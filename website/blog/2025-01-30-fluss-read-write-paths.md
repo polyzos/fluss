@@ -54,12 +54,15 @@ These batches can be categorized into different types, each generating a specifi
 - **ArrowLogWriteBatch or IndexedLogWriteBatch:** Generates a `ProduceLogRequest`, enabling the server to handle log data, which is append-only.
 
 By default, log data is stored in the **Arrow** format. Once batched, the requests are transmitted to the server for processing.
+![WriterClient2](assets/fluss_wr_paths/img3_1.png)
 
 ## The TabletServer
 ![TabletServer](assets/fluss_wr_paths/img4.png)
 
 On the server side, the **TabletServers** manage **LogTablets** and **KvTablets** through dedicated components: the **LogManager** and **KVManager**, respectively.
 The TabletServers also expose a **TabletService**, an RPC gateway that handles incoming requests such as `PutKvRequest` and `ProduceLogRequest`.
+
+![TabletServer](assets/fluss_wr_paths/img4_1.png)
 
 ### Handling KV and Log Data Requests
 
@@ -80,6 +83,12 @@ The **pre-write buffer** addresses this issue by acting as an intermediary betwe
 Once the data is replicated across all replicas, acknowledgments (ACKs) are sent back to the client.
 
 ## The Read Path
+Similar to the Flink Sink the Source sends requests to the server that are served by the **TabletService** RPC Gateway.
+There are different types of requests, depending on the read operation like `FetchLogRequest`, `LookupRequest`, `PrefixLookupRequest` and more.
+Once more the **ReplicaManager** plays a key role in handling the read requests, by managing the replicas and ensuring data consistency.
+
+![TabletService](assets/fluss_wr_paths/img4_1_2.png)
+
 In Fluss architecture, **full data** resides in RocksDB's SST files stored in remote storage, while **incremental data** is maintained as log files in the LogStore. 
 By persisting the consistent offset on the LogTablet during checkpointing of the KvTablet, the system ensures seamless data retrieval. 
 When switching between phases, only the incremental data in the LogStore needs to be read based on the checkpoint's offset.
@@ -125,12 +134,12 @@ This process ensures data durability, fault tolerance, and efficient write handl
 
 
 ![Fault Tolerance & Persistence](assets/fluss_wr_paths/img6.png)
-1. **Trigger Checkpoint:** A checkpoint is initiated for KVTablet-1. 
+1. **Trigger Snapshot:** A snapshot is initiated for KVTablet-1. 
 2. **Snapshot and Upload:** A snapshot of the RocksDB state and the corresponding LogTablet offset is captured and the SST files and a metafile are uploaded to remote storage. 
-3. **Acknowledge Checkpoint:** Once the snapshot and upload are complete, a checkpoint acknowledgment is returned for KVTablet-1, including the checkpoint's path. 
-4. **Persist Checkpoint Path:** The checkpoint path for Tablet-1 is stored in the cluster coordinator to ensure it is accessible for future recovery.
+3. **Acknowledge Snapshot:** Once the snapshot and upload are complete, a snapshot acknowledgment is returned for KVTablet-1, including the snapshot's path. 
+4. **Persist Snapshot Path:** The snapshot path for Tablet-1 is stored in the cluster coordinator to ensure it is accessible for future recovery.
 
-The checkpointing mechanism for **KVTablet (RocksDB)** adopts an incremental checkpointing strategy, similar to Apache Flink, minimizing data transmission and storage overhead by only transmitting changes since the last checkpoint.
+The snapshot mechanism for **KVTablet (RocksDB)** adopts an incremental strategy, similar to Apache Flink, minimizing data transmission and storage overhead by only transmitting changes since the last snapshot.
 
 
 During restoration, the **TabletServer** hosting the new primary **LogTablet** retrieves the checkpoint path from the cluster coordinator, downloads the SST files for the KVTablet from remote storage, and restores the KVTablet state. 
