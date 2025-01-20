@@ -50,8 +50,8 @@ The writer maintains a pool of buffer space to temporarily store records that ha
 The send() method operates asynchronously. When invoked, it appends the log record to a buffer of pending records and returns immediately. This approach enables the writer to batch individual records together, optimizing throughput and efficiency.
 
 These batches can be categorized into different types, each generating a specific type of request based on the data:
-- **KV Write Batch:** Generates a `PutKvRequest`, which the server processes to handle key-value (KV) data.
-- **Arrow Log Write Batch or Indexed Log Write Batch:** Generates a `ProduceLogRequest`, enabling the server to handle log data, which is append-only.
+- **KVWriteBatch:** Generates a `PutKvRequest`, which the server processes to handle key-value (KV) data.
+- **ArrowLogWriteBatch or IndexedLogWriteBatch:** Generates a `ProduceLogRequest`, enabling the server to handle log data, which is append-only.
 
 By default, log data is stored in the **Arrow** format. Once batched, the requests are transmitted to the server for processing.
 
