@@ -9,144 +9,144 @@ authors: [giannis]
 Fluss is an open-source streaming storage system engineered for real-time analytics, serving as a real-time data layer for Lakehouse architectures.
 It bridges the gap between streaming data and data Lakehouse, in order to bring lower latencies to the data Lakehouse and better analytics to data streams.
 
-By delving into its architecture and understanding its read and write paths, developers can contribute to its evolution and leverage its capabilities to build efficient, real-time data processing applications. 
+By delving into its architecture developers can contribute to its evolution, while also understand and leverage its capabilities to build efficient, real-time data processing applications. 
 
 This blog post aims to provide an overview of Fluss read and write paths, elucidate its data flow mechanisms, and help developers interested, understand and engage with the project.
 
 ## The Write Path
 -----------------
-At its core, Fluss stream storage is built on a Log Tablet, with a key-value (KV) index constructed over the log. This architecture enables efficient real-time updates. The relationship between the Log and KV mirrors the concept of stream-table duality: updates to the KV index generate a changelog that is written to the Log Tablet. In the event of a failure, data from the Log Tablet is used to recover the KV Tablet.
+At the heart of Fluss streaming storage lies the `LogTablet`, a foundational structure complemented by a key-value index called `KvTablet` built over the log. 
+This architecture is designed to support highly efficient real-time updates. The interaction between the Log and the Kv index embodies the concept of **stream-table duality**: updates to the Kv index produce a changelog, which is then persisted to the LogTablet. In the event of a failure, the LogTablet serves as the source for recovering the KvTablet, ensuring data integrity and resilience.
 
-Let's start with the Flink Sink and understand how Flink writes data to Fluss.
+To delve deeper into this architecture, let’s explore the `Flink Sink` and understand how Apache Flink writes data to Fluss.
 
-### The Flink Sink
+## The Flink Sink
 ![Flink Client](assets/fluss_wr_paths/img1.png)
+As depicted in the figure above, we have the `FlinkSinkFunction`, that implements the sink functionality. It is an abstract class that consists 
+of two concrete implementation for handling different types of data:
+- **AppendSinkFunction:** handles the writing of `append-only` data for Fluss log tables.
+- **FlinkUpsertSinkFunction:** handles the writing of `upserts` for Fluss primary key tables.
 
-As depicted in the figure above, we have the FlinkSinkFunction and since we can have
-either log tables or primary key tables, the Sink Function, consists of two implementations:
-- **AppendSinkFunction:** handles writing of `append-only` data.
-- **FlinkUpsertSinkFunction:** handles writing of upserts, based
-- on some primary key.
-
-Each implementation holds an instance of a TableWriter that comes from the Fluss Client package.
+Each implementation holds an instance of a **TableWriter** that comes from Fluss `client package`.
 
 ![TableWriter](assets/fluss_wr_paths/img2.png)
-The **AppendSinkFunction** has an **AppendWriter**, while the **UpsertSinkFunction** has an **UpsertWriter**.
+Similarly the TableWriter is an abstract class that has two concrete implementations, the `AppendWriter` and the `UpsertWriter`.
+The AppendSinkFunction uses the AppendWriter, while the UpsertSinkFunction uses the UpsertWriter, for handling `append-only` data and `upserts` respectively.
 
-Again as the names suggest each writes append-only and upsert data respectively.
-
-The **TableWriter** uses the WriterClient, which is responsible for sending data to Fluss Servers, namely the **TabletServers**.
-Sending messages happens with the send() method that sends WriteRecords.
-
-WriteRecords is a conversion from Flink's InternalRow.
-
-For table with primary key, if we use the **UpsertWriter** to send record, it will convert to
-WriteRecord with a key part, a value row part and write kind of `PUT`.
-
-For `deletes` it will convert to a WriteRecord with a key part , an empty value row and write kind WriteKind of `DELETE`.
-
-For none-pk table, if we use the **AppendWriter** to send records, it will
-convert to a WriteRecord without key, the value row part and write kind of `APPEND`.
+The TableWriter uses the WriterClient, which is responsible for sending data to Fluss Servers, called **TabletServers**.
+More specifically:
+- Sending messages happens with the `send()` method that sends WriteRecords. 
+- WriteRecords is a conversion from Flink's InternalRow. 
+- For table with primary key, if we use the **UpsertWriter** to send record 
+  - it will convert to WriteRecord with a key part, a value row part and write kind of `PUT`.  
+  - For `deletes` it will convert to a WriteRecord with a key part , an empty value row and write kind WriteKind of `DELETE`. 
+- For none-pk table, if we use the **AppendWriter** to send records, it will convert to a WriteRecord without key, the value row part and write kind of `APPEND`.
 
 
 ![WriterClient](assets/fluss_wr_paths/img3.png)
 
-The writer consists of a pool of buffer space that holds records that haven't yet been
-transmitted to the TabletServer as well as a background I/O thread that is responsible for
-turning these records into requests and transmitting them to the cluster. Failure to close the
-after use will leak these resources.
+The writer maintains a pool of buffer space to temporarily store records that have not yet been transmitted to the TabletServer. It also includes a dedicated background I/O thread responsible for converting these records into requests and transmitting them to the cluster. Failure to close the writer after use can result in resource leaks.
 
-The `send()` method is asynchronous. When called, it adds the log record to a buffer of pending
-record sends and immediately returns. This allows the wrote record to batch together individual
-records for efficiency.
+The send() method operates asynchronously. When invoked, it appends the log record to a buffer of pending records and returns immediately. This approach enables the writer to batch individual records together, optimizing throughput and efficiency.
 
-These batches can be of different types and produce different types of requests depending on the type:
-1. It can generate a **KvWriteBatch** that sends a **PutKvRequest** to the server to handle KV data.
-2. It can generate an **ArrowLogWriteBatch** or an **IndexedLogWriteBatch** that sends a **ProduceLogRequest** to the server to handle log (append-only) data.
+These batches can be categorized into different types, each generating a specific type of request based on the data:
+- **KV Write Batch:** Generates a `PutKvRequest`, which the server processes to handle key-value (KV) data.
+- **Arrow Log Write Batch or Indexed Log Write Batch:** Generates a `ProduceLogRequest`, enabling the server to handle log data, which is append-only.
 
-By default log data gets stored in the arrow format.
+By default, log data is stored in the **Arrow** format. Once batched, the requests are transmitted to the server for processing.
 
-<add a diagram here>
+## The TabletServer
+![TabletServer](assets/fluss_wr_paths/img4.png)
 
-At this point the requests have been send to the server.
+On the server side, the **TabletServers** manage **LogTablets** and **KvTablets** through dedicated components: the **LogManager** and **KVManager**, respectively.
+The TabletServers also expose a **TabletService**, an RPC gateway that handles incoming requests such as `PutKvRequest` and `ProduceLogRequest`.
 
-### The TabletServer
-On the server side we have the TabletServers that manages the Log tablets and KV tablets via a LogManager and KVManager. 
-The TabletServers also expose a TabletService, which is an RPC Gateway that receives and handles incoming requests, like the **PutKvRequest** and **ProduceLogRequest**.
+### Handling KV and Log Data Requests
 
-Let's see how these requests are handle to store kv or log data. Let's start with the **PutKvRequest** that writes the KV data, as its more involved.
-The TabletService has a **ReplicaManager** that manages **Replicas**. During writes the `putRecordsToKv(...)` is invoked. This method will put kv records
-to the leader replicas of the buckets. The kv data will write will be writen to the KvTablet and the response needs to wait for the CDC log (changelog) to be replicated to the other replicas.
+The `PutKvRequest`, which is more complex, initiates the process of writing key-value (KV) data. The **TabletService** utilizes a **ReplicaManager** to manage replicas during the write process. When the method`putRecordsToKv(...)` is invoked, KV records are written to the leader replicas of the specified buckets.
+The **KvTablet** handles the write operation and ensures consistency by waiting for the **WAL/changelog** (CDC) to be replicated across all replicas before sending a response. Specifically, the following steps occur in the `putAsLeader()` method:
+1. **Partial Updates and other Merge Engines:** Handles partial updates or other specified merge engine, if configured.
+2. **Write-Ahead Log (WAL):** Creates a WAL entry, by default in `Arrow` format, and records the following operations:`INSERT (+I)`,`UPDATE_BEFORE (-U)`,`UPDATE_AFTER (+U)`and`DELETE (-D)`.
+3. **KvPreWriteBuffer:** Records are written to an in-memory pre-write buffer called KvPreWriteBuffer. This buffer temporarily stores KV records before flushing them to the underlying storage when the `flush()` method is invoked.
 
-More specifically the **KvTablet** invokes the `putAsLeader()` method and this method: 
-1. Handles the partial updates and other another merge engine if specified
-2. Creates a WAL (via the LogTablet) using the arrow format by default and it writes the operations:
-   * INSERT (+I)
-   * UPDATE_BEFORE (-U)
-   * UPDATE_AFTER (+U)
-   * DELETE (-D)
-3. Writes the records to an in-memory buffer called **KvPreWriteBuffer**.
+In Fluss, the WAL is important for maintaining consistency. When a key-value pair is written, Fluss first persists the WAL entry. Only after the WAL is successfully persisted (ensuring fault tolerance) does Fluss proceed to write the data to the KV storage. This mechanism prevents inconsistencies in the event of a failure.
 
-The **KvPreWriteBuffer** is an in-memory pre-write buffer for putting kv records. 
-The kv records will first be put into the  buffer and then be flushed to the underlying 
-kv storage when the `flush()` method is invoked.
+For example:
+- If data is written to KV storage without waiting for the WAL to persist, users could read the data prematurely.
+- In the event of KV storage failure before WAL persistence, Fluss would be unable to restore the lost data from the WAL, resulting in permanent data loss despite prior reads.
 
-In Fluss, when putting a key-value pair, Fluss will first write WAL first. Only when the WAL 
-has been persisted(with fault tolerance), can Fluss safely writing the key-value pair to the 
-underlying kv storage. Otherwise, it'll cause in-consistent data in the kv storage.
+The **pre-write buffer** addresses this issue by acting as an intermediary between WAL persistence and final storage.
 
-For example, if Fluss writes data to the kv storage without waiting for the WAL to be persisted, 
-then users can read the data from kv storage. But unfortunately, the kv storage was lost. 
-Then, Fluss can never restore the piece of data to kv storage from the WAL as it hasn't 
-been persisted, which will cause user can not read the data any more although the data has been ever read.
-
-The pre-write buffer was introduced to solve this problem. 
-
-After data has been persisted in all replicas, ack’s are send back to the client.
-
-Handling a **ProduceLogRequest** is similar, but simpler. Similary the **ReplicaManager** invokes the `appendRecordsToLog(...)` method.
-As the name suggests is appends log records to leader replicas of the buckets, and wait for them to be replicated to other replicas.
-And the actual writing happens from the **LogTablet** when the `appendAsLeader()` method is invoked, which appends the messages to the active segment of the local log, assigning offsets and bucket leader epochs.
+Once the data is replicated across all replicas, acknowledgments (ACKs) are sent back to the client.
 
 ## The Read Path
-Full data is the RocksDB SST file on the remote storage and incremental data is the log file in the LogStore.. Because we have saved the consistent offset on the LogTablet corresponding to the KvTablet checkpointing during KvStore persistence, we only need to read the data in the LogStore according to the offset in the checkpoint when switching.
+In Fluss architecture, **full data** resides in RocksDB's SST files stored in remote storage, while **incremental data** is maintained as log files in the LogStore. 
+By persisting the consistent offset on the LogTablet during checkpointing of the KvTablet, the system ensures seamless data retrieval. 
+When switching between phases, only the incremental data in the LogStore needs to be read based on the checkpoint's offset.
 
-**Full data phase:** the connector uses RocksDB to provide SstFileReader to directly read SST files in remote storage, mergeand read multiple files and Flink checkpoint during full data processing, record the location of the file. This process is similar to the stream read of Paimon (In order to simplify the implementation the first phase can read the full amount in the way of load RocksDB with poor performance and stability).
+### Data Retrieval Phases
+**Full Data Phase**
 
-**Incremental phase:** Same as the design of Kafka Consumer, corresponding TabletServer node is requested according to the tablet id, and the TabletServer delivers the data to the consumers according to the offset of the request, the consumer maintains the consumption location information by itself.
+In the full data phase, the connector leverages RocksDB's `SstFileReader` to directly access SST files stored in remote storage. Multiple SST files are merged and read while maintaining Flink checkpoints to track file locations during the processing of full data. This ensures consistency and accurate recovery.
 
-**Query pushdown:** then the batch query contains the PK, filter condition you can directly push the PK down to TabletServer. TabletServer directly queries the results returned by RocksDB, which turns into a point query. When only some columns are selected in the streaming query, you can efficiently cut the columns of the row-store log data on the TabletServer to reduce the network bandwidth pressure on the TabletServer
+This phase is akin to the stream-read mechanism used in `Apache Paimon`. As a simplification, the initial implementation may load data into RocksDB, albeit with potentially reduced performance and stability, to handle the full data workload.
 
+**Incremental Phase**
 
+The incremental phase mirrors the design of a Kafka consumer. During this phase:
+- The connector identifies the appropriate **TabletServer** node using the tablet ID. 
+- The TabletServer retrieves incremental log data from the LogStore based on the requested offset and transmits it to the consumer. 
+- The consumer independently manages its consumption location information, ensuring precise tracking of incremental data.
 
+**Query Pushdown**
+- **Batch Query:** When a query includes a primary key (PK) or filter condition, it can be pushed down to the TabletServer. The TabletServer then performs a point query by directly retrieving the relevant results from RocksDB, significantly improving query efficiency.
+- **Streaming Query:** For streaming queries that select specific columns, the TabletServer efficiently filters columns from the row-based log data. This reduces network bandwidth usage and minimizes the pressure on the TabletServer.
 
+So, in summary the workflow involves:
+1. **Full Data Access:** Reading and merging SST files from remote storage using SstFileReader.
+2. **Incremental Data Access:** Fetching log data from the LogStore via TabletServer based on offsets tracked during checkpointing.
+3. **Query Pushdown:** Enhancing query performance through PK-based point queries or selective column filtering in streaming scenarios.
 
-
-
-
-
-
+This approach ensures a robust, scalable, and efficient data processing pipeline, effectively balancing full and incremental data retrieval with advanced query optimizations.
 
 Let's try and visualize the process.
-![Write Path](assets/fluss_wr_paths/img4.png)
+![Write Path](assets/fluss_wr_paths/img5.png)
 
-1. The Client first requests the coordinator server Leader to query the tableassignments of the table T. The client will cache the assignment information locally and the next time the cache will be directly requested and then the cache will be routed to TabletServer.
-2. According to the written data key = k1 and the buckets number of the table, the data belongs to Tablet3. And according to the assignments in the previous step, the primary Tablet3 is obtained on TabletServer2. The write request is sent to TabletServer2(TS2).
-3. After receiving the request, TS2 first queries the local KvTablet T-3 to obtain the old row, generates CDC data UPDATE_BEFORE and UPDATE_AFTER, and writes them to the LogTablet T-3.
-4. TS2 will copy the newly written data T-3 the LogTablet to TS4 and TS1 where the replica tablet is located. After the synchronization is completed, ack is returned to TS2.
-5. TS After the ack of the replication factor is collected, the write success message can be returned to the client. That is, the data has been persisted (acting as WAL). At this time TS/CS failover, the data can also be recovered.
-6. Writes a new row to the KvTablet.
+1. **Table Assignment Query:** The client first contacts the Coordinator Server Leader to retrieve the table assignment information for table T. This information is cached locally by the client, allowing subsequent requests to directly leverage the cached assignment to route requests to the appropriate TabletServer.
+2. **Key-to-Tablet Mapping:** Based on the key (`k1`) and the bucket configuration of table `T`, the client determines that the data belongs to `Tablet3`. Using the cached assignment information, the primary replica for `Tablet3` is identified as residing on **TabletServer2 (TS2)**, and the write request is directed to TS2.
+3. **Processing the Write Request:** Upon receiving the write request TS2, first queries the local **KvTablet T-3** to retrieve the existing row associated with the key, then generates the WAL/Changelog and finally writes the records to **LogTablet T-3**
+4. **Data Replication:** TS2 replicates the newly written **LogTablet T-3** data to the secondary replicas located on **TabletServer4 (TS4)** and **TabletServer1 (TS1)**. Once the replication process is complete, acknowledgments (ACKs) are returned to TS2.
+5. **Write Confirmation:** After TS2 collects ACKs from all replicas as defined by the replication factor, it returns a success response to the client, ensuring that the data has been fully persisted. This mechanism guarantees durability, allowing data recovery during TS or **Coordinator Server (CS)** failover.
+6. **Final Row Update:** Once the data is safely persisted, TS2 writes the new row to the **KvTablet T-3**, completing the write operation.
+
+This process ensures data durability, fault tolerance, and efficient write handling by leveraging a combination of local caching, CDC logging, and replication across TabletServers.
 
 ## Fault Tolerance & Persistence
 
 
-![Fault Tolerance & Persistence](assets/fluss_wr_paths/img5.png)
+![Fault Tolerance & Persistence](assets/fluss_wr_paths/img6.png)
+1. **Trigger Checkpoint:** A checkpoint is initiated for KVTablet-1. 
+2. **Snapshot and Upload:** A snapshot of the RocksDB state and the corresponding LogTablet offset is captured and the SST files and a metafile are uploaded to remote storage. 
+3. **Acknowledge Checkpoint:** Once the snapshot and upload are complete, a checkpoint acknowledgment is returned for KVTablet-1, including the checkpoint's path. 
+4. **Persist Checkpoint Path:** The checkpoint path for Tablet-1 is stored in the cluster coordinator to ensure it is accessible for future recovery.
 
-The KvTablet (RocksDB) checkpoint also uses the incremental checkpoint mechanism similar
-to Flink to reduce data transmission and storage.
+The checkpointing mechanism for **KVTablet (RocksDB)** adopts an incremental checkpointing strategy, similar to Apache Flink, minimizing data transmission and storage overhead by only transmitting changes since the last checkpoint.
 
-During restoration, the TS node of the new primary LogTablet downloads the SST restoration KvTablet from the remote storage
-and applies the log after the LogTablet offset to the new KvTablet. The Tablet is then re-served externally.
+
+During restoration, the **TabletServer** hosting the new primary **LogTablet** retrieves the checkpoint path from the cluster coordinator, downloads the SST files for the KVTablet from remote storage, and restores the KVTablet state. 
+The **LogTablet** then applies any incremental log data from the stored offset, bringing the KVTablet to its latest state. 
+Once restored, the Tablet is made available for external use, ensuring efficient recovery and data consistency.
 
 ## Conclusion
+We explored some of Fluss components, including the write/read paths and fault-tolerance mechanisms, as this blog aims to help developers better understand it's internals.
+
+For engineers building real-time data processing pipelines, Fluss provides a robust and scalable foundation, particularly in conjunction with Apache Flink. For open-source contributors, it represents an exciting opportunity to engage with and shape an evolving technology designed for modern data challenges.
+
+Whether you’re looking to adopt Fluss for its technical capabilities or contribute to its growth as part of the community, Fluss offers a platform to build next-generation real-time applications with confidence. 
+
+Join the Fluss community and help drive the future of real-time data processing.
+
+
+
+
 
