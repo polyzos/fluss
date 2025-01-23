@@ -218,16 +218,18 @@ public class ReplicaTestBase {
         TableDescriptor data1NonPkTableDescriptor =
                 TableDescriptor.builder().schema(DATA1_SCHEMA).distributedBy(3).build();
         zkClient.registerTable(
-                DATA1_TABLE_PATH, TableRegistration.of(DATA1_TABLE_ID, data1NonPkTableDescriptor));
+                DATA1_TABLE_PATH,
+                TableRegistration.newTable(DATA1_TABLE_ID, data1NonPkTableDescriptor));
         zkClient.registerSchema(DATA1_TABLE_PATH, DATA1_SCHEMA);
         zkClient.registerTable(
                 DATA1_TABLE_PATH_PK,
-                TableRegistration.of(DATA1_TABLE_ID_PK, DATA1_TABLE_INFO_PK.getTableDescriptor()));
+                TableRegistration.newTable(
+                        DATA1_TABLE_ID_PK, DATA1_TABLE_INFO_PK.getTableDescriptor()));
         zkClient.registerSchema(DATA1_TABLE_PATH_PK, DATA1_SCHEMA_PK);
 
         zkClient.registerTable(
                 DATA2_TABLE_PATH,
-                TableRegistration.of(DATA2_TABLE_ID, DATA2_TABLE_INFO.getTableDescriptor()));
+                TableRegistration.newTable(DATA2_TABLE_ID, DATA2_TABLE_INFO.getTableDescriptor()));
         zkClient.registerSchema(DATA2_TABLE_PATH, DATA2_SCHEMA);
     }
 
@@ -246,7 +248,7 @@ public class ReplicaTestBase {
         if (zkClient.tableExist(tablePath)) {
             zkClient.deleteTable(tablePath);
         }
-        zkClient.registerTable(tablePath, TableRegistration.of(tableId, tableDescriptor));
+        zkClient.registerTable(tablePath, TableRegistration.newTable(tableId, tableDescriptor));
         zkClient.registerSchema(tablePath, schema);
         return tableId;
     }
@@ -265,7 +267,8 @@ public class ReplicaTestBase {
                 snapshotReporter,
                 NOPErrorHandler.INSTANCE,
                 TestingMetricGroups.TABLET_SERVER_METRICS,
-                remoteLogManager);
+                remoteLogManager,
+                manualClock);
     }
 
     @AfterEach
@@ -294,6 +297,10 @@ public class ReplicaTestBase {
 
         if (rpcClient != null) {
             rpcClient.close();
+        }
+
+        if (scheduler != null) {
+            scheduler.shutdown();
         }
 
         // clear zk environment.
@@ -433,7 +440,8 @@ public class ReplicaTestBase {
                 serverMetadataCache,
                 NOPErrorHandler.INSTANCE,
                 metricGroup,
-                TableDescriptor.builder().schema(DATA1_SCHEMA).distributedBy(3).build());
+                TableDescriptor.builder().schema(DATA1_SCHEMA).distributedBy(3).build(),
+                manualClock);
     }
 
     private void initRemoteLogEnv() throws Exception {

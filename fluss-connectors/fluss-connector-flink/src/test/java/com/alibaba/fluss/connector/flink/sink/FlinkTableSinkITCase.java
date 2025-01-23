@@ -125,11 +125,18 @@ class FlinkTableSinkITCase {
         tEnv.executeSql(String.format("drop database %s cascade", DEFAULT_DB));
     }
 
-    @Test
-    void testAppendLog() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void testAppendLog(boolean compressed) throws Exception {
+        String compressedProperties =
+                compressed
+                        ? ",'table.log.format' = 'arrow', 'table.log.arrow.compression.type' = 'zstd'"
+                        : "";
         tEnv.executeSql(
                 "create table sink_test (a int not null, b bigint, c string) with "
-                        + "('bucket.num' = '3')");
+                        + "('bucket.num' = '3'"
+                        + compressedProperties
+                        + ")");
         tEnv.executeSql(
                         "INSERT INTO sink_test(a, b, c) "
                                 + "VALUES (1, 3501, 'Tim'), "
@@ -387,7 +394,16 @@ class FlinkTableSinkITCase {
         // insert again
         tEnv.executeSql("insert into first_row_source(a, b) VALUES (3, 'v33'), (4, 'v44')").await();
         expectedRows = Collections.singletonList("+I[4, v44]");
+        assertResultsIgnoreOrder(rowIter, expectedRows, false);
+
+        // insert with all keys already exists.
+        tEnv.executeSql("insert into first_row_source(a, b) VALUES (3, 'v333'), (4, 'v444')")
+                .await();
+
+        tEnv.executeSql("insert into first_row_source(a, b) VALUES (5, 'v5')").await();
+        expectedRows = Collections.singletonList("+I[5, v5]");
         assertResultsIgnoreOrder(rowIter, expectedRows, true);
+
         insertJobClient.cancel().get();
     }
 
@@ -531,7 +547,7 @@ class FlinkTableSinkITCase {
                                 + " primary key (a) not enforced"
                                 + ")",
                         tableName));
-        // test delete without data.
+        // test delete data with non-exists key.
         tBatchEnv.executeSql("DELETE FROM " + tableName + " WHERE a = 5").await();
 
         List<String> insertValues =
@@ -556,6 +572,9 @@ class FlinkTableSinkITCase {
                         .executeSql(String.format("select * from %s WHERE a = 5", tableName))
                         .collect();
         assertThat(rowIter.hasNext()).isFalse();
+
+        // test delete data with non-exists key.
+        tBatchEnv.executeSql("DELETE FROM " + tableName + " WHERE a = 15").await();
 
         // test update row4
         tBatchEnv.executeSql("UPDATE " + tableName + " SET c = 'New York' WHERE a = 4").await();

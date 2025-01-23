@@ -53,6 +53,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.annotation.Nullable;
@@ -929,6 +930,88 @@ class FlussTableITCase extends ClientToServerITCaseBase {
                         .withSchema(rowType)
                         .isEqualTo(expectedRows.get(i));
             }
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"none,3", "lz4_frame,3", "zstd,3", "zstd,9"})
+    void testArrowCompressionAndProject(String compression, String level) throws Exception {
+        Schema schema =
+                Schema.newBuilder()
+                        .column("a", DataTypes.INT())
+                        .column("b", DataTypes.INT())
+                        .column("c", DataTypes.STRING())
+                        .column("d", DataTypes.BIGINT())
+                        .build();
+        TableDescriptor tableDescriptor =
+                TableDescriptor.builder()
+                        .schema(schema)
+                        .property(ConfigOptions.TABLE_LOG_ARROW_COMPRESSION_TYPE.key(), compression)
+                        .property(ConfigOptions.TABLE_LOG_ARROW_COMPRESSION_ZSTD_LEVEL.key(), level)
+                        .build();
+        TablePath tablePath = TablePath.of("test_db_1", "test_arrow_compression_and_project");
+        createTable(tablePath, tableDescriptor, false);
+
+        try (Connection conn = ConnectionFactory.createConnection(clientConf);
+                Table table = conn.getTable(tablePath)) {
+            AppendWriter appendWriter = table.getAppendWriter();
+            int expectedSize = 30;
+            for (int i = 0; i < expectedSize; i++) {
+                String value = i % 2 == 0 ? "hello, friend " + i : null;
+                InternalRow row = row(schema.toRowType(), new Object[] {i, 100, value, i * 10L});
+                appendWriter.append(row);
+                if (i % 10 == 0) {
+                    // insert 3 bathes, each batch has 10 rows
+                    appendWriter.flush();
+                }
+            }
+
+            // fetch data without project.
+            LogScanner logScanner = createLogScanner(table);
+            subscribeFromBeginning(logScanner, table);
+            int count = 0;
+            while (count < expectedSize) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
+
+                    assertThat(scanRecord.getRowKind()).isEqualTo(RowKind.APPEND_ONLY);
+                    assertThat(scanRecord.getRow().getInt(0)).isEqualTo(count);
+                    assertThat(scanRecord.getRow().getInt(1)).isEqualTo(100);
+                    if (count % 2 == 0) {
+                        assertThat(scanRecord.getRow().getString(2).toString())
+                                .isEqualTo("hello, friend " + count);
+                    } else {
+                        // check null values
+                        assertThat(scanRecord.getRow().isNullAt(2)).isTrue();
+                    }
+                    count++;
+                }
+            }
+            assertThat(count).isEqualTo(expectedSize);
+            logScanner.close();
+
+            // fetch data with project.
+            logScanner = createLogScanner(table, new int[] {0, 2});
+            subscribeFromBeginning(logScanner, table);
+            count = 0;
+            while (count < expectedSize) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
+                    assertThat(scanRecord.getRowKind()).isEqualTo(RowKind.APPEND_ONLY);
+                    assertThat(scanRecord.getRow().getFieldCount()).isEqualTo(2);
+                    assertThat(scanRecord.getRow().getInt(0)).isEqualTo(count);
+                    if (count % 2 == 0) {
+                        assertThat(scanRecord.getRow().getString(1).toString())
+                                .isEqualTo("hello, friend " + count);
+                    } else {
+                        // check null values
+                        assertThat(scanRecord.getRow().isNullAt(1)).isTrue();
+                    }
+                    count++;
+                }
+            }
+            assertThat(count).isEqualTo(expectedSize);
+            logScanner.close();
         }
     }
 }

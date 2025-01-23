@@ -18,6 +18,7 @@ package com.alibaba.fluss.config;
 
 import com.alibaba.fluss.annotation.Internal;
 import com.alibaba.fluss.annotation.PublicEvolving;
+import com.alibaba.fluss.compression.ArrowCompressionType;
 import com.alibaba.fluss.metadata.KvFormat;
 import com.alibaba.fluss.metadata.LogFormat;
 import com.alibaba.fluss.metadata.MergeEngine;
@@ -234,6 +235,22 @@ public class ConfigOptions {
                     .defaultValue(10)
                     .withDescription(
                             "The number of threads to use for various background processing tasks.");
+
+    public static final ConfigOption<MemorySize> SERVER_BUFFER_MEMORY_SIZE =
+            key("server.buffer.memory-size")
+                    .memoryType()
+                    .defaultValue(MemorySize.parse("256mb"))
+                    .withDescription(
+                            "The total bytes of memory the server can use, e.g, buffer write-ahead-log rows.");
+
+    public static final ConfigOption<MemorySize> SERVER_BUFFER_PAGE_SIZE =
+            key("server.buffer.page-size")
+                    .memoryType()
+                    .defaultValue(MemorySize.parse("128kb"))
+                    .withDescription(
+                            "Size of every page in memory buffers ('"
+                                    + SERVER_BUFFER_MEMORY_SIZE.key()
+                                    + "').");
 
     // ------------------------------------------------------------------
     // ZooKeeper Settings
@@ -881,6 +898,24 @@ public class ConfigOptions {
                             "The format of the log records in log store. The default value is 'arrow'. "
                                     + "The supported formats are 'arrow' and 'indexed'.");
 
+    public static final ConfigOption<ArrowCompressionType> TABLE_LOG_ARROW_COMPRESSION_TYPE =
+            key("table.log.arrow.compression.type")
+                    .enumType(ArrowCompressionType.class)
+                    // TODO: change to ZSTD by default when it is stable
+                    .defaultValue(ArrowCompressionType.NONE)
+                    .withDescription(
+                            "The compression type of the log records if the log format is set to 'ARROW'. "
+                                    + "The candidate compression type is "
+                                    + Arrays.toString(ArrowCompressionType.values()));
+
+    public static final ConfigOption<Integer> TABLE_LOG_ARROW_COMPRESSION_ZSTD_LEVEL =
+            key("table.log.arrow.compression.zstd.level")
+                    .intType()
+                    .defaultValue(3)
+                    .withDescription(
+                            "The compression level of ZSTD for the log records if the log format is set to 'ARROW' "
+                                    + "and the compression type is set to 'ZSTD'. The valid range is 1 to 22.");
+
     public static final ConfigOption<KvFormat> TABLE_KV_FORMAT =
             key("table.kv.format")
                     .enumType(KvFormat.class)
@@ -1106,18 +1141,18 @@ public class ConfigOptions {
                                     + "For more information, please refer to %s https://github.com/facebook/rocksdb/wiki/Leveled-Compaction#level_compaction_dynamic_level_bytes-is-true"
                                     + "RocksDB's doc.");
 
-    public static final ConfigOption<List<CompressionType>> KV_COMPRESSION_PER_LEVEL =
+    public static final ConfigOption<List<KvCompressionType>> KV_COMPRESSION_PER_LEVEL =
             key("kv.rocksdb.compression.per.level")
-                    .enumType(CompressionType.class)
+                    .enumType(KvCompressionType.class)
                     .asList()
                     .defaultValues(
-                            CompressionType.LZ4,
-                            CompressionType.LZ4,
-                            CompressionType.LZ4,
-                            CompressionType.LZ4,
-                            CompressionType.LZ4,
-                            CompressionType.ZSTD,
-                            CompressionType.ZSTD)
+                            KvCompressionType.LZ4,
+                            KvCompressionType.LZ4,
+                            KvCompressionType.LZ4,
+                            KvCompressionType.LZ4,
+                            KvCompressionType.LZ4,
+                            KvCompressionType.ZSTD,
+                            KvCompressionType.ZSTD)
                     .withDescription(
                             "A comma-separated list of Compression Type. Different levels can have different "
                                     + "compression policies. In many cases, lower levels use fast compression algorithms,"
@@ -1316,7 +1351,7 @@ public class ConfigOptions {
     }
 
     /** Compression type for Fluss's kv. Currently only exposes the following compression type. */
-    public enum CompressionType {
+    public enum KvCompressionType {
         NO,
         SNAPPY,
         LZ4,

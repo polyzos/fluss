@@ -17,10 +17,10 @@
 package com.alibaba.fluss.server.kv;
 
 import com.alibaba.fluss.annotation.VisibleForTesting;
+import com.alibaba.fluss.compression.ArrowCompressionInfo;
 import com.alibaba.fluss.config.ConfigOptions;
 import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.exception.KvStorageException;
-import com.alibaba.fluss.memory.ManagedPagedOutputView;
 import com.alibaba.fluss.memory.MemorySegmentPool;
 import com.alibaba.fluss.metadata.KvFormat;
 import com.alibaba.fluss.metadata.LogFormat;
@@ -104,6 +104,7 @@ public final class KvTablet {
     private final LogFormat logFormat;
     private final KvFormat kvFormat;
     private final @Nullable MergeEngine mergeEngine;
+    private final ArrowCompressionInfo arrowCompressionInfo;
 
     /**
      * The kv data in pre-write buffer whose log offset is less than the flushedLogOffset has been
@@ -125,7 +126,8 @@ public final class KvTablet {
             BufferAllocator arrowBufferAllocator,
             MemorySegmentPool memorySegmentPool,
             KvFormat kvFormat,
-            @Nullable MergeEngine mergeEngine) {
+            @Nullable MergeEngine mergeEngine,
+            ArrowCompressionInfo arrowCompressionInfo) {
         this.physicalPath = physicalPath;
         this.tableBucket = tableBucket;
         this.logTablet = logTablet;
@@ -140,6 +142,7 @@ public final class KvTablet {
         this.partialUpdaterCache = new PartialUpdaterCache();
         this.kvFormat = kvFormat;
         this.mergeEngine = mergeEngine;
+        this.arrowCompressionInfo = arrowCompressionInfo;
     }
 
     public static KvTablet create(
@@ -149,7 +152,8 @@ public final class KvTablet {
             BufferAllocator arrowBufferAllocator,
             MemorySegmentPool memorySegmentPool,
             KvFormat kvFormat,
-            @Nullable MergeEngine mergeEngine)
+            @Nullable MergeEngine mergeEngine,
+            ArrowCompressionInfo arrowCompressionInfo)
             throws IOException {
         Tuple2<PhysicalTablePath, TableBucket> tablePathAndBucket =
                 FlussPaths.parseTabletDir(kvTabletDir);
@@ -162,7 +166,8 @@ public final class KvTablet {
                 arrowBufferAllocator,
                 memorySegmentPool,
                 kvFormat,
-                mergeEngine);
+                mergeEngine,
+                arrowCompressionInfo);
     }
 
     public static KvTablet create(
@@ -174,7 +179,8 @@ public final class KvTablet {
             BufferAllocator arrowBufferAllocator,
             MemorySegmentPool memorySegmentPool,
             KvFormat kvFormat,
-            @Nullable MergeEngine mergeEngine)
+            @Nullable MergeEngine mergeEngine,
+            ArrowCompressionInfo arrowCompressionInfo)
             throws IOException {
         RocksDBKv kv = buildRocksDBKv(conf, kvTabletDir);
         return new KvTablet(
@@ -188,7 +194,8 @@ public final class KvTablet {
                 arrowBufferAllocator,
                 memorySegmentPool,
                 kvFormat,
-                mergeEngine);
+                mergeEngine,
+                arrowCompressionInfo);
     }
 
     private static RocksDBKv buildRocksDBKv(Configuration configuration, File kvDir)
@@ -268,7 +275,6 @@ public final class KvTablet {
                         ValueDecoder valueDecoder =
                                 new ValueDecoder(readContext.getRowDecoder(schemaId));
 
-                        int appendedRecordCount = 0;
                         for (KvRecord kvRecord : kvRecords.records(readContext)) {
                             byte[] keyBytes = BytesUtils.toArray(kvRecord.getKey());
                             KvPreWriteBuffer.Key key = KvPreWriteBuffer.Key.of(keyBytes);
@@ -290,13 +296,11 @@ public final class KvTablet {
                                     // if newRow is null, it means the row should be deleted
                                     if (newRow == null) {
                                         walBuilder.append(RowKind.DELETE, oldRow);
-                                        appendedRecordCount += 1;
                                         kvPreWriteBuffer.delete(key, logOffset++);
                                     } else {
                                         // otherwise, it's a partial update, should produce -U,+U
                                         walBuilder.append(RowKind.UPDATE_BEFORE, oldRow);
                                         walBuilder.append(RowKind.UPDATE_AFTER, newRow);
-                                        appendedRecordCount += 2;
                                         kvPreWriteBuffer.put(
                                                 key,
                                                 ValueEncoder.encodeValue(schemaId, newRow),
@@ -318,7 +322,6 @@ public final class KvTablet {
                                             updateRow(oldRow, kvRecord.getRow(), partialUpdater);
                                     walBuilder.append(RowKind.UPDATE_BEFORE, oldRow);
                                     walBuilder.append(RowKind.UPDATE_AFTER, newRow);
-                                    appendedRecordCount += 2;
                                     // logOffset is for -U, logOffset + 1 is for +U, we need to use
                                     // the log offset for +U
                                     kvPreWriteBuffer.put(
@@ -332,7 +335,6 @@ public final class KvTablet {
                                     //  of the input row are set to null.
                                     BinaryRow newRow = kvRecord.getRow();
                                     walBuilder.append(RowKind.INSERT, newRow);
-                                    appendedRecordCount += 1;
                                     kvPreWriteBuffer.put(
                                             key,
                                             ValueEncoder.encodeValue(schemaId, newRow),
@@ -341,21 +343,17 @@ public final class KvTablet {
                             }
                         }
 
-                        // if appendedRecordCount is 0, it means there is no record to append, we
-                        // should not append.
-                        if (appendedRecordCount > 0) {
-                            // now, we can build the full log.
-                            return logTablet.appendAsLeader(walBuilder.build());
-                        } else {
-                            return new LogAppendInfo(
-                                    logEndOffsetOfPrevBatch - 1,
-                                    logEndOffsetOfPrevBatch - 1,
-                                    0L,
-                                    0L,
-                                    0,
-                                    0,
-                                    false);
-                        }
+                        // There will be a situation that these batches of kvRecordBatch have not
+                        // generated any CDC logs, for example, when client attempts to delete
+                        // some non-existent keys or MergeEngine set to FIRST_ROW. In this case,
+                        // we cannot simply return, as doing so would cause a
+                        // OutOfOrderSequenceException problem. Therefore, here we will build an
+                        // empty batch with lastLogOffset to 0L as the baseLogOffset is 0L. As doing
+                        // that, the logOffsetDelta in logRecordBatch will be set to 0L. So, we will
+                        // put a batch into file with recordCount 0 and offset plus 1L, it will
+                        // update the batchSequence corresponding to the writerId and also increment
+                        // the CDC log offset by 1.
+                        return logTablet.appendAsLeader(walBuilder.build());
                     } catch (Throwable t) {
                         // While encounter error here, the CDC logs may fail writing to disk,
                         // and the client probably will resend the batch. If we do not remove the
@@ -383,7 +381,7 @@ public final class KvTablet {
                     throw new IllegalArgumentException(
                             "Primary Key Table with COMPACTED kv format doesn't support INDEXED cdc log format.");
                 }
-                return new IndexWalBuilder(schemaId);
+                return new IndexWalBuilder(schemaId, memorySegmentPool);
             case ARROW:
                 return new ArrowWalBuilder(
                         schemaId,
@@ -393,8 +391,9 @@ public final class KvTablet {
                                 // we don't limit size of the arrow batch, because all the
                                 // changelogs should be in a single batch
                                 Integer.MAX_VALUE,
-                                rowType),
-                        new ManagedPagedOutputView(memorySegmentPool));
+                                rowType,
+                                arrowCompressionInfo),
+                        memorySegmentPool);
             default:
                 throw new IllegalArgumentException("Unsupported log format: " + logFormat);
         }

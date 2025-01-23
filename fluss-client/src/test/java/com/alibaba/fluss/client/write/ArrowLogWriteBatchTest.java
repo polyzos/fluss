@@ -16,8 +16,11 @@
 
 package com.alibaba.fluss.client.write;
 
+import com.alibaba.fluss.compression.ArrowCompressionInfo;
 import com.alibaba.fluss.memory.MemorySegment;
+import com.alibaba.fluss.memory.PreAllocatedPagedOutputView;
 import com.alibaba.fluss.memory.TestingMemorySegmentPool;
+import com.alibaba.fluss.memory.UnmanagedPagedOutputView;
 import com.alibaba.fluss.metadata.TableBucket;
 import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.record.LogRecordBatch;
@@ -33,6 +36,9 @@ import com.alibaba.fluss.utils.CloseableIterator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static com.alibaba.fluss.record.LogRecordReadContext.createArrowReadContext;
 import static com.alibaba.fluss.record.TestData.DATA1_PHYSICAL_TABLE_PATH;
@@ -82,10 +88,68 @@ public class ArrowLogWriteBatchTest {
 
         // close this batch.
         arrowLogWriteBatch.close();
-        arrowLogWriteBatch.serialize();
         BytesView bytesView = arrowLogWriteBatch.build();
-        MemoryLogRecords records =
-                MemoryLogRecords.pointToByteBuffer(bytesView.getByteBuf().nioBuffer());
+        MemoryLogRecords records = MemoryLogRecords.pointToBytesView(bytesView);
+        LogRecordBatch batch = records.batches().iterator().next();
+        assertThat(batch.getRecordCount()).isEqualTo(count);
+        try (LogRecordReadContext readContext =
+                        createArrowReadContext(DATA1_ROW_TYPE, DATA1_TABLE_INFO.getSchemaId());
+                CloseableIterator<LogRecord> recordsIter = batch.records(readContext)) {
+            int readCount = 0;
+            while (recordsIter.hasNext()) {
+                LogRecord record = recordsIter.next();
+                assertThat(record.getRow().getInt(0)).isEqualTo(readCount);
+                assertThat(record.getRow().getString(1).toString()).isEqualTo("a" + readCount);
+                readCount++;
+            }
+            assertThat(readCount).isEqualTo(count);
+        }
+    }
+
+    @Test
+    void testAppendWithPreAllocatedMemorySegments() throws Exception {
+        int bucketId = 0;
+        int maxSizeInBytes = 1024;
+        int pageSize = 128;
+        TestingMemorySegmentPool memoryPool = new TestingMemorySegmentPool(pageSize);
+        List<MemorySegment> memorySegmentList = new ArrayList<>();
+        for (int i = 0; i < maxSizeInBytes / pageSize; i++) {
+            memorySegmentList.add(memoryPool.nextSegment());
+        }
+
+        TableBucket tb = new TableBucket(DATA1_TABLE_ID, bucketId);
+        ArrowLogWriteBatch arrowLogWriteBatch =
+                new ArrowLogWriteBatch(
+                        tb,
+                        DATA1_PHYSICAL_TABLE_PATH,
+                        DATA1_TABLE_INFO.getSchemaId(),
+                        writerProvider.getOrCreateWriter(
+                                tb.getTableId(),
+                                DATA1_TABLE_INFO.getSchemaId(),
+                                maxSizeInBytes,
+                                DATA1_ROW_TYPE,
+                                ArrowCompressionInfo.NO_COMPRESSION),
+                        new PreAllocatedPagedOutputView(memorySegmentList));
+        assertThat(arrowLogWriteBatch.pooledMemorySegments()).isEqualTo(memorySegmentList);
+
+        int count = 0;
+        while (arrowLogWriteBatch.tryAppend(
+                createWriteRecord(row(DATA1_ROW_TYPE, new Object[] {count, "a" + count})),
+                newWriteCallback())) {
+            count++;
+        }
+
+        // batch full.
+        boolean appendResult =
+                arrowLogWriteBatch.tryAppend(
+                        createWriteRecord(row(DATA1_ROW_TYPE, new Object[] {1, "a"})),
+                        newWriteCallback());
+        assertThat(appendResult).isFalse();
+
+        // close this batch.
+        arrowLogWriteBatch.close();
+        BytesView bytesView = arrowLogWriteBatch.build();
+        MemoryLogRecords records = MemoryLogRecords.pointToBytesView(bytesView);
         LogRecordBatch batch = records.batches().iterator().next();
         assertThat(batch.getRecordCount()).isEqualTo(count);
         try (LogRecordReadContext readContext =
@@ -115,9 +179,9 @@ public class ArrowLogWriteBatchTest {
                         tb.getTableId(),
                         DATA1_TABLE_INFO.getSchemaId(),
                         maxSizeInBytes,
-                        DATA1_ROW_TYPE),
-                MemorySegment.wrap(new byte[10 * 1024]),
-                new TestingMemorySegmentPool(10 * 1024));
+                        DATA1_ROW_TYPE,
+                        ArrowCompressionInfo.NO_COMPRESSION),
+                new UnmanagedPagedOutputView(128));
     }
 
     private WriteCallback newWriteCallback() {

@@ -48,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.alibaba.fluss.client.utils.ClientRpcMessageUtils.toByteBuffer;
+import static com.alibaba.fluss.compression.ArrowCompressionInfo.NO_COMPRESSION;
 import static com.alibaba.fluss.record.TestData.DATA2;
 import static com.alibaba.fluss.record.TestData.DATA2_ROW_TYPE;
 import static com.alibaba.fluss.record.TestData.DATA2_TABLE_ID;
@@ -143,7 +144,9 @@ public class DefaultCompletedFetchTest {
                         DATA2_TABLE_PATH,
                         DATA2_TABLE_ID,
                         TableDescriptor.builder().schema(schema).logFormat(logFormat).build(),
-                        1);
+                        1,
+                        System.currentTimeMillis(),
+                        System.currentTimeMillis());
         long fetchOffset = 0L;
         int bucketId = 0; // records for 0-10.
         TableBucket tb = new TableBucket(DATA2_TABLE_ID, bucketId);
@@ -233,7 +236,7 @@ public class DefaultCompletedFetchTest {
 
         FileLogProjection fileLogProjection = new FileLogProjection();
         fileLogProjection.setCurrentProjection(
-                DATA2_TABLE_ID, rowType, projection.getProjectionInOrder());
+                DATA2_TABLE_ID, rowType, NO_COMPRESSION, projection.getProjectionInOrder());
         ByteBuffer buffer =
                 toByteBuffer(
                         fileLogProjection

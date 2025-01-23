@@ -24,7 +24,9 @@ import com.alibaba.fluss.metadata.TablePath;
 import com.alibaba.fluss.record.DefaultValueRecordBatch;
 import com.alibaba.fluss.record.KvRecord;
 import com.alibaba.fluss.record.KvRecordBatch;
+import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.record.LogRecordBatch;
+import com.alibaba.fluss.record.LogRecordReadContext;
 import com.alibaba.fluss.record.LogRecords;
 import com.alibaba.fluss.record.MemoryLogRecords;
 import com.alibaba.fluss.record.RowKind;
@@ -53,6 +55,7 @@ import com.alibaba.fluss.testutils.DataTestUtils;
 import com.alibaba.fluss.types.DataField;
 import com.alibaba.fluss.types.DataTypes;
 import com.alibaba.fluss.types.RowType;
+import com.alibaba.fluss.utils.CloseableIterator;
 import com.alibaba.fluss.utils.types.Tuple2;
 
 import org.junit.jupiter.api.Test;
@@ -65,11 +68,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import static com.alibaba.fluss.record.LogRecordReadContext.createArrowReadContext;
 import static com.alibaba.fluss.record.TestData.ANOTHER_DATA1;
 import static com.alibaba.fluss.record.TestData.DATA1;
 import static com.alibaba.fluss.record.TestData.DATA1_KEY_TYPE;
@@ -81,9 +86,11 @@ import static com.alibaba.fluss.record.TestData.DATA1_TABLE_PATH;
 import static com.alibaba.fluss.record.TestData.DATA1_TABLE_PATH_PK;
 import static com.alibaba.fluss.record.TestData.DATA_1_WITH_KEY_AND_VALUE;
 import static com.alibaba.fluss.record.TestData.DEFAULT_SCHEMA_ID;
+import static com.alibaba.fluss.record.TestData.EXPECTED_LOG_RESULTS_FOR_DATA_1_WITH_PK;
 import static com.alibaba.fluss.server.coordinator.CoordinatorContext.INITIAL_COORDINATOR_EPOCH;
 import static com.alibaba.fluss.server.zk.data.LeaderAndIsr.INITIAL_BUCKET_EPOCH;
 import static com.alibaba.fluss.server.zk.data.LeaderAndIsr.INITIAL_LEADER_EPOCH;
+import static com.alibaba.fluss.testutils.DataTestUtils.assertLogRecordBatchEqualsWithRowKind;
 import static com.alibaba.fluss.testutils.DataTestUtils.assertLogRecordsEquals;
 import static com.alibaba.fluss.testutils.DataTestUtils.assertLogRecordsEqualsWithRowKind;
 import static com.alibaba.fluss.testutils.DataTestUtils.assertMemoryRecordsEquals;
@@ -563,6 +570,73 @@ class ReplicaManagerTest extends ReplicaTestBase {
     }
 
     @Test
+    void testPutKvWithDeleteNonExistsKey() throws Exception {
+        TableBucket tb = new TableBucket(DATA1_TABLE_ID_PK, 1);
+        makeKvTableAsLeader(DATA1_TABLE_ID_PK, DATA1_TABLE_PATH_PK, tb.getBucket());
+
+        // put 10 batches delete non-exists key batch to kv store.
+        CompletableFuture<List<PutKvResultForBucket>> future;
+        List<Tuple2<Object[], Object[]>> deleteList =
+                Arrays.asList(
+                        Tuple2.of(new Object[] {1}, null),
+                        Tuple2.of(new Object[] {2}, null),
+                        Tuple2.of(new Object[] {3}, null),
+                        Tuple2.of(new Object[] {4}, null));
+        for (int i = 0; i < 10; i++) {
+            future = new CompletableFuture<>();
+            replicaManager.putRecordsToKv(
+                    20000,
+                    1,
+                    Collections.singletonMap(tb, genKvRecordBatch(deleteList)),
+                    null,
+                    future::complete);
+            assertThat(future.get()).containsOnly(new PutKvResultForBucket(tb, i + 1));
+        }
+
+        // 2. write a normal batch.
+        future = new CompletableFuture<>();
+        replicaManager.putRecordsToKv(
+                20000,
+                1,
+                Collections.singletonMap(tb, genKvRecordBatch(DATA_1_WITH_KEY_AND_VALUE)),
+                null,
+                future::complete);
+        assertThat(future.get()).containsOnly(new PutKvResultForBucket(tb, 18));
+
+        // 2. get the cdc-log of these batches.
+        CompletableFuture<Map<TableBucket, FetchLogResultForBucket>> future1 =
+                new CompletableFuture<>();
+        replicaManager.fetchLogRecords(
+                buildFetchParams(-1),
+                Collections.singletonMap(tb, new FetchData(tb.getTableId(), 0L, Integer.MAX_VALUE)),
+                future1::complete);
+        FetchLogResultForBucket resultForBucket = future1.get().get(tb);
+        assertThat(resultForBucket.getHighWatermark()).isEqualTo(18L);
+        LogRecords logRecords = resultForBucket.recordsOrEmpty();
+        Iterator<LogRecordBatch> iterator = logRecords.batches().iterator();
+        for (int i = 0; i < 10; i++) {
+            assertThat(iterator.hasNext()).isTrue();
+            LogRecordBatch logRecordBatch = iterator.next();
+            assertThat(logRecordBatch.getRecordCount()).isEqualTo(0);
+            assertThat(logRecordBatch.baseLogOffset()).isEqualTo(i);
+            assertThat(logRecordBatch.lastLogOffset()).isEqualTo(i);
+            assertThat(logRecordBatch.nextLogOffset()).isEqualTo(i + 1);
+            try (LogRecordReadContext readContext =
+                            createArrowReadContext(DATA1_ROW_TYPE, DEFAULT_SCHEMA_ID);
+                    CloseableIterator<LogRecord> logIterator =
+                            logRecordBatch.records(readContext)) {
+                assertThat(logIterator.hasNext()).isFalse();
+            }
+        }
+
+        assertThat(iterator.hasNext()).isTrue();
+        LogRecordBatch logRecordBatch = iterator.next();
+        assertThat(iterator.hasNext()).isFalse();
+        assertLogRecordBatchEqualsWithRowKind(
+                DATA1_ROW_TYPE, logRecordBatch, EXPECTED_LOG_RESULTS_FOR_DATA_1_WITH_PK);
+    }
+
+    @Test
     void testLookup() throws Exception {
         TableBucket tb = new TableBucket(DATA1_TABLE_ID_PK, 1);
         makeKvTableAsLeader(DATA1_TABLE_ID_PK, DATA1_TABLE_PATH_PK, tb.getBucket());
@@ -883,7 +957,26 @@ class ReplicaManagerTest extends ReplicaTestBase {
             assertThat(future1.get()).containsOnly(new ListOffsetsResultForBucket(tb, baseOffset));
         }
 
-        // list offset by an invalid timestamp which higher than max batch commit time.
+        // list offset by a timestamp which higher than max batch commit time but less then current
+        // timestamp .
+        future1 = new CompletableFuture<>();
+        replicaManager.listOffsets(
+                new ListOffsetsParam(-1, ListOffsetsParam.LATEST_OFFSET_TYPE, null),
+                Collections.singleton(tb),
+                future1::complete);
+        long latestOffset = future1.get().get(0).getOffset();
+        manualClock.advanceTime(100, TimeUnit.MILLISECONDS);
+        future1 = new CompletableFuture<>();
+        replicaManager.listOffsets(
+                new ListOffsetsParam(
+                        -1,
+                        ListOffsetsParam.TIMESTAMP_OFFSET_TYPE,
+                        manualClock.milliseconds() - 50),
+                Collections.singleton(tb),
+                future1::complete);
+        assertThat(future1.get()).containsOnly(new ListOffsetsResultForBucket(tb, latestOffset));
+
+        // list offset by an invalid timestamp which higher than current timestamp.
         future1 = new CompletableFuture<>();
         replicaManager.listOffsets(
                 new ListOffsetsParam(
@@ -901,9 +994,9 @@ class ReplicaManagerTest extends ReplicaTestBase {
                                         String.format(
                                                 "Get offset error for table bucket "
                                                         + "TableBucket{tableId=150001, bucket=1}, the fetch "
-                                                        + "timestamp %s is larger than the max timestamp %s",
+                                                        + "timestamp %s is larger than the current timestamp %s",
                                                 manualClock.milliseconds() + 1000,
-                                                manualClock.milliseconds() - 100))));
+                                                manualClock.milliseconds()))));
     }
 
     private Map<Long, Long> startOffsetToBatchCommitTimestamp(FetchLogResultForBucket result) {

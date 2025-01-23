@@ -17,8 +17,8 @@
 package com.alibaba.fluss.row.arrow;
 
 import com.alibaba.fluss.annotation.Internal;
+import com.alibaba.fluss.compression.ArrowCompressionInfo;
 import com.alibaba.fluss.memory.AbstractPagedOutputView;
-import com.alibaba.fluss.memory.MemorySegment;
 import com.alibaba.fluss.row.InternalRow;
 import com.alibaba.fluss.row.arrow.writers.ArrowFieldWriter;
 import com.alibaba.fluss.shaded.arrow.org.apache.arrow.memory.BufferAllocator;
@@ -27,6 +27,8 @@ import com.alibaba.fluss.shaded.arrow.org.apache.arrow.vector.BaseVariableWidthV
 import com.alibaba.fluss.shaded.arrow.org.apache.arrow.vector.FieldVector;
 import com.alibaba.fluss.shaded.arrow.org.apache.arrow.vector.VectorSchemaRoot;
 import com.alibaba.fluss.shaded.arrow.org.apache.arrow.vector.VectorUnloader;
+import com.alibaba.fluss.shaded.arrow.org.apache.arrow.vector.compression.CompressionCodec;
+import com.alibaba.fluss.shaded.arrow.org.apache.arrow.vector.compression.CompressionUtil;
 import com.alibaba.fluss.shaded.arrow.org.apache.arrow.vector.ipc.WriteChannel;
 import com.alibaba.fluss.shaded.arrow.org.apache.arrow.vector.ipc.message.ArrowBlock;
 import com.alibaba.fluss.shaded.arrow.org.apache.arrow.vector.ipc.message.ArrowRecordBatch;
@@ -47,7 +49,6 @@ import static com.alibaba.fluss.utils.Preconditions.checkState;
  */
 @Internal
 public class ArrowWriter implements AutoCloseable {
-
     /**
      * The initial capacity of the vectors which are used to store the rows. The capacity will be
      * expanded automatically if the rows exceed the initial capacity.
@@ -55,10 +56,16 @@ public class ArrowWriter implements AutoCloseable {
     private static final int INITIAL_CAPACITY = 1024;
 
     /**
+     * The buffer usage ratio which is used to determine whether the writer is full. The writer is
+     * full if the buffer usage ratio exceeds the threshold.
+     */
+    public static final double BUFFER_USAGE_RATIO = 0.96;
+
+    /**
      * The identifier of the writer which is used to identify the writer in the {@link
      * ArrowWriterPool}.
      */
-    final String tableSchemaId;
+    final String writerKey;
 
     /** Container that holds a set of vectors for the rows. */
     final VectorSchemaRoot root;
@@ -79,7 +86,9 @@ public class ArrowWriter implements AutoCloseable {
 
     private final RowType schema;
 
-    private int maxSizeInBytes;
+    private final CompressionCodec compressionCodec;
+
+    private int writeLimitInBytes;
 
     private int estimatedMaxRecordsCount;
     private int recordsCount;
@@ -88,17 +97,22 @@ public class ArrowWriter implements AutoCloseable {
     private long epoch;
 
     ArrowWriter(
-            String tableSchemaId,
-            int maxSizeInBytes,
+            String writerKey,
+            int bufferSizeInBytes,
             RowType schema,
             BufferAllocator allocator,
-            ArrowWriterProvider provider) {
-        this.tableSchemaId = tableSchemaId;
+            ArrowWriterProvider provider,
+            ArrowCompressionInfo compressionInfo) {
+        this.writerKey = writerKey;
         this.schema = schema;
         this.root = VectorSchemaRoot.create(ArrowUtils.toArrowSchema(schema), allocator);
         this.provider = Preconditions.checkNotNull(provider);
-        this.metadataLength = ArrowUtils.estimateArrowMetadataLength(root.getSchema());
-        this.maxSizeInBytes = maxSizeInBytes;
+        this.compressionCodec = compressionInfo.createCompressionCodec();
+
+        this.metadataLength =
+                ArrowUtils.estimateArrowMetadataLength(
+                        root.getSchema(), CompressionUtil.createBodyCompression(compressionCodec));
+        this.writeLimitInBytes = (int) (bufferSizeInBytes * BUFFER_USAGE_RATIO);
         this.estimatedMaxRecordsCount = -1;
         this.recordsCount = 0;
         this.epoch = 0;
@@ -115,8 +129,8 @@ public class ArrowWriter implements AutoCloseable {
         return recordsCount;
     }
 
-    public int getMaxSizeInBytes() {
-        return maxSizeInBytes;
+    public int getWriteLimitInBytes() {
+        return writeLimitInBytes;
     }
 
     public boolean isFull() {
@@ -125,14 +139,14 @@ public class ArrowWriter implements AutoCloseable {
             int metadataLength = getMetadataLength();
             int bodyLength = getBodyLength();
             int currentSize = metadataLength + bodyLength;
-            if (currentSize >= maxSizeInBytes) {
+            if (currentSize >= writeLimitInBytes) {
                 return true;
             } else {
                 // update the estimated max records count
                 estimatedMaxRecordsCount =
                         (int)
                                 Math.ceil(
-                                        (maxSizeInBytes - metadataLength)
+                                        (writeLimitInBytes - metadataLength)
                                                 / (bodyLength / (recordsCount * 1.0)));
                 return false;
             }
@@ -143,8 +157,8 @@ public class ArrowWriter implements AutoCloseable {
         }
     }
 
-    public void reset(int maxSizeInBytes) {
-        this.maxSizeInBytes = maxSizeInBytes;
+    public void reset(int bufferSizeInBytes) {
+        this.writeLimitInBytes = (int) (bufferSizeInBytes * BUFFER_USAGE_RATIO);
         for (int i = 0; i < fieldWriters.length; i++) {
             FieldVector fieldVector = root.getVector(i);
             initFieldVector(fieldVector);
@@ -199,22 +213,19 @@ public class ArrowWriter implements AutoCloseable {
     }
 
     /** Serializes the current row batch to Arrow format and returns the written size in bytes. */
-    public int serializeToOutputView(
-            AbstractPagedOutputView outputView,
-            MemorySegment firstSegment,
-            int position,
-            boolean waitingSegment)
+    public int serializeToOutputView(AbstractPagedOutputView outputView, int position)
             throws IOException {
         // Whether there is any record to write, we need to advance the position to make sure the
         // batch header will be written in outputView.
-        outputView.seekOutput(firstSegment, position, waitingSegment);
+        outputView.setPosition(position);
         if (recordsCount == 0) {
             return 0;
         }
 
         // update row count only when we try to write records to the output.
         root.setRowCount(recordsCount);
-        try (ArrowRecordBatch arrowBatch = new VectorUnloader(root).getRecordBatch()) {
+        try (ArrowRecordBatch arrowBatch =
+                new VectorUnloader(root, true, compressionCodec, true).getRecordBatch()) {
             PagedMemorySegmentWritableChannel channel =
                     new PagedMemorySegmentWritableChannel(outputView);
             ArrowBlock block = MessageSerializer.serialize(new WriteChannel(channel), arrowBatch);
