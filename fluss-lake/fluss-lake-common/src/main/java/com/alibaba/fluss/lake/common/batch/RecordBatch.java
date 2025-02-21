@@ -13,7 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.alibaba.fluss.lake.common.batch;
 
-/** The RecordBatch interface represents a batch of records. */
-public interface RecordBatch {}
+/**
+ * The RecordBatch interface represents a batch of records.
+ */
+public interface RecordBatch {
+}

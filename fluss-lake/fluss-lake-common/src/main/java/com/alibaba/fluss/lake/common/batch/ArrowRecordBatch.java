@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.alibaba.fluss.lake.common.batch;
 
-public class ArrowRecordBatch implements RecordBatch {}
+public class ArrowRecordBatch implements RecordBatch {
+}

@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.alibaba.fluss.lake.common.committer;
 
 import java.io.IOException;
@@ -22,7 +23,7 @@ import java.util.List;
  * The LakeCommitter interface for committing write results. It extends the AutoCloseable interface
  * to ensure resources are released after use.
  *
- * @param <WriteResult> the type of the write result
+ * @param <WriteResult>  the type of the write result
  * @param <CommittableT> the type of the committable object
  */
 public interface LakeCommitter<WriteResult, CommittableT> extends AutoCloseable {
