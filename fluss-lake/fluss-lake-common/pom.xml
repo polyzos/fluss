@@ -25,7 +25,19 @@
         <version>0.6-SNAPSHOT</version>
     </parent>
 
-    <artifactId>fluss-lake-common</artifactId>
+    <groupId>com.alibaba.fluss</groupId>
     <name>Fluss : Lake : Common</name>
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-files</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-core</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+    </dependencies>
 
 </project>
