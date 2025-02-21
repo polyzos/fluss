@@ -25,7 +25,7 @@
         <version>0.6-SNAPSHOT</version>
     </parent>
 
-    <groupId>com.alibaba.fluss</groupId>
+    <artifactId>fluss-lake-common</artifactId>
     <name>Fluss : Lake : Common</name>
     <dependencies>
         <dependency>
