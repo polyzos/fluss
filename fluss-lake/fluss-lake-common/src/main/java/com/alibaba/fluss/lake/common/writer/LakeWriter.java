@@ -21,8 +21,8 @@ import java.io.Closeable;
 import java.io.IOException;
 
 /**
- * The LakeWriter interface for writing records to a lake.
- * It extends the Closeable interface to ensure resources are released after use.
+ * The LakeWriter interface for writing records to a lake. It extends the Closeable interface to
+ * ensure resources are released after use.
  *
  * @param <WriteResult> the type of the write result
  */

@@ -20,8 +20,8 @@ import com.alibaba.fluss.lake.common.batch.RecordBatch;
 import java.io.IOException;
 
 /**
- * The SupportsRecordBatchWrite interface for writing batches of records.
- * It provides a method to write a batch of records to the underlying storage.
+ * The SupportsRecordBatchWrite interface for writing batches of records. It provides a method to
+ * write a batch of records to the underlying storage.
  */
 public interface SupportsRecordBatchWrite {
 

@@ -18,9 +18,7 @@ package com.alibaba.fluss.lake.common.assigner;
 
 import com.alibaba.fluss.row.InternalRow;
 
-/**
- * The BucketAssigner interface for assigning buckets to rows.
- */
+/** The BucketAssigner interface for assigning buckets to rows. */
 public interface BucketAssigner {
 
     /**

@@ -21,8 +21,8 @@ import com.alibaba.fluss.metadata.TablePath;
 import javax.annotation.Nullable;
 
 /**
- * The WriterInitContext interface provides the context needed to create a LakeWriter.
- * It includes methods to obtain the table path, table bucket, and an optional partition.
+ * The WriterInitContext interface provides the context needed to create a LakeWriter. It includes
+ * methods to obtain the table path, table bucket, and an optional partition.
  */
 public interface WriterInitContext {
 
@@ -45,5 +45,6 @@ public interface WriterInitContext {
      *
      * @return the partition, or null if there is no partition
      */
-    @Nullable String partition();
+    @Nullable
+    String partition();
 }

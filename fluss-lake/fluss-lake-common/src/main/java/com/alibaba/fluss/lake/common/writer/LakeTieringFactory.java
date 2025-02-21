@@ -16,6 +16,7 @@
 package com.alibaba.fluss.lake.common.writer;
 
 import com.alibaba.fluss.lake.common.serializer.SimpleVersionedSerializer;
+
 import org.apache.flink.api.connector.sink2.Committer;
 import org.apache.flink.api.connector.sink2.CommitterInitContext;
 import org.apache.flink.connector.file.table.stream.compact.CompactWriter;
@@ -23,9 +24,9 @@ import org.apache.flink.connector.file.table.stream.compact.CompactWriter;
 import java.io.IOException;
 
 /**
- * The LakeTieringFactory interface defines how to create lake writers and committers.
- * It provides methods to create writers and committers for Fluss's rows to Paimon/Iceberg rows,
- * and to obtain serializers for write results and committable objects.
+ * The LakeTieringFactory interface defines how to create lake writers and committers. It provides
+ * methods to create writers and committers for Fluss's rows to Paimon/Iceberg rows, and to obtain
+ * serializers for write results and committable objects.
  *
  * @param <WriteResult> the type of the write result
  * @param <CommitableT> the type of the committable object
@@ -39,7 +40,8 @@ public interface LakeTieringFactory<WriteResult, CommitableT> {
      * @return the lake writer
      * @throws IOException if an I/O error occurs
      */
-    CompactWriter<WriteResult> createLakeWriter(WriterInitContext writerInitContext) throws IOException;
+    CompactWriter<WriteResult> createLakeWriter(WriterInitContext writerInitContext)
+            throws IOException;
 
     /**
      * Returns the serializer for write results.
@@ -55,7 +57,8 @@ public interface LakeTieringFactory<WriteResult, CommitableT> {
      * @return the lake committer
      * @throws IOException if an I/O error occurs
      */
-    Committer<CommitableT> createLakeCommitter(CommitterInitContext committerInitContext) throws IOException;
+    Committer<CommitableT> createLakeCommitter(CommitterInitContext committerInitContext)
+            throws IOException;
 
     /**
      * Returns the serializer for committable objects.

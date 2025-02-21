@@ -19,8 +19,8 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * The LakeCommitter interface  for committing write results.
- * It extends the AutoCloseable interface to ensure resources are released after use.
+ * The LakeCommitter interface for committing write results. It extends the AutoCloseable interface
+ * to ensure resources are released after use.
  *
  * @param <WriteResult> the type of the write result
  * @param <CommittableT> the type of the committable object

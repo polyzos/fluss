@@ -18,8 +18,8 @@ package com.alibaba.fluss.lake.common.serializer;
 import java.io.IOException;
 
 /**
- * The SimpleVersionedSerializer interface = for serializing and deserializing objects
- * with versioning support. It provides methods to get the version, serialize an object to a byte array,
+ * The SimpleVersionedSerializer interface = for serializing and deserializing objects with
+ * versioning support. It provides methods to get the version, serialize an object to a byte array,
  * and deserialize a byte array to an object.
  *
  * @param <E> the type of the object to be serialized and deserialized
