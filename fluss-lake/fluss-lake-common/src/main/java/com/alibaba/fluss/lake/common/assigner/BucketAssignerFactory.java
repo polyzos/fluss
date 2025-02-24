@@ -16,7 +16,6 @@
 
 package com.alibaba.fluss.lake.common.assigner;
 
-import com.alibaba.fluss.client.write.BucketAssigner;
 import com.alibaba.fluss.metadata.TableDescriptor;
 
 /** The BucketAssignerFactory interface for creating BucketAssigner instances. */
