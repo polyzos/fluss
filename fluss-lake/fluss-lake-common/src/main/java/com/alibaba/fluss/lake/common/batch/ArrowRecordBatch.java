@@ -16,5 +16,4 @@
 
 package com.alibaba.fluss.lake.common.batch;
 
-public class ArrowRecordBatch implements RecordBatch {
-}
+public class ArrowRecordBatch implements RecordBatch {}

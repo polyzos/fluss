@@ -16,8 +16,5 @@
 
 package com.alibaba.fluss.lake.common.batch;
 
-/**
- * The RecordBatch interface represents a batch of records.
- */
-public interface RecordBatch {
-}
+/** The RecordBatch interface represents a batch of records. */
+public interface RecordBatch {}
