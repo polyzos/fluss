@@ -27,16 +27,41 @@ import java.lang.reflect.Field;
  * to convert Flink rows to POJOs.
  */
 public class FlinkRowToPojo {
-
     public static <T> T convert(Row row, Class<T> pojoClass) {
         try {
             T pojo = pojoClass.getDeclaredConstructor().newInstance();
             Field[] fields = pojoClass.getDeclaredFields();
 
+            if (row.getArity() != fields.length) {
+                throw new IllegalArgumentException(
+                        "Row arity does not match the number of fields in the POJO class");
+            }
+
             for (int i = 0; i < fields.length; i++) {
                 Field field = fields[i];
                 field.setAccessible(true);
                 Object value = row.getField(i);
+
+                // Handle null values for primitive types
+                if (value == null && field.getType().isPrimitive()) {
+                    if (field.getType() == int.class) {
+                        value = 0;
+                    } else if (field.getType() == long.class) {
+                        value = 0L;
+                    } else if (field.getType() == double.class) {
+                        value = 0.0;
+                    } else if (field.getType() == float.class) {
+                        value = 0.0f;
+                    } else if (field.getType() == short.class) {
+                        value = (short) 0;
+                    } else if (field.getType() == byte.class) {
+                        value = (byte) 0;
+                    } else if (field.getType() == boolean.class) {
+                        value = false;
+                    } else if (field.getType() == char.class) {
+                        value = '\u0000';
+                    }
+                }
 
                 // Convert types if necessary
                 if (value != null && !field.getType().isAssignableFrom(value.getClass())) {

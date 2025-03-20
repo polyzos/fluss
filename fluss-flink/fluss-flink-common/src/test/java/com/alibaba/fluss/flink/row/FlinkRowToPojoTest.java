@@ -29,7 +29,7 @@ public class FlinkRowToPojoTest {
     @Test
     public void testConvert() {
         // Create a Row
-        Row row = new Row(5);
+        Row row = new Row(4);
         row.setField(0, 1L);
         row.setField(1, 100L);
         row.setField(2, 5);
@@ -46,13 +46,66 @@ public class FlinkRowToPojoTest {
     }
 
     @Test
+    public void testConvertWithNullValues() {
+        // Create a Row with null values
+        Row row = new Row(4);
+        row.setField(0, null);
+        row.setField(1, null);
+        row.setField(2, null);
+        row.setField(3, null);
+
+        // Convert the row to an Order object
+        Order order = FlinkRowToPojo.convert(row, Order.class);
+
+        // Verify the converted object
+        assertThat(order.getOrderId()).isEqualTo(0L);
+        assertThat(order.getItemId()).isEqualTo(0L);
+        assertThat(order.getAmount()).isEqualTo(0);
+        assertThat(order.getAddress()).isNull();
+    }
+
+    @Test
     public void testConvertWithTypeMismatch() {
         // Create a Row with type mismatch
-        Row row = new Row(5);
+        Row row = new Row(4);
         row.setField(0, "1");
         row.setField(1, "100");
         row.setField(2, "5");
         row.setField(3, 123);
+
+        // Verify that an exception is thrown
+        assertThatThrownBy(() -> FlinkRowToPojo.convert(row, Order.class))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Error converting Flink Row to POJO");
+    }
+
+    @Test
+    public void testConvertWithExtraFields() {
+        // Create a Row with extra fields
+        Row row = new Row(4);
+        row.setField(0, 1L);
+        row.setField(1, 100L);
+        row.setField(2, 5);
+        row.setField(3, "123 Test St");
+        row.setField(4, "extra");
+
+        // Convert the row to an Order object
+        Order order = FlinkRowToPojo.convert(row, Order.class);
+
+        // Verify the converted object
+        assertThat(order.getOrderId()).isEqualTo(1L);
+        assertThat(order.getItemId()).isEqualTo(100L);
+        assertThat(order.getAmount()).isEqualTo(5);
+        assertThat(order.getAddress()).isEqualTo("123 Test St");
+    }
+
+    @Test
+    public void testConvertWithMissingFields() {
+        // Create a Row with missing fields
+        Row row = new Row(3);
+        row.setField(0, 1L);
+        row.setField(1, 100L);
+        row.setField(2, 5);
 
         // Verify that an exception is thrown
         assertThatThrownBy(() -> FlinkRowToPojo.convert(row, Order.class))
