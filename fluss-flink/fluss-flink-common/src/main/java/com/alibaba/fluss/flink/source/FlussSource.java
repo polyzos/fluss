@@ -43,7 +43,7 @@ import org.apache.flink.table.data.RowData;
 import javax.annotation.Nullable;
 
 /** Flink source for Fluss. */
-public class FlinkSource implements Source<RowData, SourceSplitBase, SourceEnumeratorState> {
+public class FlussSource implements Source<RowData, SourceSplitBase, SourceEnumeratorState> {
     private static final long serialVersionUID = 1L;
 
     private final Configuration flussConf;
@@ -56,7 +56,7 @@ public class FlinkSource implements Source<RowData, SourceSplitBase, SourceEnume
     private final long scanPartitionDiscoveryIntervalMs;
     private final boolean streaming;
 
-    public FlinkSource(
+    public FlussSource(
             Configuration flussConf,
             TablePath tablePath,
             boolean hasPrimaryKey,
