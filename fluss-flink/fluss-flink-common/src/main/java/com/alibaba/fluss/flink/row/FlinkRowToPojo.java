@@ -19,6 +19,8 @@ package com.alibaba.fluss.flink.row;
 import org.apache.flink.types.Row;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
 
 /**
  * Helper class for converting a Flink Row to a POJO using reflection
@@ -30,7 +32,16 @@ public class FlinkRowToPojo {
     public static <T> T convert(Row row, Class<T> pojoClass) {
         try {
             T pojo = pojoClass.getDeclaredConstructor().newInstance();
-            Field[] fields = pojoClass.getDeclaredFields();
+            Field[] allFields = pojoClass.getDeclaredFields();
+
+            // Filter out synthetic fields (like JaCoCo's $jacocoData)
+            Field[] fields =
+                    Arrays.stream(allFields)
+                            .filter(
+                                    field ->
+                                            !field.isSynthetic()
+                                                    && !Modifier.isStatic(field.getModifiers()))
+                            .toArray(Field[]::new);
 
             if (row.getArity() != fields.length) {
                 throw new IllegalArgumentException(
