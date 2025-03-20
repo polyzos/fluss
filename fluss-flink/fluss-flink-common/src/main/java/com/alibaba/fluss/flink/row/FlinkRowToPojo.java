@@ -34,7 +34,7 @@ public class FlinkRowToPojo {
             T pojo = pojoClass.getDeclaredConstructor().newInstance();
             Field[] allFields = pojoClass.getDeclaredFields();
 
-            // Filter out synthetic fields (like JaCoCo's $jacocoData)
+            // Filter out synthetic fields (JaCoCo's $jacocoData)
             Field[] fields =
                     Arrays.stream(allFields)
                             .filter(
@@ -93,6 +93,62 @@ public class FlinkRowToPojo {
                         value = ((Number) value).shortValue();
                     } else if (field.getType() == Byte.class || field.getType() == byte.class) {
                         value = ((Number) value).byteValue();
+                    } else if (field.getType() == Boolean.class
+                            || field.getType() == boolean.class) {
+                        if (value instanceof Number) {
+                            value = ((Number) value).intValue() != 0;
+                        } else {
+                            value = Boolean.parseBoolean(value.toString());
+                        }
+                    } else if (field.getType() == String.class) {
+                        // Convert any type to String if needed
+                        value = value.toString();
+                    } else if (field.getType() == java.time.LocalDateTime.class) {
+                        // Handle TimestampNtz to LocalDateTime conversion
+                        if (value.getClass()
+                                .getName()
+                                .equals("com.alibaba.fluss.row.TimestampNtz")) {
+                            try {
+                                // Try invoking toLocalDateTime() method if it exists
+                                java.lang.reflect.Method method =
+                                        value.getClass().getMethod("toLocalDateTime");
+                                value = method.invoke(value);
+                            } catch (NoSuchMethodException e) {
+                                // Fallback 1: try getting internal value
+                                try {
+                                    java.lang.reflect.Method method =
+                                            value.getClass().getMethod("getMillisecond");
+                                    Long milliseconds = (Long) method.invoke(value);
+                                    value =
+                                            java.time.Instant.ofEpochMilli(milliseconds)
+                                                    .atZone(java.time.ZoneId.systemDefault())
+                                                    .toLocalDateTime();
+                                } catch (Exception ex) {
+                                    // Fallback 2: try parsing the string representation
+                                    String strValue = value.toString().trim().replace(" ", "T");
+                                    value = java.time.LocalDateTime.parse(strValue);
+                                }
+                            }
+                        } else if (value instanceof Long) {
+                            // Convert epoch millis to LocalDateTime
+                            value =
+                                    java.time.Instant.ofEpochMilli((Long) value)
+                                            .atZone(java.time.ZoneId.systemDefault())
+                                            .toLocalDateTime();
+                        }
+                    } else if (field.getType() == java.time.LocalDate.class) {
+                        if (value instanceof java.time.LocalDateTime) {
+                            value = ((java.time.LocalDateTime) value).toLocalDate();
+                        } else {
+                            // Try to convert string to LocalDate
+                            value = java.time.LocalDate.parse(value.toString());
+                        }
+                    } else if (field.getType() == java.util.Date.class) {
+                        if (value instanceof java.time.LocalDateTime) {
+                            value = java.sql.Timestamp.valueOf((java.time.LocalDateTime) value);
+                        } else if (value instanceof Long) {
+                            value = new java.util.Date((Long) value);
+                        }
                     }
                 }
 
