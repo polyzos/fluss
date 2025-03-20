@@ -32,7 +32,7 @@ public class FlussDeserializationSchemaTest {
     @Test
     public void testDeserialize() throws Exception {
         // Create a mock FlussRecord from a Row object
-        Row row = new Row(5);
+        Row row = new Row(4);
         row.setField(0, 1L);
         row.setField(1, 100L);
         row.setField(2, 5);
@@ -64,7 +64,7 @@ public class FlussDeserializationSchemaTest {
     @Test
     public void testConvertPojoToOrder() {
         // Create a Row
-        Row row = new Row(5);
+        Row row = new Row(4);
         row.setField(0, 1);
         row.setField(1, 100L);
         row.setField(2, 5);

@@ -82,7 +82,7 @@ public class FlinkRowToPojoTest {
     @Test
     public void testConvertWithExtraFields() {
         // Create a Row with extra fields
-        Row row = new Row(5); // Set arity to 5
+        Row row = new Row(5);
         row.setField(0, 1L);
         row.setField(1, 100L);
         row.setField(2, 5);

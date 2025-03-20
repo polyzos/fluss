@@ -35,12 +35,11 @@ public class FlussRecord {
         this.row = row;
     }
 
-    /** The position of this record in the corresponding fluss table bucket. */
-    public long logOffset() {
+    public long getOffset() {
         return offset;
     }
 
-    public long timestamp() {
+    public long getTimestamp() {
         return timestamp;
     }
 
@@ -52,6 +51,7 @@ public class FlussRecord {
         return row;
     }
 
+    /** The position of this record in the corresponding fluss table bucket. */
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) {

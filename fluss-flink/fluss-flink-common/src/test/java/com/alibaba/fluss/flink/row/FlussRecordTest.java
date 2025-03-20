@@ -39,7 +39,7 @@ public class FlussRecordTest {
                 new FlussRecord(0, System.currentTimeMillis(), ChangeType.INSERT, row);
 
         // Verify the FlussRecord properties
-        assertThat(flussRecord.logOffset()).isEqualTo(0);
+        assertThat(flussRecord.getOffset()).isEqualTo(0);
         assertThat(flussRecord.getChangeType()).isEqualTo(ChangeType.INSERT);
         assertThat(flussRecord.getRow()).isEqualTo(row);
     }
@@ -59,11 +59,12 @@ public class FlussRecordTest {
         row2.setField(2, 5);
         row2.setField(3, "123 Test St");
 
+        // Use the same timestamp for both records
+        long timestamp = System.currentTimeMillis();
+
         // Create two identical FlussRecords
-        FlussRecord flussRecord1 =
-                new FlussRecord(0, System.currentTimeMillis(), ChangeType.INSERT, row1);
-        FlussRecord flussRecord2 =
-                new FlussRecord(0, System.currentTimeMillis(), ChangeType.INSERT, row2);
+        FlussRecord flussRecord1 = new FlussRecord(0, timestamp, ChangeType.INSERT, row1);
+        FlussRecord flussRecord2 = new FlussRecord(0, timestamp, ChangeType.INSERT, row2);
 
         assertThat(flussRecord1).isEqualTo(flussRecord2);
         assertThat(flussRecord1.hashCode()).isEqualTo(flussRecord2.hashCode());
