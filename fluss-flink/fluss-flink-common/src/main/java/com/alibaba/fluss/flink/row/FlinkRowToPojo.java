@@ -34,7 +34,12 @@ public class FlinkRowToPojo {
 
             if (row.getArity() != fields.length) {
                 throw new IllegalArgumentException(
-                        "Row arity does not match the number of fields in the POJO class");
+                        "Row arity ("
+                                + row.getArity()
+                                + ") does not match the number of fields ("
+                                + fields.length
+                                + ") in the POJO class: "
+                                + pojoClass.getName());
             }
 
             for (int i = 0; i < fields.length; i++) {
@@ -84,8 +89,15 @@ public class FlinkRowToPojo {
             }
 
             return pojo;
+        } catch (IllegalArgumentException e) {
+            throw e;
         } catch (Exception e) {
-            throw new RuntimeException("Error converting Flink Row to POJO", e);
+            throw new RuntimeException(
+                    "Error converting Flink Row to POJO. Row: "
+                            + row
+                            + ", POJO class: "
+                            + pojoClass.getName(),
+                    e);
         }
     }
 }

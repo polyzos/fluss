@@ -82,21 +82,18 @@ public class FlinkRowToPojoTest {
     @Test
     public void testConvertWithExtraFields() {
         // Create a Row with extra fields
-        Row row = new Row(4);
+        Row row = new Row(5); // Set arity to 5
         row.setField(0, 1L);
         row.setField(1, 100L);
         row.setField(2, 5);
         row.setField(3, "123 Test St");
         row.setField(4, "extra");
 
-        // Convert the row to an Order object
-        Order order = FlinkRowToPojo.convert(row, Order.class);
-
-        // Verify the converted object
-        assertThat(order.getOrderId()).isEqualTo(1L);
-        assertThat(order.getItemId()).isEqualTo(100L);
-        assertThat(order.getAmount()).isEqualTo(5);
-        assertThat(order.getAddress()).isEqualTo("123 Test St");
+        // Verify that an exception is thrown
+        assertThatThrownBy(() -> FlinkRowToPojo.convert(row, Order.class))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(
+                        "Row arity (5) does not match the number of fields (4) in the POJO class");
     }
 
     @Test
@@ -109,7 +106,8 @@ public class FlinkRowToPojoTest {
 
         // Verify that an exception is thrown
         assertThatThrownBy(() -> FlinkRowToPojo.convert(row, Order.class))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Error converting Flink Row to POJO");
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(
+                        "Row arity (3) does not match the number of fields (4) in the POJO class");
     }
 }
