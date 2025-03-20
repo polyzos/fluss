@@ -29,7 +29,7 @@ public class FlinkRowToPojoTest {
     @Test
     public void testConvert() {
         // Create a Row
-        Row row = new Row(4);
+        Row row = new Row(5);
         row.setField(0, 1L);
         row.setField(1, 100L);
         row.setField(2, 5);
@@ -48,7 +48,7 @@ public class FlinkRowToPojoTest {
     @Test
     public void testConvertWithTypeMismatch() {
         // Create a Row with type mismatch
-        Row row = new Row(4);
+        Row row = new Row(5);
         row.setField(0, "1");
         row.setField(1, "100");
         row.setField(2, "5");
