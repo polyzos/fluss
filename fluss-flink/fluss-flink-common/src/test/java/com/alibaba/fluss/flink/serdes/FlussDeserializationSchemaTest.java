@@ -32,7 +32,7 @@ public class FlussDeserializationSchemaTest {
     @Test
     public void testDeserialize() throws Exception {
         // Create a mock FlussRecord from a Row object
-        Row row = new Row(4);
+        Row row = new Row(5);
         row.setField(0, 1L);
         row.setField(1, 100L);
         row.setField(2, 5);
