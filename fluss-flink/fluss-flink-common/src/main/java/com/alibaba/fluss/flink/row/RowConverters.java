@@ -21,10 +21,12 @@ import com.alibaba.fluss.row.GenericRow;
 import com.alibaba.fluss.row.TimestampNtz;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.sql.Date;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Arrays;
 
 /**
  * Utility class for converting between different row representations in Fluss.
@@ -45,7 +47,17 @@ public class RowConverters {
             throw new IllegalArgumentException("Input POJO cannot be null");
         }
 
-        Field[] fields = pojo.getClass().getDeclaredFields();
+        Field[] allFields = pojo.getClass().getDeclaredFields();
+
+        // Filter out synthetic fields (JaCoCo's $jacocoData)
+        Field[] fields =
+                Arrays.stream(allFields)
+                        .filter(
+                                field ->
+                                        !field.isSynthetic()
+                                                && !Modifier.isStatic(field.getModifiers()))
+                        .toArray(Field[]::new);
+
         Object[] values = new Object[fields.length];
 
         for (int i = 0; i < fields.length; i++) {
