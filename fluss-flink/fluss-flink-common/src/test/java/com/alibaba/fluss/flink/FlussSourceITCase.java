@@ -42,6 +42,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -52,7 +53,7 @@ public class FlussSourceITCase extends FlinkTestBase {
     private static final List<Order> collectedElements = new ArrayList<>();
 
     private static final List<Order> orders =
-            List.of(
+            Arrays.asList(
                     new Order(600, 20, 600, "addr1"),
                     new Order(700, 22, 601, "addr2"),
                     new Order(800, 23, 602, "addr3"),
