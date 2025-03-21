@@ -17,6 +17,7 @@
 package com.alibaba.fluss.flink.source.reader;
 
 import com.alibaba.fluss.config.Configuration;
+import com.alibaba.fluss.flink.serdes.FlussRowDeserializationSchema;
 import com.alibaba.fluss.flink.source.event.PartitionBucketsUnsubscribedEvent;
 import com.alibaba.fluss.flink.source.event.PartitionsRemovedEvent;
 import com.alibaba.fluss.flink.source.metrics.FlinkSourceReaderMetrics;
@@ -76,7 +77,7 @@ class FlussSourceReaderTest extends FlinkTestBase {
 
         // try to write some rows to the table
         TestingReaderContext readerContext = new TestingReaderContext();
-        try (final FlinkSourceReader reader =
+        try (final FlinkSourceReader<RowData> reader =
                 createReader(
                         clientConf,
                         tablePath,
@@ -151,7 +152,7 @@ class FlussSourceReaderTest extends FlinkTestBase {
         }
     }
 
-    private FlinkSourceReader createReader(
+    private FlinkSourceReader<RowData> createReader(
             Configuration flussConf,
             TablePath tablePath,
             RowType sourceOutputType,
@@ -165,6 +166,7 @@ class FlussSourceReaderTest extends FlinkTestBase {
                 sourceOutputType,
                 context,
                 null,
-                new FlinkSourceReaderMetrics(context.metricGroup()));
+                new FlinkSourceReaderMetrics(context.metricGroup()),
+                new FlussRowDeserializationSchema(sourceOutputType));
     }
 }
