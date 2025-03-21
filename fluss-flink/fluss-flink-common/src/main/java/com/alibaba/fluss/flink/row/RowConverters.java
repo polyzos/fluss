@@ -31,8 +31,6 @@ import java.time.ZoneId;
  *
  * <p>It's primarily used for testing and data conversion operations when interacting with the Fluss
  * storage system.
- *
- * <p>
  */
 public class RowConverters {
     /**

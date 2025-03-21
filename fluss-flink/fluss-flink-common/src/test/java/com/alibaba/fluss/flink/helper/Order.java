@@ -67,7 +67,9 @@ public class Order {
 
     @Override
     public boolean equals(Object o) {
-        if (o == null || getClass() != o.getClass()) return false;
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         Order order = (Order) o;
         return orderId == order.orderId
                 && itemId == order.itemId

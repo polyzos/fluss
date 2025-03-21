@@ -88,7 +88,6 @@ public class FlussSourceITCase extends FlinkTestBase {
             admin.createTable(tablePath, tableDescriptor, false).get();
         } catch (Exception e) {
             System.out.println("Table creation failed, may already exist: " + e.getMessage());
-            // Continue if table already exists
         }
 
         TablePath ordersTablePath = new TablePath("test-flink-db", "orders_test");
@@ -112,7 +111,7 @@ public class FlussSourceITCase extends FlinkTestBase {
         FlinkTestBase.beforeAll();
 
         initOrdersTable();
-        String BOOTSTRAP_SERVERS =
+        String bootstrapServers =
                 conn.getConfiguration().get(ConfigOptions.BOOTSTRAP_SERVERS).get(0);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -121,7 +120,7 @@ public class FlussSourceITCase extends FlinkTestBase {
         // Create a DataStream from the FlussSource
         FlussSource<Order> flussSource =
                 FlussSource.<Order>builder()
-                        .setBootstrapServers(BOOTSTRAP_SERVERS)
+                        .setBootstrapServers(bootstrapServers)
                         .setDatabase("test-flink-db")
                         .setTable("orders_test")
                         .setStartingOffsets(OffsetsInitializer.earliest())
