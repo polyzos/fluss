@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.alibaba.fluss.flink;
+package com.alibaba.fluss.flink.source;
 
 import com.alibaba.fluss.client.table.Table;
 import com.alibaba.fluss.client.table.scanner.ScanRecord;
@@ -22,7 +22,6 @@ import com.alibaba.fluss.config.ConfigOptions;
 import com.alibaba.fluss.flink.helper.Order;
 import com.alibaba.fluss.flink.row.RowConverters;
 import com.alibaba.fluss.flink.serdes.FlussDeserializationSchema;
-import com.alibaba.fluss.flink.source.FlussSource;
 import com.alibaba.fluss.flink.source.enumerator.initializer.OffsetsInitializer;
 import com.alibaba.fluss.flink.source.testutils.FlinkTestBase;
 import com.alibaba.fluss.metadata.Schema;
