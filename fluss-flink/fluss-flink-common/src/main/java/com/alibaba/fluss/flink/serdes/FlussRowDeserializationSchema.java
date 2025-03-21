@@ -57,6 +57,6 @@ public class FlussRowDeserializationSchema implements FlussDeserializationSchema
 
     @Override
     public TypeInformation<RowData> getProducedType() {
-        return null;
+        return TypeInformation.of(RowData.class);
     }
 }
