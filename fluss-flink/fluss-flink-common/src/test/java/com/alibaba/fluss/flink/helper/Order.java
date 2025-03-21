@@ -16,6 +16,8 @@
 
 package com.alibaba.fluss.flink.helper;
 
+import java.util.Objects;
+
 public class Order {
     private long orderId;
     private long itemId;
@@ -61,6 +63,21 @@ public class Order {
 
     public void setAddress(String address) {
         this.address = address;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+        Order order = (Order) o;
+        return orderId == order.orderId
+                && itemId == order.itemId
+                && amount == order.amount
+                && Objects.equals(address, order.address);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(orderId, itemId, amount, address);
     }
 
     @Override
