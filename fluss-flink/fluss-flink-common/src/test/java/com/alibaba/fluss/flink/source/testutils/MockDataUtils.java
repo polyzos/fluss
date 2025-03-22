@@ -58,8 +58,8 @@ public class MockDataUtils {
 
     public static class OrderDeserializationSchema implements FlussDeserializationSchema<Order> {
         @Override
-        public Order deserialize(ScanRecord flussRecord) throws Exception {
-            InternalRow row = flussRecord.getRow();
+        public Order deserialize(ScanRecord scanRecord) throws Exception {
+            InternalRow row = scanRecord.getRow();
             long orderId = row.getLong(0);
             long itemId = row.getLong(1);
             int amount = row.getInt(2);

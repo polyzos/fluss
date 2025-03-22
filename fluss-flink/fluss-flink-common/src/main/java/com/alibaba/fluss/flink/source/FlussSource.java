@@ -105,7 +105,10 @@ public class FlussSource<OUT>
         isPartitioned = !tableInfo.getPartitionKeys().isEmpty();
         hasPrimaryKey = !tableInfo.getPrimaryKeys().isEmpty();
 
-        sourceOutputType = tableInfo.getRowType();
+        sourceOutputType =
+                projectedFields != null
+                        ? tableInfo.getRowType().project(projectedFields)
+                        : tableInfo.getRowType();
 
         LOG.info("Creating Fluss Source with Configuration: {}", flussConf);
     }

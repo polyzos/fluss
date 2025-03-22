@@ -124,6 +124,50 @@ public class FlussSourcePKITCase extends FlinkTestBase {
         Assertions.assertEquals(orders, collectedElements);
     }
 
+    //    @Test
+    //    public void testTablePKSourceWithProjectionPushdown() throws Exception {
+    //        FlinkTestBase.beforeAll();
+    //        List<OrderPartial> expectedOutput =   Arrays.asList(
+    //                new OrderPartial(600, 600),
+    //                new OrderPartial(700, 601),
+    //                new OrderPartial(800, 602),
+    //                new OrderPartial(900, 603),
+    //                new OrderPartial(1000, 604));
+    //
+    //        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+    //        env.setParallelism(1);
+    //
+    //        // Create a DataStream from the FlussSource
+    //        FlussSource<OrderPartial> flussSource =
+    //                FlussSource.<OrderPartial>builder()
+    //                        .setBootstrapServers(bootstrapServers)
+    //                        .setDatabase(DEFAULT_DB)
+    //                        .setTable(pkTableName)
+    //                        .setStartingOffsets(OffsetsInitializer.earliest())
+    //                        .setScanPartitionDiscoveryIntervalMs(1000L)
+    //                        .setDeserializationSchema(new OrderPartialDeserializationSchema())
+    //                        .setProjectedFields(new int[] {0, 2})
+    //                        .build();
+    //
+    //        DataStreamSource<OrderPartial> stream =
+    //                env.fromSource(flussSource, WatermarkStrategy.noWatermarks(), "Fluss Source");
+    //
+    //        List<OrderPartial> collectedElements = new ArrayList<>();
+    //        try (CloseableIterator<OrderPartial> data = stream.collectAsync()) {
+    //            env.executeAsync("Test Fluss Orders Source With Projection Pushdown");
+    //            int count = 0;
+    //            while (data.hasNext() && count < expectedOutput.size() - 1) {
+    //                collectedElements.add(data.next());
+    //                count++;
+    //            }
+    //            collectedElements.add(data.next());
+    //        }
+    //
+    //        // Assert result size and elements match
+    //        Assertions.assertEquals(expectedOutput.size(), collectedElements.size());
+    //        Assertions.assertEquals(expectedOutput, collectedElements);
+    //    }
+
     @Test
     public void testRowDataPKTableSource() throws Exception {
         FlinkTestBase.beforeAll();
