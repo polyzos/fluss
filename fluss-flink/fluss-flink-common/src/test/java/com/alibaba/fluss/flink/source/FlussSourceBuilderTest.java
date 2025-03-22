@@ -278,7 +278,7 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
     @Test
     public void testSetProjectedFields() {
         // Given
-        int[] projectedFields = new int[] {0, 1, 2};
+        int[] projectedFields = new int[] {0, 1};
         FlussSource<TestRecord> source =
                 FlussSource.<TestRecord>builder()
                         .setBootstrapServers(bootstrapServers)
@@ -343,7 +343,7 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
     @Test
     public void testProjectedFields() {
         // Given
-        int[] projectedFields = new int[] {0, 2}; // Only include orderId and amount fields
+        int[] projectedFields = new int[] {0, 1}; // Only include orderId and amount fields
 
         // When
         FlussSource<TestRecord> source =
