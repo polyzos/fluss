@@ -161,20 +161,20 @@ public class FlinkTableSink
             // else, it's full update, ignore the given target columns as we don't care the order
         }
 
-        FlinkSink.SinkWriterBuilder<? extends FlinkSinkWriter> flinkSinkWriterBuilder =
+        FlussSink.SinkWriterBuilder<? extends FlinkSinkWriter> flinkSinkWriterBuilder =
                 (primaryKeyIndexes.length > 0)
-                        ? new FlinkSink.UpsertSinkWriterBuilder(
+                        ? new FlussSink.UpsertSinkWriterBuilder(
                                 tablePath,
                                 flussConfig,
                                 tableRowType,
                                 targetColumnIndexes,
                                 ignoreDelete)
-                        : new FlinkSink.AppendSinkWriterBuilder(
+                        : new FlussSink.AppendSinkWriterBuilder(
                                 tablePath, flussConfig, tableRowType, ignoreDelete);
 
-        FlinkSink flinkSink = new FlinkSink(flinkSinkWriterBuilder);
+        FlussSink flussSink = new FlussSink(flinkSinkWriterBuilder);
 
-        return SinkV2Provider.of(flinkSink);
+        return SinkV2Provider.of(flussSink);
     }
 
     private List<String> columns(int[] columnIndexes) {
