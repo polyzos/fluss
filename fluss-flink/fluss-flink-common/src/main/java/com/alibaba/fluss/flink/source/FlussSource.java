@@ -68,10 +68,10 @@ public class FlussSource<OUT>
     private final int[] projectedFields;
     private final long scanPartitionDiscoveryIntervalMs;
     private final boolean streaming;
+    private final OffsetsInitializer offsetsInitializer;
+    private final FlussDeserializationSchema<OUT> deserializationSchema;
 
     private String bootstrapServers;
-    private OffsetsInitializer offsetsInitializer;
-    private FlussDeserializationSchema<OUT> deserializationSchema;
 
     private FlussSource(Builder<OUT> builder) {
         this.bootstrapServers = builder.bootstrapServers;
@@ -90,13 +90,20 @@ public class FlussSource<OUT>
         tablePath = new TablePath(builder.database, builder.tableName);
         flussConf.setString("bootstrap.servers", bootstrapServers);
 
-        Connection connection = ConnectionFactory.createConnection(flussConf);
-        Admin admin = connection.getAdmin();
         TableInfo tableInfo;
-        try {
-            tableInfo = admin.getTableInfo(tablePath).get();
-        } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException(e);
+        try (Connection connection = ConnectionFactory.createConnection(flussConf);
+                Admin admin = connection.getAdmin()) {
+            try {
+                tableInfo = admin.getTableInfo(tablePath).get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Interrupted while getting table info", e);
+            } catch (ExecutionException e) {
+                throw new RuntimeException("Failed to get table info", e);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "Failed to initialize FlussSource admin connection: " + e.getMessage(), e);
         }
 
         flussConf.addAll(tableInfo.getCustomProperties());
