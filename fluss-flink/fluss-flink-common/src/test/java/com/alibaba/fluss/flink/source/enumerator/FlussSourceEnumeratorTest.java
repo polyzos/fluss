@@ -63,7 +63,7 @@ import static com.alibaba.fluss.testutils.DataTestUtils.row;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Unit tests for {@link FlinkSourceEnumerator}. */
-class FlinkSourceEnumeratorTest extends FlinkTestBase {
+class FlussSourceEnumeratorTest extends FlinkTestBase {
 
     private static final int PARTITION_DISCOVERY_CALLABLE_INDEX = 0;
     private static Configuration flussConf;

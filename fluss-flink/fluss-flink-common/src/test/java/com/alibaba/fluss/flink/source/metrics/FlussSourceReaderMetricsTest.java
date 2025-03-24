@@ -32,7 +32,7 @@ import static com.alibaba.fluss.flink.source.metrics.FlinkSourceReaderMetrics.RE
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Unit test for {@link com.alibaba.fluss.flink.source.metrics.FlinkSourceReaderMetrics}. */
-class FlinkSourceReaderMetricsTest {
+class FlussSourceReaderMetricsTest {
 
     @Test
     void testCurrentOffsetTracking() {

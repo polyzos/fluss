@@ -52,7 +52,7 @@ import static com.alibaba.fluss.testutils.common.CommonTestUtils.retry;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Test for {@link FlinkSourceReader}. */
-class FlinkSourceReaderTest extends FlinkTestBase {
+class FlussSourceReaderTest extends FlinkTestBase {
 
     @Test
     void testHandlePartitionsRemovedEvent() throws Exception {
