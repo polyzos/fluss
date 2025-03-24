@@ -301,7 +301,7 @@
                                             com.alibaba.fluss.flink.catalog.FlinkCatalogOptions
                                         </exclude>
                                         <exclude>
-                                            com.alibaba.fluss.flink.source.FlinkTableSource.*
+                                            com.alibaba.fluss.flink.source.FlussTableSource.*
                                         </exclude>
                                         <exclude>
                                             com.alibaba.fluss.flink.source.split.HybridSnapshotLogSplitState

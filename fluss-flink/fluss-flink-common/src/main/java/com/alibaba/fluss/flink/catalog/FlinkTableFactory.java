@@ -20,8 +20,8 @@ import com.alibaba.fluss.config.ConfigOptions;
 import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.flink.FlinkConnectorOptions;
 import com.alibaba.fluss.flink.lakehouse.LakeTableFactory;
-import com.alibaba.fluss.flink.sink.FlinkTableSink;
-import com.alibaba.fluss.flink.source.FlinkTableSource;
+import com.alibaba.fluss.flink.sink.FlussTableSink;
+import com.alibaba.fluss.flink.source.FlussTableSource;
 import com.alibaba.fluss.flink.utils.FlinkConnectorOptionsUtils;
 import com.alibaba.fluss.metadata.TablePath;
 
@@ -115,7 +115,7 @@ public class FlinkTableFactory implements DynamicTableSourceFactory, DynamicTabl
                         .get(FlinkConnectorOptions.SCAN_PARTITION_DISCOVERY_INTERVAL)
                         .toMillis();
 
-        return new FlinkTableSource(
+        return new FlussTableSource(
                 toFlussTablePath(context.getObjectIdentifier()),
                 toFlussClientConfig(tableOptions, context.getConfiguration()),
                 tableOutputType,
@@ -144,7 +144,7 @@ public class FlinkTableFactory implements DynamicTableSourceFactory, DynamicTabl
         RowType rowType = (RowType) context.getPhysicalRowDataType().getLogicalType();
         final ReadableConfig tableOptions = helper.getOptions();
 
-        return new FlinkTableSink(
+        return new FlussTableSink(
                 toFlussTablePath(context.getObjectIdentifier()),
                 toFlussClientConfig(tableOptions, context.getConfiguration()),
                 rowType,

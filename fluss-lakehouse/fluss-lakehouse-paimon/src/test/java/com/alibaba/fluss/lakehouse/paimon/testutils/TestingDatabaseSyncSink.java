@@ -20,7 +20,7 @@ import com.alibaba.fluss.client.Connection;
 import com.alibaba.fluss.client.ConnectionFactory;
 import com.alibaba.fluss.client.admin.Admin;
 import com.alibaba.fluss.config.Configuration;
-import com.alibaba.fluss.flink.sink.FlinkTableSink;
+import com.alibaba.fluss.flink.sink.FlussTableSink;
 import com.alibaba.fluss.flink.utils.FlinkConversions;
 import com.alibaba.fluss.lakehouse.paimon.record.MultiplexCdcRecord;
 import com.alibaba.fluss.metadata.TableInfo;
@@ -115,8 +115,8 @@ public class TestingDatabaseSyncSink implements Sink<MultiplexCdcRecord> {
                     throw new RuntimeException(e);
                 }
 
-                FlinkTableSink flinkTableSink =
-                        new FlinkTableSink(
+                FlussTableSink flinkTableSink =
+                        new FlussTableSink(
                                 // write to the sink database
                                 new TablePath(sinkDataBase, tablePath.getTableName()),
                                 flussConfig,

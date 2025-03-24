@@ -53,7 +53,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /** A Flink {@link DynamicTableSink}. */
-public class FlinkTableSink
+public class FlussTableSink
         implements DynamicTableSink,
                 SupportsPartitioning,
                 SupportsDeletePushDown,
@@ -71,7 +71,7 @@ public class FlinkTableSink
     private boolean appliedUpdates = false;
     @Nullable private GenericRow deleteRow;
 
-    public FlinkTableSink(
+    public FlussTableSink(
             TablePath tablePath,
             Configuration flussConfig,
             RowType tableRowType,
@@ -187,8 +187,8 @@ public class FlinkTableSink
 
     @Override
     public DynamicTableSink copy() {
-        FlinkTableSink sink =
-                new FlinkTableSink(
+        FlussTableSink sink =
+                new FlussTableSink(
                         tablePath,
                         flussConfig,
                         tableRowType,

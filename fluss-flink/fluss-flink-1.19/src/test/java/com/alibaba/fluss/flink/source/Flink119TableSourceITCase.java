@@ -16,5 +16,5 @@
 
 package com.alibaba.fluss.flink.source;
 
-/** IT case for {@link FlinkTableSource} in Flink 1.19. */
-public class Flink119TableSourceITCase extends FlinkTableSourceITCase {}
+/** IT case for {@link FlussTableSource} in Flink 1.19. */
+public class Flink119TableSourceITCase extends FlussTableSourceITCase {}

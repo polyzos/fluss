@@ -17,4 +17,4 @@
 package com.alibaba.fluss.flink.source;
 
 /** IT case for source failover and recovery in Flink 1.19. */
-public class Flink119TableSourceFailOverITCase extends FlinkTableSourceFailOverITCase {}
+public class Flink119TableSourceFailOverITCase extends FlussTableSourceFailOverITCase {}

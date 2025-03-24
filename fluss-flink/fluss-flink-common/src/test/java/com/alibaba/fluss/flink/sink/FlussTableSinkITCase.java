@@ -67,8 +67,8 @@ import static com.alibaba.fluss.server.testutils.FlussClusterExtension.BUILTIN_D
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Test for {@link FlinkTableSink}. */
-class FlinkTableSinkITCase {
+/** Test for {@link FlussTableSink}. */
+class FlussTableSinkITCase {
     @RegisterExtension
     public static final FlussClusterExtension FLUSS_CLUSTER_EXTENSION =
             FlussClusterExtension.builder().setNumOfTabletServers(3).build();

@@ -16,5 +16,5 @@
 
 package com.alibaba.fluss.flink.sink;
 
-/** IT case for {@link FlinkTableSink} in Flink 1.18. */
-public class Flink118TableSinkITCase extends FlinkTableSinkITCase {}
+/** IT case for {@link FlussTableSink} in Flink 1.18. */
+public class Flink118TableSinkITCase extends FlussTableSinkITCase {}

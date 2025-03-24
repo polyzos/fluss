@@ -17,4 +17,4 @@
 package com.alibaba.fluss.flink.source;
 
 /** IT case for batch source in Flink 1.18. */
-public class Flink118TableSourceBatchITCase extends FlinkTableSourceBatchITCase {}
+public class Flink118TableSourceBatchITCase extends FlussTableSourceBatchITCase {}

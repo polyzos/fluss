@@ -76,7 +76,7 @@ import java.util.Map;
 import static com.alibaba.fluss.utils.Preconditions.checkNotNull;
 
 /** Flink table source to scan Fluss data. */
-public class FlinkTableSource
+public class FlussTableSource
         implements ScanTableSource,
                 SupportsProjectionPushDown,
                 SupportsFilterPushDown,
@@ -123,7 +123,7 @@ public class FlinkTableSource
 
     private long limit = -1;
 
-    public FlinkTableSource(
+    public FlussTableSource(
             TablePath tablePath,
             Configuration flussConfig,
             org.apache.flink.table.types.logical.RowType tableOutputType,
@@ -335,8 +335,8 @@ public class FlinkTableSource
 
     @Override
     public DynamicTableSource copy() {
-        FlinkTableSource source =
-                new FlinkTableSource(
+        FlussTableSource source =
+                new FlussTableSource(
                         tablePath,
                         flussConfig,
                         tableOutputType,
