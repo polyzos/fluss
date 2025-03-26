@@ -17,6 +17,7 @@
 package com.alibaba.fluss.flink.source;
 
 import com.alibaba.fluss.config.Configuration;
+import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
 import com.alibaba.fluss.flink.source.enumerator.FlinkSourceEnumerator;
 import com.alibaba.fluss.flink.source.enumerator.initializer.OffsetsInitializer;
 import com.alibaba.fluss.flink.source.metrics.FlinkSourceReaderMetrics;
@@ -54,6 +55,7 @@ public class FlinkSource<OUT> implements Source<OUT, SourceSplitBase, SourceEnum
     private final OffsetsInitializer offsetsInitializer;
     private final long scanPartitionDiscoveryIntervalMs;
     private final boolean streaming;
+    private final FlussDeserializationSchema<OUT> deserializationSchema;
 
     public FlinkSource(
             Configuration flussConf,
@@ -64,6 +66,7 @@ public class FlinkSource<OUT> implements Source<OUT, SourceSplitBase, SourceEnum
             @Nullable int[] projectedFields,
             OffsetsInitializer offsetsInitializer,
             long scanPartitionDiscoveryIntervalMs,
+            FlussDeserializationSchema<OUT> deserializationSchema,
             boolean streaming) {
         this.flussConf = flussConf;
         this.tablePath = tablePath;
@@ -73,6 +76,7 @@ public class FlinkSource<OUT> implements Source<OUT, SourceSplitBase, SourceEnum
         this.projectedFields = projectedFields;
         this.offsetsInitializer = offsetsInitializer;
         this.scanPartitionDiscoveryIntervalMs = scanPartitionDiscoveryIntervalMs;
+        this.deserializationSchema = deserializationSchema;
         this.streaming = streaming;
     }
 
@@ -135,6 +139,7 @@ public class FlinkSource<OUT> implements Source<OUT, SourceSplitBase, SourceEnum
                 sourceOutputType,
                 context,
                 projectedFields,
-                flinkSourceReaderMetrics);
+                flinkSourceReaderMetrics,
+                deserializationSchema);
     }
 }
