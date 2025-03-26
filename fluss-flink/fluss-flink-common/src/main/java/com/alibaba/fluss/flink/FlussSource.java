@@ -231,7 +231,7 @@ public class FlussSource<OUT> extends FlinkSource implements ResultTypeQueryable
                             : tableInfo.getRowType();
 
             LOG.info("Creating Fluss Source with Configuration: {}", flussConf);
-            System.out.println("Creating Fluss Source with Configuration: " + flussConf);
+
             return new FlussSource<T>(
                     flussConf,
                     tablePath,
