@@ -168,9 +168,8 @@ public class FlussSource<OUT> extends FlinkSource implements ResultTypeQueryable
         public FlussSource<T> build() {
 
             Objects.requireNonNull(bootstrapServers, "bootstrapServers must not be empty");
+            Objects.requireNonNull(deserializationSchema, "DeserializationSchema must not be null");
             //            Objects.requireNonNull(rowType, "RowType cannot be null");
-            //            Objects.requireNonNull(deserializationSchema, "DeserializationSchema
-            // cannot be null");
 
             if (bootstrapServers == null || bootstrapServers.isEmpty()) {
                 throw new IllegalArgumentException("bootstrapServers must not be empty");
