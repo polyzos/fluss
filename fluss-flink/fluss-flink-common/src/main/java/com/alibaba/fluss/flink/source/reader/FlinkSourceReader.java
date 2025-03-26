@@ -18,6 +18,7 @@ package com.alibaba.fluss.flink.source.reader;
 
 import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.flink.lakehouse.LakeSplitStateInitializer;
+import com.alibaba.fluss.flink.source.deserializer.FlussRowDataDeserializer;
 import com.alibaba.fluss.flink.source.emitter.FlinkRecordEmitter;
 import com.alibaba.fluss.flink.source.event.PartitionBucketsUnsubscribedEvent;
 import com.alibaba.fluss.flink.source.event.PartitionsRemovedEvent;
@@ -36,7 +37,6 @@ import org.apache.flink.api.connector.source.SourceReaderContext;
 import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.SingleThreadMultiplexSourceReaderBase;
 import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
-import org.apache.flink.table.data.RowData;
 
 import javax.annotation.Nullable;
 
@@ -45,9 +45,9 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 /** The source reader for Fluss. */
-public class FlinkSourceReader
+public class FlinkSourceReader<OUT>
         extends SingleThreadMultiplexSourceReaderBase<
-                RecordAndPos, RowData, SourceSplitBase, SourceSplitState> {
+                RecordAndPos, OUT, SourceSplitBase, SourceSplitState> {
 
     public FlinkSourceReader(
             FutureCompletingBlockingQueue<RecordsWithSplitIds<RecordAndPos>> elementsQueue,
@@ -69,7 +69,7 @@ public class FlinkSourceReader
                                         projectedFields,
                                         flinkSourceReaderMetrics),
                         (ignore) -> {}),
-                new FlinkRecordEmitter(sourceOutputType),
+                new FlinkRecordEmitter(new FlussRowDataDeserializer(sourceOutputType)),
                 context.getConfiguration(),
                 context);
     }

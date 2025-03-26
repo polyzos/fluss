@@ -38,12 +38,11 @@ import org.apache.flink.api.connector.source.SplitEnumeratorContext;
 import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
 import org.apache.flink.core.io.SimpleVersionedSerializer;
-import org.apache.flink.table.data.RowData;
 
 import javax.annotation.Nullable;
 
 /** Flink source for Fluss. */
-public class FlinkSource implements Source<RowData, SourceSplitBase, SourceEnumeratorState> {
+public class FlinkSource<OUT> implements Source<OUT, SourceSplitBase, SourceEnumeratorState> {
     private static final long serialVersionUID = 1L;
 
     private final Configuration flussConf;
@@ -124,12 +123,12 @@ public class FlinkSource implements Source<RowData, SourceSplitBase, SourceEnume
     }
 
     @Override
-    public SourceReader<RowData, SourceSplitBase> createReader(SourceReaderContext context) {
+    public SourceReader<OUT, SourceSplitBase> createReader(SourceReaderContext context) {
         FutureCompletingBlockingQueue<RecordsWithSplitIds<RecordAndPos>> elementsQueue =
                 new FutureCompletingBlockingQueue<>();
         FlinkSourceReaderMetrics flinkSourceReaderMetrics =
                 new FlinkSourceReaderMetrics(context.metricGroup());
-        return new FlinkSourceReader(
+        return new FlinkSourceReader<>(
                 elementsQueue,
                 flussConf,
                 tablePath,
