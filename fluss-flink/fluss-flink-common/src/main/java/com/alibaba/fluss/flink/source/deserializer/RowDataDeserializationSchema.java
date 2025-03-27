@@ -76,6 +76,7 @@ public class RowDataDeserializationSchema implements FlussDeserializationSchema<
         RowType rowType = context.getRowSchema();
         this.converter = new FlussRowToFlinkRowConverter(rowType);
     }
+
     /**
      * Deserializes a {@link LogRecord} into a Flink {@link RowData} object.
      *
