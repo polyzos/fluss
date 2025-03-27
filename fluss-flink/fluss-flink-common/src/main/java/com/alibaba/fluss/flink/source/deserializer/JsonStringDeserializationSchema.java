@@ -16,7 +16,6 @@
 
 package com.alibaba.fluss.flink.source.deserializer;
 
-import com.alibaba.fluss.client.table.scanner.ScanRecord;
 import com.alibaba.fluss.record.LogRecord;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -60,17 +59,10 @@ public class JsonStringDeserializationSchema implements FlussDeserializationSche
      */
     @Override
     public String deserialize(LogRecord record) throws Exception {
-        if (record == null) {
-            return null;
-        }
-
-        ScanRecord scanRecord = (ScanRecord) record;
-
-        recordMap.clear();
-        recordMap.put("offset", scanRecord.logOffset());
-        recordMap.put("timestamp", scanRecord.timestamp());
-        recordMap.put("changeType", scanRecord.getChangeType().toString());
-        recordMap.put("row", scanRecord.getRow().toString());
+        recordMap.put("offset", record.logOffset());
+        recordMap.put("timestamp", record.timestamp());
+        recordMap.put("changeType", record.getChangeType().toString());
+        recordMap.put("row", record.getRow().toString());
 
         return objectMapper.writeValueAsString(recordMap);
     }
