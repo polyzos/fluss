@@ -16,6 +16,7 @@
 
 package com.alibaba.fluss.flink.source.deserializer;
 
+import com.alibaba.fluss.annotation.PublicEvolving;
 import com.alibaba.fluss.record.LogRecord;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -28,20 +29,64 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * A deserialization schema that converts {@link LogRecord} objects to {@link String}
- * representations.
+ * A deserialization schema that converts {@link LogRecord} objects to JSON strings.
  *
- * <p>This deserializer simply converts the scan record to its string representation using {@code
- * String.valueOf()} method and creates a new String instance from the result.
+ * <p>This implementation serializes Fluss records into JSON strings, making it useful for
+ * debugging, logging, or when the downstream processing requires string-based JSON data. The schema
+ * preserves important metadata such as offset, timestamp, and change type along with the actual row
+ * data.
  *
- * <p>Implementation of {@link FlussDeserializationSchema} for producing String values.
+ * <p>The resulting JSON has the following structure:
+ *
+ * <pre>{@code
+ * {
+ *   "offset": <record_offset>,
+ *   "timestamp": <record_timestamp>,
+ *   "changeType": <APPEND_ONLY|INSERT|UPDATE_BEFORE|UPDATE_AFTER|DELETE>,
+ *   "row": <string_representation_of_row>
+ * }
+ * }</pre>
+ *
+ * <p>Usage example:
+ *
+ * <pre>{@code
+ * JsonStringDeserializationSchema schema = new JsonStringDeserializationSchema();
+ * FlussSource<String> source = FlussSource.builder()
+ *     .setDeserializationSchema(schema)
+ *     .build();
+ * }</pre>
+ *
+ * @since 0.7
  */
+@PublicEvolving
 public class JsonStringDeserializationSchema implements FlussDeserializationSchema<String> {
     private static final long serialVersionUID = 1L;
 
+    /**
+     * Jackson ObjectMapper used for JSON serialization. Marked as transient because ObjectMapper is
+     * not serializable and needs to be recreated in the open method.
+     */
     private transient ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * Reusable map for building the record representation before serializing to JSON. This avoids
+     * creating a new Map for each record.
+     */
     private final Map<String, Object> recordMap = new HashMap<>(4);
 
+    /**
+     * Initializes the JSON serialization mechanism.
+     *
+     * <p>This method creates a new ObjectMapper instance and configures it with:
+     *
+     * <ul>
+     *   <li>JavaTimeModule for proper serialization of date/time objects
+     *   <li>Configuration to render dates in ISO-8601 format rather than timestamps
+     * </ul>
+     *
+     * @param context Contextual information for initialization (not used in this implementation)
+     * @throws Exception if initialization fails
+     */
     @Override
     public void open(InitializationContext context) throws Exception {
         objectMapper = new ObjectMapper();
@@ -53,9 +98,12 @@ public class JsonStringDeserializationSchema implements FlussDeserializationSche
     /**
      * Deserializes a {@link LogRecord} into a JSON {@link String}.
      *
-     * @param record the record to deserialize
-     * @return JSON string representation of the scan record
-     * @throws Exception if deserialization fails
+     * <p>The method extracts key information from the record (offset, timestamp, change type, and
+     * row data) and serializes it as a JSON string.
+     *
+     * @param record The Fluss LogRecord to deserialize
+     * @return JSON string representation of the record
+     * @throws Exception If JSON serialization fails
      */
     @Override
     public String deserialize(LogRecord record) throws Exception {
