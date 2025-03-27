@@ -52,16 +52,16 @@ public class RowDataDeserializationSchema implements FlussDeserializationSchema<
     /**
      * Converter responsible for transforming Fluss row data into Flink's {@link RowData} format.
      */
-    private final FlussRowToFlinkRowConverter converter;
+    private FlussRowToFlinkRowConverter converter;
 
-    /**
-     * Creates a new {@link RowDataDeserializationSchema} with the specified row type.
-     *
-     * @param rowType The Fluss row type that describes the structure of the input data
-     */
-    public RowDataDeserializationSchema(RowType rowType) {
-        this.converter = new FlussRowToFlinkRowConverter(rowType);
-    }
+    //    /**
+    //     * Creates a new {@link RowDataDeserializationSchema} with the specified row type.
+    //     *
+    //     * @param rowType The Fluss row type that describes the structure of the input data
+    //     */
+    //    public RowDataDeserializationSchema(RowType rowType) {
+    //        this.converter = new FlussRowToFlinkRowConverter(rowType);
+    //    }
 
     /**
      * Initializes the deserialization schema.
@@ -72,8 +72,10 @@ public class RowDataDeserializationSchema implements FlussDeserializationSchema<
      * @throws Exception if initialization fails
      */
     @Override
-    public void open(InitializationContext context) throws Exception {}
-
+    public void open(InitializationContext context) throws Exception {
+        RowType rowType = context.getRowSchema();
+        this.converter = new FlussRowToFlinkRowConverter(rowType);
+    }
     /**
      * Deserializes a {@link LogRecord} into a Flink {@link RowData} object.
      *
