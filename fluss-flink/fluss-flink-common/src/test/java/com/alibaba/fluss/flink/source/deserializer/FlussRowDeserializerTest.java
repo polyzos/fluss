@@ -42,7 +42,7 @@ import static org.junit.Assert.assertThrows;
 public class FlussRowDeserializerTest {
 
     private RowType rowType;
-    private FlussRowDataDeserializer schema;
+    private RowDataDeserializationSchema schema;
 
     @BeforeEach
     public void setUp() {
@@ -54,7 +54,7 @@ public class FlussRowDeserializerTest {
                         new DataField("amount", DataTypes.INT()),
                         new DataField("address", DataTypes.STRING()));
         rowType = new RowType(fields);
-        schema = new FlussRowDataDeserializer(rowType);
+        schema = new RowDataDeserializationSchema(rowType);
     }
 
     @Test
@@ -68,7 +68,7 @@ public class FlussRowDeserializerTest {
 
         ScanRecord scanRecord = new ScanRecord(row);
 
-        FlussRowDataDeserializer testSchema = new FlussRowDataDeserializer(rowType);
+        RowDataDeserializationSchema testSchema = new RowDataDeserializationSchema(rowType);
 
         RowData result = testSchema.deserialize(scanRecord);
 
@@ -100,7 +100,8 @@ public class FlussRowDeserializerTest {
         // Deserialize
         ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
         ObjectInputStream ois = new ObjectInputStream(bais);
-        FlussRowDataDeserializer deserializedSchema = (FlussRowDataDeserializer) ois.readObject();
+        RowDataDeserializationSchema deserializedSchema =
+                (RowDataDeserializationSchema) ois.readObject();
         ois.close();
 
         // Verify
@@ -115,7 +116,7 @@ public class FlussRowDeserializerTest {
         List<DataField> simpleFields = Arrays.asList(new DataField("id", DataTypes.BIGINT()));
         RowType simpleRowType = new RowType(simpleFields);
 
-        FlussRowDataDeserializer simpleSchema = new FlussRowDataDeserializer(simpleRowType);
+        RowDataDeserializationSchema simpleSchema = new RowDataDeserializationSchema(simpleRowType);
 
         assertNotNull(simpleSchema);
         assertEquals(RowData.class, simpleSchema.getProducedType().getTypeClass());

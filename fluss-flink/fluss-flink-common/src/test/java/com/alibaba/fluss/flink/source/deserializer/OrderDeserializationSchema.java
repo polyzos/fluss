@@ -14,19 +14,22 @@
  *  limitations under the License.
  */
 
-package com.alibaba.fluss.flink.helper;
+package com.alibaba.fluss.flink.source.deserializer;
 
-import com.alibaba.fluss.client.table.scanner.ScanRecord;
-import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
+import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.row.InternalRow;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 
 public class OrderDeserializationSchema implements FlussDeserializationSchema<Order> {
+    private static final long serialVersionUID = 1L;
 
     @Override
-    public Order deserialize(ScanRecord scanRecord) throws Exception {
-        InternalRow row = scanRecord.getRow();
+    public void open(InitializationContext context) throws Exception {}
+
+    @Override
+    public Order deserialize(LogRecord record) throws Exception {
+        InternalRow row = record.getRow();
 
         long orderId = row.getLong(0);
         long itemId = row.getLong(1);

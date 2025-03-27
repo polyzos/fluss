@@ -18,10 +18,12 @@ package com.alibaba.fluss.flink.source.deserializer;
 
 import com.alibaba.fluss.client.table.scanner.ScanRecord;
 import com.alibaba.fluss.flink.utils.FlussRowToFlinkRowConverter;
+import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.types.RowType;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 
 /**
  * A deserialization schema that converts Fluss {@link ScanRecord} objects to Flink's {@link
@@ -35,7 +37,7 @@ import org.apache.flink.table.data.RowData;
  *
  * <pre>{@code
  * RowType rowType = ...; // Define your row type
- * FlussRowDataDeserializer schema = new FlussRowDataDeserializer(rowType);
+ * RowDataDeserializationSchema schema = new RowDataDeserializationSchema(rowType);
  * RowData flinkRow = schema.deserialize(scanRecord);
  * }</pre>
  *
@@ -43,20 +45,25 @@ import org.apache.flink.table.data.RowData;
  * @see FlussRowToFlinkRowConverter
  * @see ScanRecord
  */
-public class FlussRowDataDeserializer implements FlussDeserializationSchema<RowData> {
+public class RowDataDeserializationSchema implements FlussDeserializationSchema<RowData> {
+    private static final long serialVersionUID = 1L;
+
     private final FlussRowToFlinkRowConverter converter;
 
-    public FlussRowDataDeserializer(RowType rowType) {
+    public RowDataDeserializationSchema(RowType rowType) {
         this.converter = new FlussRowToFlinkRowConverter(rowType);
     }
 
     @Override
-    public RowData deserialize(ScanRecord scanRecord) throws Exception {
-        return converter.toFlinkRowData(scanRecord);
+    public void open(InitializationContext context) throws Exception {}
+
+    @Override
+    public RowData deserialize(LogRecord record) throws Exception {
+        return converter.toFlinkRowData((ScanRecord) record);
     }
 
     @Override
     public TypeInformation<RowData> getProducedType() {
-        return TypeInformation.of(RowData.class);
+        return InternalTypeInfo.of(RowData.class);
     }
 }
