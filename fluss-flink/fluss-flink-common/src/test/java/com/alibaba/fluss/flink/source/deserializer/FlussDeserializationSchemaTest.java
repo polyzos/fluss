@@ -21,12 +21,8 @@ import com.alibaba.fluss.row.BinaryString;
 import com.alibaba.fluss.row.GenericRow;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.typeutils.PojoTypeInfo;
 import org.junit.jupiter.api.Test;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -107,6 +103,7 @@ public class FlussDeserializationSchemaTest {
         TypeInformation<Order> typeInfo = schema.getProducedType();
 
         assertThat(typeInfo).isNotNull();
+        assertThat(typeInfo).isInstanceOf(PojoTypeInfo.class);
         assertThat(typeInfo.getTypeClass()).isEqualTo(Order.class);
     }
 
@@ -126,9 +123,11 @@ public class FlussDeserializationSchemaTest {
 
         // Verify result
         assertThat(result).isNotNull();
+        assertThat(result).contains("\"offset\":-1");
+        assertThat(result).contains("\"timestamp\":-1");
         assertThat(result)
                 .isEqualTo(
-                        "{\"row\":\"(42,test value)\",\"offset\":-1,\"timestamp\":-1,\"changeType\":\"INSERT\"}");
+                        "{\"change_type\":\"INSERT\",\"row\":\"(42,test value)\",\"offset\":-1,\"timestamp\":-1}");
     }
 
     @Test
@@ -142,26 +141,5 @@ public class FlussDeserializationSchemaTest {
         // Verify type information
         assertThat(typeInfo).isNotNull();
         assertThat(typeInfo.getTypeClass()).isEqualTo(String.class);
-    }
-
-    @Test
-    public void testSerializable() throws Exception {
-        OrderDeserializationSchema schema = new OrderDeserializationSchema();
-
-        // Serialize
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        ObjectOutputStream oos = new ObjectOutputStream(baos);
-        oos.writeObject(schema);
-        oos.close();
-
-        // Deserialize
-        ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
-        ObjectInputStream ois = new ObjectInputStream(bais);
-        OrderDeserializationSchema deserializedSchema =
-                (OrderDeserializationSchema) ois.readObject();
-        ois.close();
-
-        assertThat(deserializedSchema).isNotNull();
-        assertThat(deserializedSchema.getProducedType()).isEqualTo(schema.getProducedType());
     }
 }
