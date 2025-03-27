@@ -51,17 +51,32 @@ public class RowDataDeserializationSchema implements FlussDeserializationSchema<
 
     /**
      * Converter responsible for transforming Fluss row data into Flink's {@link RowData} format.
+     * Initialized either in constructor or during {@link #open(InitializationContext)}.
      */
-    private FlussRowToFlinkRowConverter converter;
+    private transient FlussRowToFlinkRowConverter converter;
 
-    //    /**
-    //     * Creates a new {@link RowDataDeserializationSchema} with the specified row type.
-    //     *
-    //     * @param rowType The Fluss row type that describes the structure of the input data
-    //     */
-    //    public RowDataDeserializationSchema(RowType rowType) {
-    //        this.converter = new FlussRowToFlinkRowConverter(rowType);
-    //    }
+    /**
+     * Optional row type provided via constructor. If null, row type will be inferred from context.
+     */
+    private final RowType rowType;
+
+    /**
+     * Creates a new {@link RowDataDeserializationSchema} that will infer the row type from the
+     * context during initialization.
+     */
+    public RowDataDeserializationSchema() {
+        this.rowType = null;
+    }
+
+    /**
+     * Creates a new {@link RowDataDeserializationSchema} with the specified row type.
+     *
+     * @param rowType The Fluss row type that describes the structure of the input data
+     */
+    public RowDataDeserializationSchema(RowType rowType) {
+        this.rowType = rowType;
+        this.converter = new FlussRowToFlinkRowConverter(rowType);
+    }
 
     /**
      * Initializes the deserialization schema.
@@ -73,8 +88,10 @@ public class RowDataDeserializationSchema implements FlussDeserializationSchema<
      */
     @Override
     public void open(InitializationContext context) throws Exception {
-        RowType rowType = context.getRowSchema();
-        this.converter = new FlussRowToFlinkRowConverter(rowType);
+        if (converter == null) {
+            RowType schemaToUse = rowType != null ? rowType : context.getRowSchema();
+            this.converter = new FlussRowToFlinkRowConverter(schemaToUse);
+        }
     }
 
     /**
@@ -86,6 +103,10 @@ public class RowDataDeserializationSchema implements FlussDeserializationSchema<
      */
     @Override
     public RowData deserialize(LogRecord record) throws Exception {
+        if (converter == null) {
+            throw new IllegalStateException(
+                    "Converter not initialized. The open() method must be called before deserializing records.");
+        }
         return converter.toFlinkRowData((ScanRecord) record);
     }
 
