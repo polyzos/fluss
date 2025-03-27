@@ -31,6 +31,10 @@ import java.io.ObjectOutputStream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * Test class for the {@link FlussDeserializationSchema} implementations that validates the
+ * conversion from Fluss records to various target formats.
+ */
 public class FlussDeserializationSchemaTest {
     @Test
     public void testDeserialize() throws Exception {
