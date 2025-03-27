@@ -24,7 +24,10 @@ import com.alibaba.fluss.types.DataTypes;
 import com.alibaba.fluss.types.RowType;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.util.UserCodeClassLoader;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,16 +53,16 @@ public class FlussRowDeserializerTest {
     private RowDataDeserializationSchema schema;
 
     @BeforeEach
-    public void setUp() {
-        // Create a sample row type with different data types
+    public void setUp() throws Exception {
         List<DataField> fields =
                 Arrays.asList(
                         new DataField("orderId", DataTypes.BIGINT()),
                         new DataField("itemId", DataTypes.BIGINT()),
                         new DataField("amount", DataTypes.INT()),
                         new DataField("address", DataTypes.STRING()));
+
         rowType = new RowType(fields);
-        schema = new RowDataDeserializationSchema(rowType);
+        schema = getRowDataDeserializationSchema(rowType);
     }
 
     @Test
@@ -73,12 +76,34 @@ public class FlussRowDeserializerTest {
 
         ScanRecord scanRecord = new ScanRecord(row);
 
-        RowDataDeserializationSchema testSchema = new RowDataDeserializationSchema(rowType);
-
-        RowData result = testSchema.deserialize(scanRecord);
+        RowDataDeserializationSchema deserializer = getRowDataDeserializationSchema(rowType);
+        RowData result = deserializer.deserialize(scanRecord);
 
         Assertions.assertNotNull(result);
         Assertions.assertEquals(row, scanRecord.getRow());
+    }
+
+    private @NotNull RowDataDeserializationSchema getRowDataDeserializationSchema(RowType rowType)
+            throws Exception {
+        RowDataDeserializationSchema deserializationSchema = new RowDataDeserializationSchema();
+        deserializationSchema.open(
+                new FlussDeserializationSchema.InitializationContext() {
+                    @Override
+                    public MetricGroup getMetricGroup() {
+                        return null;
+                    }
+
+                    @Override
+                    public UserCodeClassLoader getUserCodeClassLoader() {
+                        return null;
+                    }
+
+                    @Override
+                    public RowType getRowSchema() {
+                        return rowType;
+                    }
+                });
+        return deserializationSchema;
     }
 
     @Test
@@ -116,12 +141,12 @@ public class FlussRowDeserializerTest {
     }
 
     @Test
-    public void testDifferentRowTypes() {
+    public void testDifferentRowTypes() throws Exception {
         // Test with different row types
         List<DataField> simpleFields = Arrays.asList(new DataField("id", DataTypes.BIGINT()));
-        RowType simpleRowType = new RowType(simpleFields);
 
-        RowDataDeserializationSchema simpleSchema = new RowDataDeserializationSchema(simpleRowType);
+        RowDataDeserializationSchema simpleSchema =
+                getRowDataDeserializationSchema(new RowType(simpleFields));
 
         assertNotNull(simpleSchema);
         assertEquals(RowData.class, simpleSchema.getProducedType().getTypeClass());
