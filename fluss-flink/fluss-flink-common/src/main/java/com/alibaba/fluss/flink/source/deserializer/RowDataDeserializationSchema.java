@@ -16,6 +16,7 @@
 
 package com.alibaba.fluss.flink.source.deserializer;
 
+import com.alibaba.fluss.annotation.PublicEvolving;
 import com.alibaba.fluss.client.table.scanner.ScanRecord;
 import com.alibaba.fluss.flink.utils.FlussRowToFlinkRowConverter;
 import com.alibaba.fluss.record.LogRecord;
@@ -26,42 +27,70 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 
 /**
- * A deserialization schema that converts Fluss {@link ScanRecord} objects to Flink's {@link
- * RowData}.
+ * A deserialization schema that converts {@link LogRecord} objects to Flink's {@link RowData}
+ * format.
  *
- * <p>This implementation uses a {@link FlussRowToFlinkRowConverter} to efficiently transform Fluss
- * row representations into Flink's row format without unnecessary intermediate conversions. It's
- * optimized for direct integration between Fluss data sources and Flink's processing pipeline.
+ * <p>This implementation takes a {@link RowType} in its constructor and uses a {@link
+ * FlussRowToFlinkRowConverter} to transform Fluss records into Flink's internal row representation.
  *
  * <p>Usage example:
  *
  * <pre>{@code
- * RowType rowType = ...; // Define your row type
+ * RowType rowType = ...; // Define your row type schema
  * RowDataDeserializationSchema schema = new RowDataDeserializationSchema(rowType);
- * RowData flinkRow = schema.deserialize(scanRecord);
+ * FlussSource<RowData> source = FlussSource.builder()
+ *     .setDeserializationSchema(schema)
+ *     .build();
  * }</pre>
  *
- * @see FlussDeserializationSchema
- * @see FlussRowToFlinkRowConverter
- * @see ScanRecord
+ * @since 0.7
  */
+@PublicEvolving
 public class RowDataDeserializationSchema implements FlussDeserializationSchema<RowData> {
     private static final long serialVersionUID = 1L;
 
+    /**
+     * Converter responsible for transforming Fluss row data into Flink's {@link RowData} format.
+     */
     private final FlussRowToFlinkRowConverter converter;
 
+    /**
+     * Creates a new {@link RowDataDeserializationSchema} with the specified row type.
+     *
+     * @param rowType The Fluss row type that describes the structure of the input data
+     */
     public RowDataDeserializationSchema(RowType rowType) {
         this.converter = new FlussRowToFlinkRowConverter(rowType);
     }
 
+    /**
+     * Initializes the deserialization schema.
+     *
+     * <p>This implementation doesn't require any initialization.
+     *
+     * @param context Contextual information for initialization
+     * @throws Exception if initialization fails
+     */
     @Override
     public void open(InitializationContext context) throws Exception {}
 
+    /**
+     * Deserializes a {@link LogRecord} into a Flink {@link RowData} object.
+     *
+     * @param record The Fluss LogRecord to deserialize
+     * @return The deserialized RowData
+     * @throws Exception If deserialization fails or if the record is not a valid {@link ScanRecord}
+     */
     @Override
     public RowData deserialize(LogRecord record) throws Exception {
         return converter.toFlinkRowData((ScanRecord) record);
     }
 
+    /**
+     * Returns the TypeInformation for the produced {@link RowData} type.
+     *
+     * @return TypeInformation for RowData class
+     */
     @Override
     public TypeInformation<RowData> getProducedType() {
         return InternalTypeInfo.of(RowData.class);
