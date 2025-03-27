@@ -25,6 +25,7 @@ import com.alibaba.fluss.types.RowType;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.table.data.RowData;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -39,6 +40,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 
+/**
+ * Test class for the {@link RowDataDeserializationSchema} that validates the conversion from Fluss
+ * {@link com.alibaba.fluss.record.LogRecord} to Flink's {@link RowData} format.
+ */
 public class FlussRowDeserializerTest {
 
     private RowType rowType;
@@ -72,8 +77,8 @@ public class FlussRowDeserializerTest {
 
         RowData result = testSchema.deserialize(scanRecord);
 
-        assertNotNull(result);
-        assertEquals(row, scanRecord.getRow());
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals(row, scanRecord.getRow());
     }
 
     @Test
