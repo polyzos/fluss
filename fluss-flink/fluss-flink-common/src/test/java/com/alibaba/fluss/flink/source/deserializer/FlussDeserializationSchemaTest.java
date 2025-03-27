@@ -17,8 +17,6 @@
 package com.alibaba.fluss.flink.source.deserializer;
 
 import com.alibaba.fluss.client.table.scanner.ScanRecord;
-import com.alibaba.fluss.flink.helper.Order;
-import com.alibaba.fluss.flink.helper.OrderDeserializationSchema;
 import com.alibaba.fluss.row.BinaryString;
 import com.alibaba.fluss.row.GenericRow;
 
@@ -30,9 +28,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThrows;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class FlussDeserializationSchemaTest {
     @Test
@@ -49,10 +46,10 @@ public class FlussDeserializationSchemaTest {
 
         Order result = deserializer.deserialize(scanRecord);
 
-        assertEquals(1001L, result.getOrderId());
-        assertEquals(5001L, result.getItemId());
-        assertEquals(3, result.getAmount());
-        assertEquals("123 Main St", result.getAddress());
+        assertThat(result.getOrderId()).isEqualTo(1001L);
+        assertThat(result.getItemId()).isEqualTo(5001L);
+        assertThat(result.getAmount()).isEqualTo(3);
+        assertThat(result.getAddress()).isEqualTo("123 Main St");
     }
 
     @Test
@@ -68,10 +65,10 @@ public class FlussDeserializationSchemaTest {
 
         Order result = schema.deserialize(scanRecord);
 
-        assertEquals(1002L, result.getOrderId());
-        assertEquals(5002L, result.getItemId());
-        assertEquals(4, result.getAmount());
-        assertEquals("456 Oak Ave", result.getAddress());
+        assertThat(result.getOrderId()).isEqualTo(1002L);
+        assertThat(result.getItemId()).isEqualTo(5002L);
+        assertThat(result.getAmount()).isEqualTo(4);
+        assertThat(result.getAddress()).isEqualTo("456 Oak Ave");
     }
 
     @Test
@@ -87,24 +84,17 @@ public class FlussDeserializationSchemaTest {
 
         Order result = schema.deserialize(scanRecord);
 
-        assertEquals(1003L, result.getOrderId());
-        assertEquals(5003L, result.getItemId());
-        assertEquals(5, result.getAmount());
-        assertEquals("null", result.getAddress());
+        assertThat(result.getOrderId()).isEqualTo(1003L);
+        assertThat(result.getItemId()).isEqualTo(5003L);
+        assertThat(result.getAmount()).isEqualTo(5);
+        assertThat(result.getAddress()).isEqualTo("null");
     }
 
     @Test
     public void testDeserializeWithNullRecord() {
         OrderDeserializationSchema schema = new OrderDeserializationSchema();
 
-        Exception exception =
-                assertThrows(
-                        NullPointerException.class,
-                        () -> {
-                            schema.deserialize(null);
-                        });
-
-        assertNotNull(exception);
+        assertThatThrownBy(() -> schema.deserialize(null)).isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -112,12 +102,12 @@ public class FlussDeserializationSchemaTest {
         OrderDeserializationSchema schema = new OrderDeserializationSchema();
         TypeInformation<Order> typeInfo = schema.getProducedType();
 
-        assertNotNull(typeInfo);
-        assertEquals(Order.class, typeInfo.getTypeClass());
+        assertThat(typeInfo).isNotNull();
+        assertThat(typeInfo.getTypeClass()).isEqualTo(Order.class);
     }
 
     @Test
-    public void testStringDeserialize() throws Exception {
+    public void testJsonStringDeserialize() throws Exception {
         // Create test data
         GenericRow row = new GenericRow(2);
         row.setField(0, 42L);
@@ -125,27 +115,29 @@ public class FlussDeserializationSchemaTest {
         ScanRecord scanRecord = new ScanRecord(row);
 
         // Create deserializer
-        FlussStringDeserializer deserializer = new FlussStringDeserializer();
-
+        JsonStringDeserializationSchema deserializer = new JsonStringDeserializationSchema();
         // Test deserialization
+        deserializer.open(null);
         String result = deserializer.deserialize(scanRecord);
 
         // Verify result
-        assertNotNull(result);
-        assertEquals(String.valueOf(scanRecord), result);
+        assertThat(result).isNotNull();
+        assertThat(result)
+                .isEqualTo(
+                        "{\"row\":\"(42,test value)\",\"offset\":-1,\"timestamp\":-1,\"changeType\":\"INSERT\"}");
     }
 
     @Test
     public void testStringGetProducedType() {
         // Create deserializer
-        FlussStringDeserializer deserializer = new FlussStringDeserializer();
+        JsonStringDeserializationSchema deserializer = new JsonStringDeserializationSchema();
 
         // Get type information
         TypeInformation<String> typeInfo = deserializer.getProducedType();
 
         // Verify type information
-        assertNotNull(typeInfo);
-        assertEquals(String.class, typeInfo.getTypeClass());
+        assertThat(typeInfo).isNotNull();
+        assertThat(typeInfo.getTypeClass()).isEqualTo(String.class);
     }
 
     @Test
@@ -165,7 +157,7 @@ public class FlussDeserializationSchemaTest {
                 (OrderDeserializationSchema) ois.readObject();
         ois.close();
 
-        assertNotNull(deserializedSchema);
-        assertEquals(schema.getProducedType(), deserializedSchema.getProducedType());
+        assertThat(deserializedSchema).isNotNull();
+        assertThat(deserializedSchema.getProducedType()).isEqualTo(schema.getProducedType());
     }
 }

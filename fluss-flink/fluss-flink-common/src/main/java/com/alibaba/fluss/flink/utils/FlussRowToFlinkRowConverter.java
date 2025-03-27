@@ -43,6 +43,7 @@ import static com.alibaba.fluss.flink.utils.FlinkConversions.toFlinkRowKind;
  * modify this class.
  */
 public class FlussRowToFlinkRowConverter implements Serializable {
+    private static final long serialVersionUID = 1L;
 
     private final FlussDeserializationConverter[] toFlinkFieldConverters;
     private final InternalRow.FieldGetter[] flussFieldGetters;
