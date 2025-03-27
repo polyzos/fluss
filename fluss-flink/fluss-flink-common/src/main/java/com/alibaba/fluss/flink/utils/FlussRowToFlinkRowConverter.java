@@ -16,7 +16,7 @@
 
 package com.alibaba.fluss.flink.utils;
 
-import com.alibaba.fluss.client.table.scanner.ScanRecord;
+import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.row.BinaryString;
 import com.alibaba.fluss.row.Decimal;
 import com.alibaba.fluss.row.InternalRow;
@@ -42,9 +42,7 @@ import static com.alibaba.fluss.flink.utils.FlinkConversions.toFlinkRowKind;
  * <p>Note: fluss-datalake-tiering also contains the same class, we need to keep them in sync if we
  * modify this class.
  */
-public class FlussRowToFlinkRowConverter implements Serializable {
-    private static final long serialVersionUID = 1L;
-
+public class FlussRowToFlinkRowConverter {
     private final FlussDeserializationConverter[] toFlinkFieldConverters;
     private final InternalRow.FieldGetter[] flussFieldGetters;
 
@@ -57,7 +55,7 @@ public class FlussRowToFlinkRowConverter implements Serializable {
         }
     }
 
-    public RowData toFlinkRowData(ScanRecord scanRecord) {
+    public RowData toFlinkRowData(LogRecord scanRecord) {
         return toFlinkRowData(scanRecord.getRow(), toFlinkRowKind(scanRecord.getChangeType()));
     }
 

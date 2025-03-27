@@ -107,7 +107,7 @@ public class RowDataDeserializationSchema implements FlussDeserializationSchema<
             throw new IllegalStateException(
                     "Converter not initialized. The open() method must be called before deserializing records.");
         }
-        return converter.toFlinkRowData((ScanRecord) record);
+        return converter.toFlinkRowData(record);
     }
 
     /**
@@ -117,6 +117,8 @@ public class RowDataDeserializationSchema implements FlussDeserializationSchema<
      */
     @Override
     public TypeInformation<RowData> getProducedType() {
-        return InternalTypeInfo.of(RowData.class);
+        org.apache.flink.table.types.logical.RowType flinkRowType =
+                org.apache.flink.table.types.logical.RowType.of();
+        return InternalTypeInfo.of(flinkRowType);
     }
 }

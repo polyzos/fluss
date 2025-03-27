@@ -23,12 +23,13 @@ import com.alibaba.fluss.types.DataField;
 import com.alibaba.fluss.types.DataTypes;
 import com.alibaba.fluss.types.RowType;
 
+import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.runtime.typeutils.RowDataSerializer;
 import org.apache.flink.util.UserCodeClassLoader;
 import org.jetbrains.annotations.NotNull;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -39,6 +40,7 @@ import java.io.ObjectOutputStream;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
@@ -47,7 +49,7 @@ import static org.junit.Assert.assertThrows;
  * Test class for the {@link RowDataDeserializationSchema} that validates the conversion from Fluss
  * {@link com.alibaba.fluss.record.LogRecord} to Flink's {@link RowData} format.
  */
-public class FlussRowDeserializerTest {
+public class RowDataDeserializationSchemaTest {
 
     private RowType rowType;
     private RowDataDeserializationSchema schema;
@@ -79,8 +81,11 @@ public class FlussRowDeserializerTest {
         RowDataDeserializationSchema deserializer = getRowDataDeserializationSchema(rowType);
         RowData result = deserializer.deserialize(scanRecord);
 
-        Assertions.assertNotNull(result);
-        Assertions.assertEquals(row, scanRecord.getRow());
+        assertThat(result.getArity()).isEqualTo(4);
+        assertThat(result.getLong(0)).isEqualTo(100L);
+        assertThat(result.getLong(1)).isEqualTo(10L);
+        assertThat(result.getInt(2)).isEqualTo(45);
+        assertThat(result.getString(3).toString()).isEqualTo("Test addr");
     }
 
     private @NotNull RowDataDeserializationSchema getRowDataDeserializationSchema(RowType rowType)
@@ -117,6 +122,8 @@ public class FlussRowDeserializerTest {
 
         assertNotNull(typeInfo);
         assertEquals(RowData.class, typeInfo.getTypeClass());
+        assertThat(typeInfo.createSerializer(new ExecutionConfig()))
+                .isInstanceOf(RowDataSerializer.class);
     }
 
     @Test
@@ -138,6 +145,8 @@ public class FlussRowDeserializerTest {
         assertNotNull(deserializedSchema);
         assertNotNull(deserializedSchema.getProducedType());
         assertEquals(schema.getProducedType(), deserializedSchema.getProducedType());
+        assertThat(schema.getProducedType().createSerializer(new ExecutionConfig()))
+                .isInstanceOf(RowDataSerializer.class);
     }
 
     @Test

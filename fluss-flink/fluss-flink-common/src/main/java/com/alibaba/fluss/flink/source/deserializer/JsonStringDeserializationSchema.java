@@ -109,7 +109,7 @@ public class JsonStringDeserializationSchema implements FlussDeserializationSche
     public String deserialize(LogRecord record) throws Exception {
         recordMap.put("offset", record.logOffset());
         recordMap.put("timestamp", record.timestamp());
-        recordMap.put("changeType", record.getChangeType().toString());
+        recordMap.put("change_type", record.getChangeType().toString());
         recordMap.put("row", record.getRow().toString());
 
         return objectMapper.writeValueAsString(recordMap);
