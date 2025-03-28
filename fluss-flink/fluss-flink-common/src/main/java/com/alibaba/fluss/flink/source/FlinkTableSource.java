@@ -18,7 +18,7 @@ package com.alibaba.fluss.flink.source;
 
 import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.flink.FlinkConnectorOptions;
-import com.alibaba.fluss.flink.source.deserializer.FlussRowDataDeserializer;
+import com.alibaba.fluss.flink.source.deserializer.RowDataDeserializationSchema;
 import com.alibaba.fluss.flink.source.enumerator.initializer.OffsetsInitializer;
 import com.alibaba.fluss.flink.source.lookup.FlinkAsyncLookupFunction;
 import com.alibaba.fluss.flink.source.lookup.FlinkLookupFunction;
@@ -262,7 +262,7 @@ public class FlinkTableSource
                         projectedFields,
                         offsetsInitializer,
                         scanPartitionDiscoveryIntervalMs,
-                        new FlussRowDataDeserializer(flussRowType),
+                        new RowDataDeserializationSchema(flussRowType),
                         streaming);
 
         if (!streaming) {

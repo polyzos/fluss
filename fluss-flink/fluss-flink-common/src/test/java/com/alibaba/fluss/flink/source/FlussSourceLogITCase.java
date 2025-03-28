@@ -19,11 +19,11 @@ package com.alibaba.fluss.flink.source;
 import com.alibaba.fluss.client.table.Table;
 import com.alibaba.fluss.config.ConfigOptions;
 import com.alibaba.fluss.flink.FlussSource;
-import com.alibaba.fluss.flink.helper.Order;
-import com.alibaba.fluss.flink.helper.OrderPartial;
-import com.alibaba.fluss.flink.helper.OrderPartialDeserializationSchema;
 import com.alibaba.fluss.flink.row.RowConverters;
-import com.alibaba.fluss.flink.source.deserializer.FlussRowDataDeserializer;
+import com.alibaba.fluss.flink.source.deserializer.Order;
+import com.alibaba.fluss.flink.source.deserializer.OrderPartial;
+import com.alibaba.fluss.flink.source.deserializer.OrderPartialDeserializationSchema;
+import com.alibaba.fluss.flink.source.deserializer.RowDataDeserializationSchema;
 import com.alibaba.fluss.flink.source.enumerator.initializer.OffsetsInitializer;
 import com.alibaba.fluss.flink.source.testutils.FlinkTestBase;
 import com.alibaba.fluss.flink.source.testutils.MockDataUtils;
@@ -115,7 +115,7 @@ public class FlussSourceLogITCase extends FlinkTestBase {
                         .setTable(logTableName)
                         .setStartingOffsets(OffsetsInitializer.earliest())
                         .setScanPartitionDiscoveryIntervalMs(1000L)
-                        .setDeserializationSchema(new FlussRowDataDeserializer(rowType))
+                        .setDeserializationSchema(new RowDataDeserializationSchema(rowType))
                         .build();
 
         DataStreamSource<RowData> stream =
