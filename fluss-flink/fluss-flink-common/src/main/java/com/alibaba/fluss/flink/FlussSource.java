@@ -42,13 +42,10 @@ import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 
 public class FlussSource<OUT> extends FlinkSource implements ResultTypeQueryable {
-    private static final Logger LOG = LoggerFactory.getLogger(FlussSource.class);
 
     private static final long serialVersionUID = 1L;
 
     private FlussDeserializationSchema<OUT> deserializationSchema;
-
-    private String bootstrapServers;
 
     public FlussSource(
             Configuration flussConf,

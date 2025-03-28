@@ -48,7 +48,7 @@ class FlinkSink<IN> implements Sink<IN> {
         this.converter = element -> (RowData) element;
     }
 
-    private FlinkSink(
+    public FlinkSink(
             SinkWriterBuilder<? extends FlinkSinkWriter> builder, RowDataConverter<IN> converter) {
         this.builder = builder;
         this.converter = converter;
