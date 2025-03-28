@@ -89,7 +89,9 @@ public class FlinkRecordEmitter<OUT> implements RecordEmitter<RecordAndPos, OUT,
         try {
             record = deserializationSchema.deserialize(scanRecord);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to deserialize record: " + scanRecord + ". Cause: " + e.getMessage(), e);
+            throw new RuntimeException(
+                    "Failed to deserialize record: " + scanRecord + ". Cause: " + e.getMessage(),
+                    e);
         }
 
         if (record != null) {
