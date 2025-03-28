@@ -20,15 +20,11 @@ import com.alibaba.fluss.annotation.PublicEvolving;
 import com.alibaba.fluss.client.table.scanner.ScanRecord;
 import com.alibaba.fluss.flink.utils.FlussRowToFlinkRowConverter;
 import com.alibaba.fluss.record.LogRecord;
-import com.alibaba.fluss.types.DataField;
 import com.alibaba.fluss.types.RowType;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * A deserialization schema that converts {@link LogRecord} objects to Flink's {@link RowData}

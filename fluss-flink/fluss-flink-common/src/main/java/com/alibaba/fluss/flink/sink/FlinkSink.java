@@ -36,29 +36,80 @@ import java.io.IOException;
 import java.io.Serializable;
 
 /** Flink sink for Fluss. */
-class FlinkSink implements Sink<RowData> {
+class FlinkSink<IN> implements Sink<IN> {
 
     private static final long serialVersionUID = 1L;
 
     private final SinkWriterBuilder<? extends FlinkSinkWriter> builder;
+    private final RowDataConverter<IN> converter;
 
-    FlinkSink(SinkWriterBuilder<? extends FlinkSinkWriter> builder) {
+    public FlinkSink(SinkWriterBuilder<? extends FlinkSinkWriter> builder) {
         this.builder = builder;
+        this.converter = element -> (RowData) element;
+    }
+
+    private FlinkSink(
+            SinkWriterBuilder<? extends FlinkSinkWriter> builder, RowDataConverter<IN> converter) {
+        this.builder = builder;
+        this.converter = converter;
     }
 
     @Deprecated
     @Override
-    public SinkWriter<RowData> createWriter(InitContext context) throws IOException {
-        FlinkSinkWriter flinkSinkWriter = builder.createWriter();
-        flinkSinkWriter.initialize(InternalSinkWriterMetricGroup.wrap(context.metricGroup()));
-        return flinkSinkWriter;
+    public SinkWriter<IN> createWriter(InitContext context) throws IOException {
+        FlinkSinkWriter rowDataWriter = builder.createWriter();
+        rowDataWriter.initialize(InternalSinkWriterMetricGroup.wrap(context.metricGroup()));
+        return new ConvertingSinkWriter<>(rowDataWriter, converter);
     }
 
     @Override
-    public SinkWriter<RowData> createWriter(WriterInitContext context) throws IOException {
-        FlinkSinkWriter flinkSinkWriter = builder.createWriter();
-        flinkSinkWriter.initialize(InternalSinkWriterMetricGroup.wrap(context.metricGroup()));
-        return flinkSinkWriter;
+    public SinkWriter<IN> createWriter(WriterInitContext context) throws IOException {
+        FlinkSinkWriter rowDataWriter = builder.createWriter();
+        rowDataWriter.initialize(InternalSinkWriterMetricGroup.wrap(context.metricGroup()));
+        return new ConvertingSinkWriter<>(rowDataWriter, converter);
+    }
+
+    /** Interface for converting a generic type T to RowData. */
+    public interface RowDataConverter<T> extends Serializable {
+        RowData convert(T element) throws Exception;
+    }
+
+    /** A SinkWriter that converts the input type to RowData before writing. */
+    private static class ConvertingSinkWriter<T> implements SinkWriter<T> {
+        private final SinkWriter<RowData> rowDataWriter;
+        private final RowDataConverter<T> converter;
+
+        public ConvertingSinkWriter(
+                SinkWriter<RowData> rowDataWriter, RowDataConverter<T> converter) {
+            this.rowDataWriter = rowDataWriter;
+            this.converter = converter;
+        }
+
+        @Override
+        public void write(T element, Context context) throws IOException, InterruptedException {
+            RowData rowData;
+            try {
+                if (!(element instanceof RowData)) {
+                    rowData = converter.convert(element);
+
+                } else {
+                    rowData = (RowData) element;
+                }
+                rowDataWriter.write(rowData, context);
+            } catch (Exception e) {
+                throw new IOException("Error converting element to RowData", e);
+            }
+        }
+
+        @Override
+        public void flush(boolean endOfInput) throws IOException, InterruptedException {
+            rowDataWriter.flush(endOfInput);
+        }
+
+        @Override
+        public void close() throws Exception {
+            rowDataWriter.close();
+        }
     }
 
     @Internal

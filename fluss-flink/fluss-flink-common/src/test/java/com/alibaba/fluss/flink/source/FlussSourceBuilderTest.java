@@ -375,13 +375,12 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
         }
 
         @Override
-        public void open(InitializationContext context) throws Exception {
-
-        }
+        public void open(InitializationContext context) throws Exception {}
 
         @Override
         public TestRecord deserialize(LogRecord record) throws Exception {
             InternalRow row = record.getRow();
-            return new TestRecord(row.getInt(0), row.getString(1).toString());        }
+            return new TestRecord(row.getInt(0), row.getString(1).toString());
+        }
     }
 }
