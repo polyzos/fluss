@@ -18,7 +18,7 @@ package com.alibaba.fluss.flink.source.reader;
 
 import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.flink.lakehouse.LakeSplitStateInitializer;
-import com.alibaba.fluss.flink.source.deserializer.FlussRowDataDeserializer;
+import com.alibaba.fluss.flink.source.deserializer.RowDataDeserializationSchema;
 import com.alibaba.fluss.flink.source.emitter.FlinkRecordEmitter;
 import com.alibaba.fluss.flink.source.event.PartitionBucketsUnsubscribedEvent;
 import com.alibaba.fluss.flink.source.event.PartitionsRemovedEvent;
@@ -69,7 +69,7 @@ public class FlinkSourceReader<OUT>
                                         projectedFields,
                                         flinkSourceReaderMetrics),
                         (ignore) -> {}),
-                new FlinkRecordEmitter(new FlussRowDataDeserializer(sourceOutputType)),
+                new FlinkRecordEmitter(new RowDataDeserializationSchema(sourceOutputType)),
                 context.getConfiguration(),
                 context);
     }
