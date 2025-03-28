@@ -112,9 +112,6 @@ public class FlussSink<IN> extends FlinkSink<IN> {
         /** Build the FlussSink. */
         public FlinkSink<T> build() {
             validateConfiguration();
-            System.out.println("Building FlussSink");
-            //            this.pojoClass = pojoClass;
-            // //serializationSchema.getProducedType().getTypeClass();
             setupConverterAndRowType();
 
             Configuration flussConfig = Configuration.fromMap(configOptions);
@@ -141,8 +138,6 @@ public class FlussSink<IN> extends FlinkSink<IN> {
 
         private void setupConverterAndRowType() {
             // If converter is not provided but we have a POJO class
-            System.out.println(converter);
-            System.out.println(pojoClass);
             if (converter == null && pojoClass != null) {
                 // Infer row type if not explicitly set
                 if (tableRowType == null) {
