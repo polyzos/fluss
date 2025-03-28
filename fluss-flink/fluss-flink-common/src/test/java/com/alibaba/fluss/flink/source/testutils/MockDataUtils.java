@@ -16,10 +16,10 @@
 
 package com.alibaba.fluss.flink.source.testutils;
 
-import com.alibaba.fluss.client.table.scanner.ScanRecord;
-import com.alibaba.fluss.flink.helper.Order;
 import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
+import com.alibaba.fluss.flink.source.deserializer.Order;
 import com.alibaba.fluss.metadata.Schema;
+import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.row.InternalRow;
 import com.alibaba.fluss.types.DataTypes;
 
@@ -57,19 +57,23 @@ public class MockDataUtils {
     }
 
     public static class OrderDeserializationSchema implements FlussDeserializationSchema<Order> {
+
         @Override
-        public Order deserialize(ScanRecord scanRecord) throws Exception {
-            InternalRow row = scanRecord.getRow();
+        public TypeInformation<Order> getProducedType() {
+            return TypeInformation.of(Order.class);
+        }
+
+        @Override
+        public void open(InitializationContext context) throws Exception {}
+
+        @Override
+        public Order deserialize(LogRecord record) throws Exception {
+            InternalRow row = record.getRow();
             long orderId = row.getLong(0);
             long itemId = row.getLong(1);
             int amount = row.getInt(2);
             String address = String.valueOf(row.getString(3));
             return new Order(orderId, itemId, amount, address);
-        }
-
-        @Override
-        public TypeInformation<Order> getProducedType() {
-            return TypeInformation.of(Order.class);
         }
     }
 }

@@ -14,10 +14,9 @@
  *  limitations under the License.
  */
 
-package com.alibaba.fluss.flink.helper;
+package com.alibaba.fluss.flink.source.deserializer;
 
-import com.alibaba.fluss.client.table.scanner.ScanRecord;
-import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
+import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.row.InternalRow;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -25,17 +24,20 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 public class OrderPartialDeserializationSchema implements FlussDeserializationSchema<OrderPartial> {
 
     @Override
-    public OrderPartial deserialize(ScanRecord scanRecord) throws Exception {
-        InternalRow row = scanRecord.getRow();
+    public TypeInformation<OrderPartial> getProducedType() {
+        return TypeInformation.of(OrderPartial.class);
+    }
+
+    @Override
+    public void open(InitializationContext context) throws Exception {}
+
+    @Override
+    public OrderPartial deserialize(LogRecord record) throws Exception {
+        InternalRow row = record.getRow();
 
         long orderId = row.getLong(0);
         int amount = row.getInt(1);
 
         return new OrderPartial(orderId, amount);
-    }
-
-    @Override
-    public TypeInformation<OrderPartial> getProducedType() {
-        return TypeInformation.of(OrderPartial.class);
     }
 }
