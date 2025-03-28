@@ -1,12 +1,12 @@
 package com.alibaba.fluss.flink.source;
 
-import com.alibaba.fluss.client.table.scanner.ScanRecord;
 import com.alibaba.fluss.config.ConfigOptions;
 import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.flink.FlussSource;
 import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
 import com.alibaba.fluss.flink.source.enumerator.initializer.OffsetsInitializer;
 import com.alibaba.fluss.flink.source.testutils.FlinkTestBase;
+import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.row.InternalRow;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -370,14 +370,18 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
     private static class TestDeserializationSchema
             implements FlussDeserializationSchema<TestRecord> {
         @Override
-        public TestRecord deserialize(ScanRecord flussRecord) {
-            InternalRow row = flussRecord.getRow();
-            return new TestRecord(row.getInt(0), row.getString(1).toString());
-        }
-
-        @Override
         public TypeInformation<TestRecord> getProducedType() {
             return TypeInformation.of(TestRecord.class);
         }
+
+        @Override
+        public void open(InitializationContext context) throws Exception {
+
+        }
+
+        @Override
+        public TestRecord deserialize(LogRecord record) throws Exception {
+            InternalRow row = record.getRow();
+            return new TestRecord(row.getInt(0), row.getString(1).toString());        }
     }
 }
