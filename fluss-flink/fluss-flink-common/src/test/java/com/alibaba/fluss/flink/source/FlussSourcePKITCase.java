@@ -22,6 +22,8 @@ import com.alibaba.fluss.flink.FlussSource;
 import com.alibaba.fluss.flink.row.RowConverters;
 import com.alibaba.fluss.flink.source.deserializer.Order;
 import com.alibaba.fluss.flink.source.deserializer.OrderPartial;
+import com.alibaba.fluss.flink.source.deserializer.OrderPartialDeserializationSchema;
+import com.alibaba.fluss.flink.source.deserializer.RowDataDeserializationSchema;
 import com.alibaba.fluss.flink.source.enumerator.initializer.OffsetsInitializer;
 import com.alibaba.fluss.flink.source.testutils.FlinkTestBase;
 import com.alibaba.fluss.flink.source.testutils.MockDataUtils;
@@ -191,7 +193,7 @@ public class FlussSourcePKITCase extends FlinkTestBase {
                         .setTable(pkTableName)
                         .setStartingOffsets(OffsetsInitializer.earliest())
                         .setScanPartitionDiscoveryIntervalMs(1000L)
-                        .setDeserializationSchema(new FlussRowDataDeserializer(rowType))
+                        .setDeserializationSchema(new RowDataDeserializationSchema(rowType))
                         .build();
 
         DataStreamSource<RowData> stream =
