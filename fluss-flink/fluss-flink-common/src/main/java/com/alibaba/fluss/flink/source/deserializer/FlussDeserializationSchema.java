@@ -20,7 +20,7 @@ import com.alibaba.fluss.annotation.PublicEvolving;
 import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.types.RowType;
 
-import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.util.UserCodeClassLoader;
 
@@ -34,7 +34,7 @@ import java.io.Serializable;
  * @since 0.7
  */
 @PublicEvolving
-public interface FlussDeserializationSchema<T> extends Serializable, ResultTypeQueryable<T> {
+public interface FlussDeserializationSchema<T> extends Serializable {
 
     /**
      * Initialization method for the schema. It is called before the actual working methods {@link
@@ -55,6 +55,14 @@ public interface FlussDeserializationSchema<T> extends Serializable, ResultTypeQ
      * @throws Exception If the deserialization fails.
      */
     T deserialize(LogRecord record) throws Exception;
+
+    /**
+     * Gets the data type (as a {@link TypeInformation}) produced by this deserializer.
+     *
+     * @param rowSchema The schema of the {@link LogRecord#getRow()}.
+     * @return The data type produced by this deserializer.
+     */
+    TypeInformation<T> getProducedType(RowType rowSchema);
 
     /**
      * A contextual information provided for {@link #open(InitializationContext)} method. It can be

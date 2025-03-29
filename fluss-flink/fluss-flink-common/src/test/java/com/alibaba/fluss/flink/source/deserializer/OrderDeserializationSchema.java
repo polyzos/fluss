@@ -19,6 +19,7 @@ package com.alibaba.fluss.flink.source.deserializer;
 import com.alibaba.fluss.annotation.PublicEvolving;
 import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.row.InternalRow;
+import com.alibaba.fluss.types.RowType;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 
@@ -90,7 +91,7 @@ public class OrderDeserializationSchema implements FlussDeserializationSchema<Or
      * @return TypeInformation for Order class
      */
     @Override
-    public TypeInformation<Order> getProducedType() {
+    public TypeInformation<Order> getProducedType(RowType rowSchema) {
         return TypeInformation.of(Order.class);
     }
 }

@@ -18,6 +18,7 @@ package com.alibaba.fluss.flink.source.deserializer;
 
 import com.alibaba.fluss.annotation.PublicEvolving;
 import com.alibaba.fluss.record.LogRecord;
+import com.alibaba.fluss.types.RowType;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeinfo.Types;
@@ -25,7 +26,7 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMap
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.SerializationFeature;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -50,9 +51,8 @@ import java.util.Map;
  * <p>Usage example:
  *
  * <pre>{@code
- * JsonStringDeserializationSchema schema = new JsonStringDeserializationSchema();
  * FlussSource<String> source = FlussSource.builder()
- *     .setDeserializationSchema(schema)
+ *     .setDeserializationSchema(new JsonStringDeserializationSchema())
  *     .build();
  * }</pre>
  *
@@ -70,9 +70,10 @@ public class JsonStringDeserializationSchema implements FlussDeserializationSche
 
     /**
      * Reusable map for building the record representation before serializing to JSON. This avoids
-     * creating a new Map for each record.
+     * creating a new Map for each record. Using LinkedHashMap to ensure a stable order of fields in
+     * the JSON output.
      */
-    private final Map<String, Object> recordMap = new HashMap<>(4);
+    private final Map<String, Object> recordMap = new LinkedHashMap<>(4);
 
     /**
      * Initializes the JSON serialization mechanism.
@@ -110,6 +111,7 @@ public class JsonStringDeserializationSchema implements FlussDeserializationSche
         recordMap.put("offset", record.logOffset());
         recordMap.put("timestamp", record.timestamp());
         recordMap.put("change_type", record.getChangeType().toString());
+        // TODO: convert row into JSON https://github.com/alibaba/fluss/issues/678
         recordMap.put("row", record.getRow().toString());
 
         return objectMapper.writeValueAsString(recordMap);
@@ -121,7 +123,7 @@ public class JsonStringDeserializationSchema implements FlussDeserializationSche
      * @return TypeInformation for String class
      */
     @Override
-    public TypeInformation<String> getProducedType() {
+    public TypeInformation<String> getProducedType(RowType rowSchema) {
         return Types.STRING;
     }
 }

@@ -17,6 +17,7 @@
 package com.alibaba.fluss.flink.source.deserializer;
 
 import com.alibaba.fluss.client.table.scanner.ScanRecord;
+import com.alibaba.fluss.record.ChangeType;
 import com.alibaba.fluss.row.BinaryString;
 import com.alibaba.fluss.row.GenericRow;
 
@@ -100,7 +101,7 @@ public class FlussDeserializationSchemaTest {
     @Test
     public void testGetProducedType() {
         OrderDeserializationSchema schema = new OrderDeserializationSchema();
-        TypeInformation<Order> typeInfo = schema.getProducedType();
+        TypeInformation<Order> typeInfo = schema.getProducedType(null);
 
         assertThat(typeInfo).isNotNull();
         assertThat(typeInfo).isInstanceOf(PojoTypeInfo.class);
@@ -123,11 +124,17 @@ public class FlussDeserializationSchemaTest {
 
         // Verify result
         assertThat(result).isNotNull();
-        assertThat(result).contains("\"offset\":-1");
-        assertThat(result).contains("\"timestamp\":-1");
         assertThat(result)
                 .isEqualTo(
-                        "{\"change_type\":\"INSERT\",\"row\":\"(42,test value)\",\"offset\":-1,\"timestamp\":-1}");
+                        "{\"offset\":-1,\"timestamp\":-1,\"change_type\":\"INSERT\",\"row\":\"(42,test value)\"}");
+
+        // Verify with offset and timestamp
+        ScanRecord scanRecord2 = new ScanRecord(1001, 1743261788400L, ChangeType.DELETE, row);
+        String result2 = deserializer.deserialize(scanRecord2);
+        assertThat(result2).isNotNull();
+        assertThat(result2)
+                .isEqualTo(
+                        "{\"offset\":1001,\"timestamp\":1743261788400,\"change_type\":\"DELETE\",\"row\":\"(42,test value)\"}");
     }
 
     @Test
@@ -136,7 +143,7 @@ public class FlussDeserializationSchemaTest {
         JsonStringDeserializationSchema deserializer = new JsonStringDeserializationSchema();
 
         // Get type information
-        TypeInformation<String> typeInfo = deserializer.getProducedType();
+        TypeInformation<String> typeInfo = deserializer.getProducedType(null);
 
         // Verify type information
         assertThat(typeInfo).isNotNull();

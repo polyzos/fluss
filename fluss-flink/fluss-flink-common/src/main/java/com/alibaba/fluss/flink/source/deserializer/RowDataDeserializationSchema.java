@@ -18,6 +18,7 @@ package com.alibaba.fluss.flink.source.deserializer;
 
 import com.alibaba.fluss.annotation.PublicEvolving;
 import com.alibaba.fluss.client.table.scanner.ScanRecord;
+import com.alibaba.fluss.flink.utils.FlinkConversions;
 import com.alibaba.fluss.flink.utils.FlussRowToFlinkRowConverter;
 import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.types.RowType;
@@ -36,10 +37,8 @@ import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
  * <p>Usage example:
  *
  * <pre>{@code
- * RowType rowType = ...; // Define your row type schema
- * RowDataDeserializationSchema schema = new RowDataDeserializationSchema(rowType);
  * FlussSource<RowData> source = FlussSource.builder()
- *     .setDeserializationSchema(schema)
+ *     .setDeserializationSchema(new RowDataDeserializationSchema())
  *     .build();
  * }</pre>
  *
@@ -51,32 +50,9 @@ public class RowDataDeserializationSchema implements FlussDeserializationSchema<
 
     /**
      * Converter responsible for transforming Fluss row data into Flink's {@link RowData} format.
-     * Initialized either in constructor or during {@link #open(InitializationContext)}.
+     * Initialized during {@link #open(InitializationContext)}.
      */
     private transient FlussRowToFlinkRowConverter converter;
-
-    /**
-     * Optional row type provided via constructor. If null, row type will be inferred from context.
-     */
-    private final RowType rowType;
-
-    /**
-     * Creates a new {@link RowDataDeserializationSchema} that will infer the row type from the
-     * context during initialization.
-     */
-    public RowDataDeserializationSchema() {
-        this.rowType = null;
-    }
-
-    /**
-     * Creates a new {@link RowDataDeserializationSchema} with the specified row type.
-     *
-     * @param rowType The Fluss row type that describes the structure of the input data
-     */
-    public RowDataDeserializationSchema(RowType rowType) {
-        this.rowType = rowType;
-        this.converter = new FlussRowToFlinkRowConverter(rowType);
-    }
 
     /**
      * Initializes the deserialization schema.
@@ -89,8 +65,7 @@ public class RowDataDeserializationSchema implements FlussDeserializationSchema<
     @Override
     public void open(InitializationContext context) throws Exception {
         if (converter == null) {
-            RowType schemaToUse = rowType != null ? rowType : context.getRowSchema();
-            this.converter = new FlussRowToFlinkRowConverter(schemaToUse);
+            this.converter = new FlussRowToFlinkRowConverter(context.getRowSchema());
         }
     }
 
@@ -110,15 +85,9 @@ public class RowDataDeserializationSchema implements FlussDeserializationSchema<
         return converter.toFlinkRowData(record);
     }
 
-    /**
-     * Returns the TypeInformation for the produced {@link RowData} type.
-     *
-     * @return TypeInformation for RowData class
-     */
+    /** Returns the TypeInformation for the produced {@link RowData} type. */
     @Override
-    public TypeInformation<RowData> getProducedType() {
-        org.apache.flink.table.types.logical.RowType flinkRowType =
-                org.apache.flink.table.types.logical.RowType.of();
-        return InternalTypeInfo.of(flinkRowType);
+    public TypeInformation<RowData> getProducedType(RowType rowSchema) {
+        return InternalTypeInfo.of(FlinkConversions.toFlinkRowType(rowSchema));
     }
 }
