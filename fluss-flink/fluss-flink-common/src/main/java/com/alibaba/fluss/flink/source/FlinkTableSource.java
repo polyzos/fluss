@@ -251,8 +251,8 @@ public class FlinkTableSource
                         "Unsupported startup mode: " + startupOptions.startupMode);
         }
 
-        FlinkSource source =
-                new FlinkSource(
+        FlinkSource<RowData> source =
+                new FlinkSource<>(
                         flussConfig,
                         tablePath,
                         hasPrimaryKey(),

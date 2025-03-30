@@ -69,7 +69,10 @@ public class FlinkSourceReader<OUT>
                                         projectedFields,
                                         flinkSourceReaderMetrics),
                         (ignore) -> {}),
-                new FlinkRecordEmitter(new RowDataDeserializationSchema(sourceOutputType)),
+                new FlinkRecordEmitter(
+                        new RowDataDeserializationSchema(),
+                        sourceOutputType,
+                        flinkSourceReaderMetrics.getSourceReaderMetricGroup()),
                 context.getConfiguration(),
                 context);
     }
