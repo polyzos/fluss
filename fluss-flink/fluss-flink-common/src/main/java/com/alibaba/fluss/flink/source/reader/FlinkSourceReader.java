@@ -72,6 +72,7 @@ public class FlinkSourceReader<OUT>
                 new FlinkRecordEmitter(
                         new RowDataDeserializationSchema(),
                         sourceOutputType,
+                        context.getUserCodeClassLoader(),
                         flinkSourceReaderMetrics.getSourceReaderMetricGroup()),
                 context.getConfiguration(),
                 context);

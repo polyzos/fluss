@@ -52,6 +52,7 @@ public class FlinkRecordEmitter<OUT> implements RecordEmitter<RecordAndPos, OUT,
     public FlinkRecordEmitter(
             FlussDeserializationSchema<OUT> deserializationSchema,
             RowType sourceOutputType,
+            UserCodeClassLoader userCodeClassLoader,
             SourceReaderMetricGroup metricsGroup) {
         this.deserializationSchema = deserializationSchema;
         try {
@@ -64,7 +65,7 @@ public class FlinkRecordEmitter<OUT> implements RecordEmitter<RecordAndPos, OUT,
 
                         @Override
                         public UserCodeClassLoader getUserCodeClassLoader() {
-                            return null;
+                            return userCodeClassLoader;
                         }
 
                         @Override

@@ -34,6 +34,7 @@ import org.apache.flink.api.common.eventtime.Watermark;
 import org.apache.flink.api.connector.source.SourceOutput;
 import org.apache.flink.metrics.groups.SourceReaderMetricGroup;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.util.UserCodeClassLoader;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -75,9 +76,10 @@ public class FlinkRecordEmitterTest extends FlinkTestBase {
 
         FlussRowToFlinkRowConverter converter = new FlussRowToFlinkRowConverter(sourceOutputType);
         this.deserializationSchema = new RowDataDeserializationSchema();
+        UserCodeClassLoader userCodeClassLoader = null;
         this.emitter =
                 new FlinkRecordEmitter<RowData>(
-                        deserializationSchema, sourceOutputType, metricsGroup);
+                        deserializationSchema, sourceOutputType, userCodeClassLoader, metricsGroup);
 
         this.sourceOutput = new TestSourceOutput();
 
