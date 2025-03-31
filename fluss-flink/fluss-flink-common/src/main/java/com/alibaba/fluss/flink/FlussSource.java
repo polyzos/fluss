@@ -41,14 +41,13 @@ import javax.annotation.Nullable;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 
-public class FlussSource<OUT> extends FlinkSource implements ResultTypeQueryable {
+public class FlussSource<OUT> extends FlinkSource<OUT> implements ResultTypeQueryable {
     private static final Logger LOG = LoggerFactory.getLogger(FlussSource.class);
 
     private static final long serialVersionUID = 1L;
 
-    private FlussDeserializationSchema<OUT> deserializationSchema;
-
-    private String bootstrapServers;
+    private final FlussDeserializationSchema<OUT> deserializationSchema;
+    private final RowType sourceOutputType;
 
     public FlussSource(
             Configuration flussConf,
@@ -73,6 +72,7 @@ public class FlussSource<OUT> extends FlinkSource implements ResultTypeQueryable
                 deserializationSchema,
                 streaming);
         this.deserializationSchema = deserializationSchema;
+        this.sourceOutputType = sourceOutputType;
     }
 
     @Override
@@ -93,7 +93,7 @@ public class FlussSource<OUT> extends FlinkSource implements ResultTypeQueryable
 
     @Override
     public TypeInformation<OUT> getProducedType() {
-        return deserializationSchema.getProducedType();
+        return deserializationSchema.getProducedType(sourceOutputType);
     }
 
     // https://alibaba.github.io/fluss-docs/docs/engine-flink/options/#read-options
@@ -167,33 +167,25 @@ public class FlussSource<OUT> extends FlinkSource implements ResultTypeQueryable
 
         public FlussSource<T> build() {
 
-            Objects.requireNonNull(bootstrapServers, "bootstrapServers must not be empty");
-            Objects.requireNonNull(deserializationSchema, "DeserializationSchema must not be null");
+            Objects.requireNonNull(bootstrapServers, "bootstrapServers must not be set");
+            Objects.requireNonNull(deserializationSchema, "DeserializationSchema must be set");
             //            Objects.requireNonNull(rowType, "RowType cannot be null");
 
-            if (bootstrapServers == null || bootstrapServers.isEmpty()) {
-                throw new IllegalArgumentException("bootstrapServers must not be empty");
-            }
-
             if (database == null || database.isEmpty()) {
-                throw new IllegalArgumentException("database must not be empty");
+                throw new IllegalArgumentException("Database must be set and not empty");
             }
 
             if (tableName == null || tableName.isEmpty()) {
-                throw new IllegalArgumentException("tableName must not be empty");
+                throw new IllegalArgumentException("TableName must be set and not empty");
             }
 
             if (scanPartitionDiscoveryIntervalMs == null) {
                 throw new IllegalArgumentException(
-                        "scanPartitionDiscoveryIntervalMs must not be null");
+                        "`scanPartitionDiscoveryIntervalMs` must be set and not empty");
             }
 
             if (offsetsInitializer == null) {
-                throw new IllegalArgumentException("offsetsInitializer must not be null");
-            }
-
-            if (deserializationSchema == null) {
-                throw new IllegalArgumentException("deserializationSchema must not be null");
+                throw new IllegalArgumentException("`offsetsInitializer` be set and not empty");
             }
 
             if (this.flussConf == null) {

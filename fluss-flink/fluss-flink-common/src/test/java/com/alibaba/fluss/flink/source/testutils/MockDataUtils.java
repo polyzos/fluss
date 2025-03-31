@@ -16,6 +16,7 @@
 
 package com.alibaba.fluss.flink.source.testutils;
 
+import com.alibaba.fluss.flink.row.RowConverters;
 import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
 import com.alibaba.fluss.flink.source.deserializer.Order;
 import com.alibaba.fluss.metadata.Schema;
@@ -23,7 +24,11 @@ import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.row.InternalRow;
 import com.alibaba.fluss.types.DataTypes;
 
+import com.alibaba.fluss.types.RowType;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.types.logical.LogicalType;
 
 import java.util.Arrays;
 import java.util.List;
@@ -56,12 +61,59 @@ public class MockDataUtils {
                 .build();
     }
 
-    public static class OrderDeserializationSchema implements FlussDeserializationSchema<Order> {
+    /**
+     * Utility method to create a readable copy of a BinaryRowData.
+     * Creates a GenericRowData with the same content as the BinaryRowData.
+     *
+     * @param binaryRow The BinaryRowData to copy
+     * @param flussRowType The RowType describing the row structure
+     * @return A GenericRowData with the same content
+     */
+    public static RowData binaryRowToGenericRow(RowData binaryRow, RowType flussRowType) {
+        // Convert Fluss RowType to Flink RowType
+        org.apache.flink.table.types.logical.RowType flinkRowType =
+                RowConverters.flussRowTypeToFlinkRowType(flussRowType);
 
-        @Override
-        public TypeInformation<Order> getProducedType() {
-            return TypeInformation.of(Order.class);
+        int fieldCount = binaryRow.getArity();
+        GenericRowData genericRow = new GenericRowData(fieldCount);
+        genericRow.setRowKind(binaryRow.getRowKind());
+
+        for (int i = 0; i < fieldCount; i++) {
+            if (binaryRow.isNullAt(i)) {
+                genericRow.setField(i, null);
+                continue;
+            }
+
+            LogicalType fieldType = flinkRowType.getTypeAt(i);
+            switch (fieldType.getTypeRoot()) {
+                case BIGINT:
+                    genericRow.setField(i, binaryRow.getLong(i));
+                    break;
+                case INTEGER:
+                    genericRow.setField(i, binaryRow.getInt(i));
+                    break;
+                case DOUBLE:
+                    genericRow.setField(i, binaryRow.getDouble(i));
+                    break;
+                case FLOAT:
+                    genericRow.setField(i, binaryRow.getFloat(i));
+                    break;
+                case VARCHAR:
+                case CHAR:
+                    genericRow.setField(i, binaryRow.getString(i));
+                    break;
+                case BOOLEAN:
+                    genericRow.setField(i, binaryRow.getBoolean(i));
+                    break;
+                default:
+                    genericRow.setField(i, binaryRow.getString(i));
+            }
         }
+
+        return genericRow;
+    }
+
+    public static class OrderDeserializationSchema implements FlussDeserializationSchema<Order> {
 
         @Override
         public void open(InitializationContext context) throws Exception {}
@@ -74,6 +126,11 @@ public class MockDataUtils {
             int amount = row.getInt(2);
             String address = String.valueOf(row.getString(3));
             return new Order(orderId, itemId, amount, address);
+        }
+
+        @Override
+        public TypeInformation<Order> getProducedType(RowType rowSchema) {
+            return TypeInformation.of(Order.class);
         }
     }
 }

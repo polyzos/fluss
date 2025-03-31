@@ -1,7 +1,6 @@
 package com.alibaba.fluss.flink.source;
 
 import com.alibaba.fluss.config.ConfigOptions;
-import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.flink.FlussSource;
 import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
 import com.alibaba.fluss.flink.source.enumerator.initializer.OffsetsInitializer;
@@ -9,11 +8,14 @@ import com.alibaba.fluss.flink.source.testutils.FlinkTestBase;
 import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.row.InternalRow;
 
+import com.alibaba.fluss.types.RowType;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
+
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 public class FlussSourceBuilderTest extends FlinkTestBase {
 
@@ -40,7 +42,7 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                         .build();
 
         // Then
-        Assertions.assertNotNull(source, "FlussSource should be created successfully");
+        assertThat(source).isNotNull();
     }
 
     @Test
@@ -57,14 +59,9 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                                 .build();
 
         // Then
-        NullPointerException exception =
-                Assertions.assertThrows(
-                        NullPointerException.class,
-                        executable,
-                        "Should throw exception when bootstrapServers is missing");
-
-        Assertions.assertTrue(
-                exception.getMessage().contains("bootstrapServers must not be empty"));
+        assertThatThrownBy(executable::execute)
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("bootstrapServers must not be set");
     }
 
     @Test
@@ -81,15 +78,9 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                                 .setDeserializationSchema(new TestDeserializationSchema())
                                 .build();
 
-        // Then
-        IllegalArgumentException exception =
-                Assertions.assertThrows(
-                        IllegalArgumentException.class,
-                        executable,
-                        "Should throw exception when bootstrapServers is empty");
-
-        Assertions.assertTrue(
-                exception.getMessage().contains("bootstrapServers must not be empty"));
+        assertThatThrownBy(executable::execute)
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("Failed to initialize FlussSource admin connection: No resolvable bootstrap urls given in bootstrap.servers");
     }
 
     @Test
@@ -106,13 +97,9 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                                 .build();
 
         // Then
-        IllegalArgumentException exception =
-                Assertions.assertThrows(
-                        IllegalArgumentException.class,
-                        executable,
-                        "Should throw exception when database is missing");
-
-        Assertions.assertTrue(exception.getMessage().contains("database must not be empty"));
+        assertThatThrownBy(executable::execute)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Database must be set and not empty");
     }
 
     @Test
@@ -130,13 +117,9 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                                 .build();
 
         // Then
-        IllegalArgumentException exception =
-                Assertions.assertThrows(
-                        IllegalArgumentException.class,
-                        executable,
-                        "Should throw exception when database is empty");
-
-        Assertions.assertTrue(exception.getMessage().contains("database must not be empty"));
+        assertThatThrownBy(executable::execute)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Database must be set and not empty");
     }
 
     @Test
@@ -153,13 +136,9 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                                 .build();
 
         // Then
-        IllegalArgumentException exception =
-                Assertions.assertThrows(
-                        IllegalArgumentException.class,
-                        executable,
-                        "Should throw exception when table is missing");
-
-        Assertions.assertTrue(exception.getMessage().contains("tableName must not be empty"));
+        assertThatThrownBy(executable::execute)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("TableName must be set and not empty");
     }
 
     @Test
@@ -177,13 +156,9 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                                 .build();
 
         // Then
-        IllegalArgumentException exception =
-                Assertions.assertThrows(
-                        IllegalArgumentException.class,
-                        executable,
-                        "Should throw exception when table is empty");
-
-        Assertions.assertTrue(exception.getMessage().contains("tableName must not be empty"));
+        assertThatThrownBy(executable::execute)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("TableName must be set and not empty");
     }
 
     @Test
@@ -200,16 +175,9 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                                 .build();
 
         // Then
-        IllegalArgumentException exception =
-                Assertions.assertThrows(
-                        IllegalArgumentException.class,
-                        executable,
-                        "Should throw exception when scanPartitionDiscoveryIntervalMs is missing");
-
-        Assertions.assertTrue(
-                exception
-                        .getMessage()
-                        .contains("scanPartitionDiscoveryIntervalMs must not be null"));
+        assertThatThrownBy(executable::execute)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("`scanPartitionDiscoveryIntervalMs` must be set and not empty");
     }
 
     @Test
@@ -226,14 +194,9 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                                 .build();
 
         // Then
-        IllegalArgumentException exception =
-                Assertions.assertThrows(
-                        IllegalArgumentException.class,
-                        executable,
-                        "Should throw exception when offsetsInitializer is missing");
-
-        Assertions.assertTrue(
-                exception.getMessage().contains("offsetsInitializer must not be null"));
+        assertThatThrownBy(executable::execute)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("`offsetsInitializer` be set and not empty");
     }
 
     @Test
@@ -250,14 +213,9 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                                 .build();
 
         // Then
-        NullPointerException exception =
-                Assertions.assertThrows(
-                        NullPointerException.class,
-                        executable,
-                        "Should throw exception when deserializationSchema is missing");
-
-        Assertions.assertTrue(
-                exception.getMessage().contains("DeserializationSchema must not be null"));
+        assertThatThrownBy(executable::execute)
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("DeserializationSchema must be set");
     }
 
     @Test
@@ -276,8 +234,7 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                         .build();
 
         // Then
-        Assertions.assertNotNull(
-                source, "FlussSource should be created successfully with projected fields");
+        assertThat(source).isNotNull();
     }
 
     @Test
@@ -295,34 +252,7 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                         .build();
 
         // Then
-        Assertions.assertNotNull(
-                source, "FlussSource should be created successfully in batch mode");
-    }
-
-    @Test
-    public void testSetFlussConfig() {
-        // Given
-        Configuration customConfig = new Configuration();
-        customConfig.setString(ConfigOptions.CLIENT_SCANNER_LOG_CHECK_CRC.key(), "false");
-        customConfig.setLong(ConfigOptions.CLIENT_SCANNER_LOG_FETCH_MAX_BYTES.key(), 1048576L);
-        customConfig.setLong(ConfigOptions.CLIENT_SCANNER_LOG_MAX_POLL_RECORDS.key(), 100);
-        customConfig.setString(
-                ConfigOptions.CLIENT_SCANNER_LOG_FETCH_MAX_BYTES_FOR_BUCKET.key(), "2mb");
-
-        FlussSource<TestRecord> source =
-                FlussSource.<TestRecord>builder()
-                        .setBootstrapServers(bootstrapServers)
-                        .setDatabase(DEFAULT_DB)
-                        .setTable(DEFAULT_TABLE_PATH.getTableName())
-                        .setStartingOffsets(OffsetsInitializer.earliest())
-                        .setScanPartitionDiscoveryIntervalMs(1000L)
-                        .setDeserializationSchema(new TestDeserializationSchema())
-                        .setFlussConfig(customConfig)
-                        .build();
-
-        // Then
-        Assertions.assertNotNull(
-                source, "FlussSource should be created successfully with custom configuration");
+        assertThat(source).isNotNull();
     }
 
     @Test
@@ -343,8 +273,7 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                         .build();
 
         // Then
-        Assertions.assertNotNull(
-                source, "FlussSource should be created successfully with projected fields");
+        assertThat(source).isNotNull();
     }
 
     // Test record class for tests
@@ -369,19 +298,19 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
     // Test deserialization schema for tests
     private static class TestDeserializationSchema
             implements FlussDeserializationSchema<TestRecord> {
-        @Override
-        public TypeInformation<TestRecord> getProducedType() {
-            return TypeInformation.of(TestRecord.class);
-        }
 
         @Override
         public void open(InitializationContext context) throws Exception {
-
         }
 
         @Override
         public TestRecord deserialize(LogRecord record) throws Exception {
             InternalRow row = record.getRow();
             return new TestRecord(row.getInt(0), row.getString(1).toString());        }
+
+        @Override
+        public TypeInformation<TestRecord> getProducedType(RowType rowSchema) {
+            return TypeInformation.of(TestRecord.class);
+        }
     }
 }

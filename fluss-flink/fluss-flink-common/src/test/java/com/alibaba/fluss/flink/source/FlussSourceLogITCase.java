@@ -42,9 +42,9 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.types.RowKind;
 import org.apache.flink.util.CloseableIterator;
+import org.assertj.core.api.AssertionsForClassTypes;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -55,6 +55,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import static com.alibaba.fluss.testutils.DataTestUtils.row;
+import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
 public class FlussSourceLogITCase extends FlinkTestBase {
     private static final List<Order> orders = MockDataUtils.ORDERS;
@@ -115,7 +116,7 @@ public class FlussSourceLogITCase extends FlinkTestBase {
                         .setTable(logTableName)
                         .setStartingOffsets(OffsetsInitializer.earliest())
                         .setScanPartitionDiscoveryIntervalMs(1000L)
-                        .setDeserializationSchema(new RowDataDeserializationSchema(rowType))
+                        .setDeserializationSchema(new RowDataDeserializationSchema())
                         .build();
 
         DataStreamSource<RowData> stream =
@@ -143,16 +144,22 @@ public class FlussSourceLogITCase extends FlinkTestBase {
             env.executeAsync("Test Fluss Log RowData Source");
             int count = 0;
             while (iterator.hasNext() && count < expectedResult.size() - 1) {
-                collectedRows.add(iterator.next());
+                RowData row = iterator.next();
+                RowData genericRow = MockDataUtils.binaryRowToGenericRow(row, table.getTableInfo().getRowType());
+                collectedRows.add(genericRow);
                 count++;
             }
+            RowData genericRow = MockDataUtils
+                    .binaryRowToGenericRow(iterator.next(), table.getTableInfo().getRowType());
             // at this point the iterator should have one more element
-            collectedRows.add(iterator.next());
+            collectedRows.add(genericRow);
         }
 
         // Assert result size and elements match
-        Assertions.assertEquals(expectedResult.size(), collectedRows.size());
-        Assertions.assertEquals(expectedResult, collectedRows);
+        assertThat(expectedResult.size()).isEqualTo(collectedRows.size());
+        assertThat(expectedResult).isEqualTo(collectedRows);
+
+        assertThat(expectedResult).hasSameElementsAs(collectedRows);
     }
 
     @Test
@@ -196,8 +203,10 @@ public class FlussSourceLogITCase extends FlinkTestBase {
         }
 
         // Assert result size and elements match
-        Assertions.assertEquals(expectedOutput.size(), collectedElements.size());
-        Assertions.assertEquals(expectedOutput, collectedElements);
+        AssertionsForClassTypes.assertThat(expectedOutput.size()).isEqualTo(collectedElements.size());
+        assertThat(expectedOutput).isEqualTo(collectedElements);
+
+        assertThat(expectedOutput).hasSameElementsAs(collectedElements);
     }
 
     private static RowData createRowData(

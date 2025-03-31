@@ -19,14 +19,10 @@ package com.alibaba.fluss.flink.source.deserializer;
 import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.row.InternalRow;
 
+import com.alibaba.fluss.types.RowType;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 
 public class OrderPartialDeserializationSchema implements FlussDeserializationSchema<OrderPartial> {
-
-    @Override
-    public TypeInformation<OrderPartial> getProducedType() {
-        return TypeInformation.of(OrderPartial.class);
-    }
 
     @Override
     public void open(InitializationContext context) throws Exception {}
@@ -39,5 +35,10 @@ public class OrderPartialDeserializationSchema implements FlussDeserializationSc
         int amount = row.getInt(1);
 
         return new OrderPartial(orderId, amount);
+    }
+
+    @Override
+    public TypeInformation<OrderPartial> getProducedType(RowType rowSchema) {
+        return TypeInformation.of(OrderPartial.class);
     }
 }

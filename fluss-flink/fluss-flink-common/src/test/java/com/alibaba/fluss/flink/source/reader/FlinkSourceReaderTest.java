@@ -167,6 +167,6 @@ class FlinkSourceReaderTest extends FlinkTestBase {
                 context,
                 null,
                 new FlinkSourceReaderMetrics(context.metricGroup()),
-                new RowDataDeserializationSchema(sourceOutputType));
+                new RowDataDeserializationSchema());
     }
 }

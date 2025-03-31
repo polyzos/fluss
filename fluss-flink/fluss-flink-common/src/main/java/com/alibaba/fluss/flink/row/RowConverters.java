@@ -19,6 +19,7 @@ package com.alibaba.fluss.flink.row;
 import com.alibaba.fluss.row.BinaryString;
 import com.alibaba.fluss.row.GenericRow;
 import com.alibaba.fluss.row.TimestampNtz;
+import org.apache.flink.table.types.logical.LogicalType;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -26,7 +27,9 @@ import java.sql.Date;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Utility class for converting between different row representations in Fluss.
@@ -98,5 +101,71 @@ public class RowConverters {
             }
         }
         return row;
+    }
+
+    /**
+     * Converts a Fluss RowType to a Flink RowType.
+     *
+     * @param flussRowType The Fluss RowType to convert
+     * @return The equivalent Flink RowType
+     */
+    public static org.apache.flink.table.types.logical.RowType flussRowTypeToFlinkRowType(
+            com.alibaba.fluss.types.RowType flussRowType) {
+
+        List<LogicalType> flinkFieldTypes = new ArrayList<>();
+        List<String> flinkFieldNames = new ArrayList<>();
+
+        int fieldCount = flussRowType.getFieldCount();
+
+        for (int i = 0; i < fieldCount; i++) {
+            flinkFieldNames.add(flussRowType.getFieldNames().get(i));
+            flinkFieldTypes.add(convertFlussTypeToFlinkType(flussRowType.getTypeAt(i)));
+        }
+
+        return org.apache.flink.table.types.logical.RowType.of(
+                flinkFieldTypes.toArray(new LogicalType[0]),
+                flinkFieldNames.toArray(new String[0])
+        );
+    }
+    /**
+     * Converts a Fluss DataType to a Flink LogicalType.
+     *
+     * @param flussType The Fluss DataType to convert
+     * @return The equivalent Flink LogicalType
+     */
+    private static org.apache.flink.table.types.logical.LogicalType convertFlussTypeToFlinkType(
+            com.alibaba.fluss.types.DataType flussType) {
+        // Use the correct method to get the type name
+        String typeName = flussType.toString().toUpperCase();
+
+        // Check for nullability
+        boolean isNullable = !typeName.contains("NOT NULL");
+
+        // Remove NOT NULL for processing the base type
+        if (!isNullable) {
+            typeName = typeName.replace("NOT NULL", "").trim();
+        }
+
+        // In Flink, we need to specify nullability when creating the type
+        switch (typeName) {
+            case "BOOLEAN":
+                return new org.apache.flink.table.types.logical.BooleanType(isNullable);
+            case "BIGINT":
+            case "LONG":
+                return new org.apache.flink.table.types.logical.BigIntType(isNullable);
+            case "INTEGER":
+            case "INT":
+                return new org.apache.flink.table.types.logical.IntType(isNullable);
+            case "FLOAT":
+                return new org.apache.flink.table.types.logical.FloatType(isNullable);
+            case "DOUBLE":
+                return new org.apache.flink.table.types.logical.DoubleType(isNullable);
+            case "STRING":
+            case "VARCHAR":
+                return new org.apache.flink.table.types.logical.VarCharType(isNullable,
+                        org.apache.flink.table.types.logical.VarCharType.MAX_LENGTH);
+            default:
+                throw new UnsupportedOperationException("Unsupported type: " + flussType);
+        }
     }
 }

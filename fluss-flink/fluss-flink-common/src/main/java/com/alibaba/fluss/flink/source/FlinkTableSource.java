@@ -262,7 +262,7 @@ public class FlinkTableSource
                         projectedFields,
                         offsetsInitializer,
                         scanPartitionDiscoveryIntervalMs,
-                        new RowDataDeserializationSchema(flussRowType),
+                        new RowDataDeserializationSchema(),
                         streaming);
 
         if (!streaming) {
