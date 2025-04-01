@@ -137,7 +137,7 @@ public class FlinkRecordEmitterTest extends FlinkTestBase {
                 new HybridSnapshotLogSplitState(hybridSnapshotLogSplit);
 
         ScanRecord scanRecord =
-                new ScanRecord(-1, 100L, ChangeType.INSERT, row(100l, 101L, 5, "Test 123 Addr."));
+                new ScanRecord(-1, 100L, ChangeType.INSERT, row(1001L, 101L, 5, "Test 123 Addr."));
 
         DataType[] dataTypes =
                 new DataType[] {
@@ -179,7 +179,7 @@ public class FlinkRecordEmitterTest extends FlinkTestBase {
         List<Order> results = sourceOutput.getRecords();
 
         ArrayList<Order> expectedResult = new ArrayList<>();
-        expectedResult.add(new Order(100l, 101L, 5, "Test 123 Addr."));
+        expectedResult.add(new Order(1001L, 101L, 5, "Test 123 Addr."));
 
         assertThat(splitState.isHybridSnapshotLogSplitState()).isTrue();
         assertThat(results).hasSize(1);
