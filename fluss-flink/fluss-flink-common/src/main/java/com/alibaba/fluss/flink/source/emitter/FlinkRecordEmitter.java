@@ -23,13 +23,9 @@ import com.alibaba.fluss.flink.source.reader.FlinkSourceReader;
 import com.alibaba.fluss.flink.source.reader.RecordAndPos;
 import com.alibaba.fluss.flink.source.split.HybridSnapshotLogSplitState;
 import com.alibaba.fluss.flink.source.split.SourceSplitState;
-import com.alibaba.fluss.types.RowType;
 
 import org.apache.flink.api.connector.source.SourceOutput;
 import org.apache.flink.connector.base.source.reader.RecordEmitter;
-import org.apache.flink.metrics.MetricGroup;
-import org.apache.flink.metrics.groups.SourceReaderMetricGroup;
-import org.apache.flink.util.UserCodeClassLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,38 +45,8 @@ public class FlinkRecordEmitter<OUT> implements RecordEmitter<RecordAndPos, OUT,
     private LakeRecordRecordEmitter<OUT> lakeRecordRecordEmitter;
     private FlussDeserializationSchema<OUT> deserializationSchema;
 
-    public FlinkRecordEmitter(
-            FlussDeserializationSchema<OUT> deserializationSchema,
-            RowType sourceOutputType,
-            UserCodeClassLoader userCodeClassLoader,
-            SourceReaderMetricGroup metricsGroup) {
+    public FlinkRecordEmitter(FlussDeserializationSchema<OUT> deserializationSchema) {
         this.deserializationSchema = deserializationSchema;
-        try {
-            this.deserializationSchema.open(
-                    new FlussDeserializationSchema.InitializationContext() {
-                        @Override
-                        public MetricGroup getMetricGroup() {
-                            return metricsGroup;
-                        }
-
-                        @Override
-                        public UserCodeClassLoader getUserCodeClassLoader() {
-                            return userCodeClassLoader;
-                        }
-
-                        @Override
-                        public RowType getRowSchema() {
-                            return sourceOutputType;
-                        }
-                    });
-        } catch (Exception e) {
-            throw new RuntimeException(
-                    "Failed to initialize deserialization schema for source output type: "
-                            + sourceOutputType
-                            + ". Deserialization schema: "
-                            + deserializationSchema.getClass().getName(),
-                    e);
-        }
     }
 
     @Override
