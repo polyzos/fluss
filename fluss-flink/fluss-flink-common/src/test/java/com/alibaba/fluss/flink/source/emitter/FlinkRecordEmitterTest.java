@@ -17,7 +17,7 @@
 package com.alibaba.fluss.flink.source.emitter;
 
 import com.alibaba.fluss.client.table.scanner.ScanRecord;
-import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
+import com.alibaba.fluss.flink.source.deserializer.InitializationContextImpl;
 import com.alibaba.fluss.flink.source.deserializer.Order;
 import com.alibaba.fluss.flink.source.deserializer.OrderDeserializationSchema;
 import com.alibaba.fluss.flink.source.deserializer.RowDataDeserializationSchema;
@@ -36,9 +36,7 @@ import com.alibaba.fluss.types.RowType;
 
 import org.apache.flink.api.common.eventtime.Watermark;
 import org.apache.flink.api.connector.source.SourceOutput;
-import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.util.UserCodeClassLoader;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -74,23 +72,7 @@ public class FlinkRecordEmitterTest extends FlinkTestBase {
 
         FlussRowToFlinkRowConverter converter = new FlussRowToFlinkRowConverter(sourceOutputType);
         RowDataDeserializationSchema deserializationSchema = new RowDataDeserializationSchema();
-        deserializationSchema.open(
-                new FlussDeserializationSchema.InitializationContext() {
-                    @Override
-                    public MetricGroup getMetricGroup() {
-                        return null;
-                    }
-
-                    @Override
-                    public UserCodeClassLoader getUserCodeClassLoader() {
-                        return null;
-                    }
-
-                    @Override
-                    public RowType getRowSchema() {
-                        return sourceOutputType;
-                    }
-                });
+        deserializationSchema.open(new InitializationContextImpl(null, null, sourceOutputType));
 
         FlinkRecordEmitter<RowData> emitter = new FlinkRecordEmitter<>(deserializationSchema);
 
@@ -139,37 +121,11 @@ public class FlinkRecordEmitterTest extends FlinkTestBase {
         ScanRecord scanRecord =
                 new ScanRecord(-1, 100L, ChangeType.INSERT, row(1001L, 101L, 5, "Test 123 Addr."));
 
-        DataType[] dataTypes =
-                new DataType[] {
-                    DataTypes.BIGINT(), DataTypes.BIGINT(), DataTypes.INT(), DataTypes.STRING()
-                };
-
-        String[] fieldNames = new String[] {"orderId", "itemId", "amount", "address"};
-
-        RowType sourceOutputType = RowType.of(dataTypes, fieldNames);
-
         RecordAndPos recordAndPos = new RecordAndPos(scanRecord, 42L);
 
-        FlussRowToFlinkRowConverter converter = new FlussRowToFlinkRowConverter(sourceOutputType);
         OrderDeserializationSchema deserializationSchema = new OrderDeserializationSchema();
         deserializationSchema.open(
-                new FlussDeserializationSchema.InitializationContext() {
-                    @Override
-                    public MetricGroup getMetricGroup() {
-                        return null;
-                    }
-
-                    @Override
-                    public UserCodeClassLoader getUserCodeClassLoader() {
-                        return null;
-                    }
-
-                    @Override
-                    public RowType getRowSchema() {
-                        return sourceOutputType;
-                    }
-                });
-
+                new InitializationContextImpl(null, null, tableSchema.getRowType()));
         FlinkRecordEmitter<Order> emitter = new FlinkRecordEmitter<>(deserializationSchema);
 
         TestSourceOutput<Order> sourceOutput = new TestSourceOutput<>();

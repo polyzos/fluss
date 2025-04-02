@@ -18,6 +18,7 @@ package com.alibaba.fluss.flink.source;
 
 import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
+import com.alibaba.fluss.flink.source.deserializer.InitializationContextImpl;
 import com.alibaba.fluss.flink.source.emitter.FlinkRecordEmitter;
 import com.alibaba.fluss.flink.source.enumerator.FlinkSourceEnumerator;
 import com.alibaba.fluss.flink.source.enumerator.initializer.OffsetsInitializer;
@@ -40,8 +41,6 @@ import org.apache.flink.api.connector.source.SplitEnumeratorContext;
 import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
 import org.apache.flink.core.io.SimpleVersionedSerializer;
-import org.apache.flink.metrics.MetricGroup;
-import org.apache.flink.util.UserCodeClassLoader;
 
 import javax.annotation.Nullable;
 
@@ -138,22 +137,10 @@ public class FlinkSource<OUT> implements Source<OUT, SourceSplitBase, SourceEnum
                 new FlinkSourceReaderMetrics(context.metricGroup());
 
         deserializationSchema.open(
-                new FlussDeserializationSchema.InitializationContext() {
-                    @Override
-                    public MetricGroup getMetricGroup() {
-                        return context.metricGroup().addGroup("deserializer");
-                    }
-
-                    @Override
-                    public UserCodeClassLoader getUserCodeClassLoader() {
-                        return context.getUserCodeClassLoader();
-                    }
-
-                    @Override
-                    public RowType getRowSchema() {
-                        return sourceOutputType;
-                    }
-                });
+                new InitializationContextImpl(
+                        context.metricGroup().addGroup("deserializer"),
+                        context.getUserCodeClassLoader(),
+                        sourceOutputType));
         FlinkRecordEmitter<OUT> recordEmitter = new FlinkRecordEmitter<>(deserializationSchema);
 
         return new FlinkSourceReader<>(

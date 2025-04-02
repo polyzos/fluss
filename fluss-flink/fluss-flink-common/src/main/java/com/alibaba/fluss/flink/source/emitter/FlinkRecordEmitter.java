@@ -42,8 +42,8 @@ import org.slf4j.LoggerFactory;
 public class FlinkRecordEmitter<OUT> implements RecordEmitter<RecordAndPos, OUT, SourceSplitState> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkRecordEmitter.class);
 
+    private final FlussDeserializationSchema<OUT> deserializationSchema;
     private LakeRecordRecordEmitter<OUT> lakeRecordRecordEmitter;
-    private FlussDeserializationSchema<OUT> deserializationSchema;
 
     public FlinkRecordEmitter(FlussDeserializationSchema<OUT> deserializationSchema) {
         this.deserializationSchema = deserializationSchema;

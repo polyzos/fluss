@@ -17,7 +17,7 @@
 package com.alibaba.fluss.flink.source.reader;
 
 import com.alibaba.fluss.config.Configuration;
-import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
+import com.alibaba.fluss.flink.source.deserializer.InitializationContextImpl;
 import com.alibaba.fluss.flink.source.deserializer.RowDataDeserializationSchema;
 import com.alibaba.fluss.flink.source.emitter.FlinkRecordEmitter;
 import com.alibaba.fluss.flink.source.event.PartitionBucketsUnsubscribedEvent;
@@ -37,9 +37,7 @@ import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
 import org.apache.flink.connector.testutils.source.reader.TestingReaderContext;
 import org.apache.flink.connector.testutils.source.reader.TestingReaderOutput;
-import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.util.UserCodeClassLoader;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -167,23 +165,10 @@ class FlinkSourceReaderTest extends FlinkTestBase {
 
         RowDataDeserializationSchema deserializationSchema = new RowDataDeserializationSchema();
         deserializationSchema.open(
-                new FlussDeserializationSchema.InitializationContext() {
-                    @Override
-                    public MetricGroup getMetricGroup() {
-                        return context.metricGroup().addGroup("deserializer");
-                    }
-
-                    @Override
-                    public UserCodeClassLoader getUserCodeClassLoader() {
-                        return context.getUserCodeClassLoader();
-                    }
-
-                    @Override
-                    public RowType getRowSchema() {
-                        return sourceOutputType;
-                    }
-                });
-
+                new InitializationContextImpl(
+                        context.metricGroup().addGroup("deserializer"),
+                        context.getUserCodeClassLoader(),
+                        sourceOutputType));
         FlinkRecordEmitter<RowData> recordEmitter = new FlinkRecordEmitter<>(deserializationSchema);
 
         return new FlinkSourceReader<>(
