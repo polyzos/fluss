@@ -16,10 +16,6 @@
 
 package com.alibaba.fluss.flink.row;
 
-import com.alibaba.fluss.row.BinaryString;
-import com.alibaba.fluss.row.GenericRow;
-import com.alibaba.fluss.row.TimestampNtz;
-
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
@@ -30,7 +26,6 @@ import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.VarCharType;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Time;
@@ -39,90 +34,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class RowConverters {
-    /**
-     * Converts a POJO to a Fluss GenericRow.
-     *
-     * <p>This method uses reflection to access fields in the POJO and converts them to appropriate
-     * Fluss data types.
-     *
-     * <p>Static and synthetic fields are automatically filtered out.
-     *
-     * @param pojo The POJO object to convert (must not be null)
-     * @return A GenericRow containing the POJO's field values
-     * @throws IllegalArgumentException if the input is null or field access fails
-     */
-    public static GenericRow pojoToGenericRow(Object pojo) {
-        if (pojo == null) {
-            throw new IllegalArgumentException("Input POJO cannot be null");
-        }
-
-        Field[] allFields = pojo.getClass().getDeclaredFields();
-
-        // Filter out synthetic fields (JaCoCo's $jacocoData)
-        Field[] fields =
-                Arrays.stream(allFields)
-                        .filter(
-                                field ->
-                                        !field.isSynthetic()
-                                                && !Modifier.isStatic(field.getModifiers()))
-                        .toArray(Field[]::new);
-
-        Object[] values = new Object[fields.length];
-
-        for (int i = 0; i < fields.length; i++) {
-            Field field = fields[i];
-            field.setAccessible(true);
-            try {
-                Object value = field.get(pojo);
-
-                // Handle various field types
-                if (value instanceof String) {
-                    values[i] = BinaryString.fromString((String) value);
-                } else if (value instanceof LocalDateTime) {
-                    values[i] = TimestampNtz.fromLocalDateTime((LocalDateTime) value);
-                } else if (value instanceof Date) {
-                    values[i] = TimestampNtz.fromMillis(((Date) value).getTime());
-                } else if (value instanceof Instant) {
-                    LocalDateTime ldt =
-                            LocalDateTime.ofInstant((Instant) value, ZoneId.systemDefault());
-                    values[i] = TimestampNtz.fromLocalDateTime(ldt);
-                } else {
-                    values[i] = value;
-                }
-            } catch (IllegalAccessException e) {
-                throw new IllegalArgumentException("Unable to access field: " + field.getName(), e);
-            }
-        }
-
-        return row(values);
-    }
-
-    /**
-     * Creates a GenericRow from the provided array of objects.
-     *
-     * <p>This is a convenience method that handles basic type conversions, such as converting
-     * String objects to BinaryString.
-     *
-     * @param objects The values to include in the row
-     * @return A new GenericRow containing the provided values with appropriate type conversions
-     */
-    public static GenericRow row(Object... objects) {
-        GenericRow row = new GenericRow(objects.length);
-        for (int i = 0; i < objects.length; i++) {
-            if (objects[i] instanceof String) {
-                row.setField(i, BinaryString.fromString((String) objects[i]));
-            } else {
-                row.setField(i, objects[i]);
-            }
-        }
-        return row;
-    }
 
     /**
      * Converts a POJO to Flink RowData using the specified RowType schema.
