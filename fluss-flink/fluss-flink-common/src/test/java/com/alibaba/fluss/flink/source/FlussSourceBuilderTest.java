@@ -77,7 +77,7 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
         // Then
         assertThatThrownBy(executable::execute)
                 .isInstanceOf(NullPointerException.class)
-                .hasMessage("bootstrapServers must not be set");
+                .hasMessage("BootstrapServers is required but not provided.");
     }
 
     @Test
@@ -115,8 +115,8 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
 
         // Then
         assertThatThrownBy(executable::execute)
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Database must be set and not empty");
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("Database is required but not provided.");
     }
 
     @Test
@@ -136,7 +136,7 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
         // Then
         assertThatThrownBy(executable::execute)
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Database must be set and not empty");
+                .hasMessage("Database must not be empty.");
     }
 
     @Test
@@ -154,8 +154,8 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
 
         // Then
         assertThatThrownBy(executable::execute)
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("TableName must be set and not empty");
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("TableName is required but not provided.");
     }
 
     @Test
@@ -175,7 +175,7 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
         // Then
         assertThatThrownBy(executable::execute)
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("TableName must be set and not empty");
+                .hasMessage("TableName must not be empty.");
     }
 
     @Test
@@ -193,8 +193,8 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
 
         // Then
         assertThatThrownBy(executable::execute)
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("`scanPartitionDiscoveryIntervalMs` must be set and not empty");
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("ScanPartitionDiscoveryIntervalMs is required but not provided.");
     }
 
     @Test
@@ -212,8 +212,8 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
 
         // Then
         assertThatThrownBy(executable::execute)
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("`offsetsInitializer` be set and not empty");
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("OffsetsInitializer is required but not provided.");
     }
 
     @Test
@@ -232,7 +232,7 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
         // Then
         assertThatThrownBy(executable::execute)
                 .isInstanceOf(NullPointerException.class)
-                .hasMessage("DeserializationSchema must be set");
+                .hasMessage("Deserialization schema is required but not provided.");
     }
 
     @Test
@@ -265,11 +265,12 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                         .setStartingOffsets(OffsetsInitializer.earliest())
                         .setScanPartitionDiscoveryIntervalMs(1000L)
                         .setDeserializationSchema(new TestDeserializationSchema())
-                        .setIsBatch(true)
+                        .setIsStreaming(false)
                         .build();
 
         // Then
         assertThat(source).isNotNull();
+        assertThat(source.isStreaming()).isFalse();
     }
 
     @Test
