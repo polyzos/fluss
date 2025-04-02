@@ -16,12 +16,17 @@
 
 package com.alibaba.fluss.flink.sink;
 
+import com.alibaba.fluss.client.Connection;
+import com.alibaba.fluss.client.ConnectionFactory;
+import com.alibaba.fluss.client.admin.Admin;
 import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.flink.row.RowConverters;
 import com.alibaba.fluss.flink.sink.writer.FlinkSinkWriter;
 import com.alibaba.fluss.metadata.DataLakeFormat;
+import com.alibaba.fluss.metadata.TableInfo;
 import com.alibaba.fluss.metadata.TablePath;
 
+import com.alibaba.fluss.utils.Preconditions;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.RowType;
 import org.slf4j.Logger;
@@ -32,6 +37,7 @@ import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Builder for creating and configuring Fluss sink connectors for Apache Flink.
@@ -55,32 +61,37 @@ import java.util.Map;
 public class FlussSinkBuilder<IN> {
     private static final Logger LOG = LoggerFactory.getLogger(FlussSinkBuilder.class);
 
-    private TablePath tablePath;
+    private String bootstrapServers;
+    private String database;
+    private String tableName;
     private RowType tableRowType;
-    private boolean ignoreDelete = false;
-    private int[] targetColumnIndexes = null;
-    private boolean isUpsert = false;
+    private boolean ignoreDelete;
+    private int[] targetColumnIndexes;
+    private boolean isUpsert;
     private final Map<String, String> configOptions = new HashMap<>();
     private RowDataConverter<IN> converter;
-    private Class<IN> pojoClass;
+    private Class<IN> inputType;
+    private boolean shuffleByBucketId = true;
+    private @Nullable DataLakeFormat lakeFormat;
 
     /** Set the bootstrap server for the sink. */
     public FlussSinkBuilder<IN> setBootstrapServers(String bootstrapServers) {
-        configOptions.put("bootstrap.servers", bootstrapServers);
+        this.bootstrapServers = bootstrapServers;
         return this;
     }
 
-    /** Set the table path for the sink. */
-    public FlussSinkBuilder<IN> setTablePath(TablePath tablePath) {
-        this.tablePath = tablePath;
+    /** Set the database for the sink. */
+    public FlussSinkBuilder<IN> setDatabase(String database) {
+        this.database = database;
         return this;
     }
 
-    /** Set the table path for the sink. */
-    public FlussSinkBuilder<IN> setTablePath(String database, String table) {
-        this.tablePath = new TablePath(database, table);
+    /** Set the table name for the sink. */
+    public FlussSinkBuilder<IN> setTable(String table) {
+        this.tableName = table;
         return this;
     }
+
 
     /** Set the row type for the sink. */
     public FlussSinkBuilder<IN> setRowType(RowType rowType) {
@@ -91,6 +102,26 @@ public class FlussSinkBuilder<IN> {
     /** Set whether to ignore delete operations. */
     public FlussSinkBuilder<IN> setIgnoreDelete(boolean ignoreDelete) {
         this.ignoreDelete = ignoreDelete;
+        return this;
+    }
+
+    /** Set target column indexes. */
+    public FlussSinkBuilder<IN> setTargetColumnIndexes(int[] targetColumnIndexes) {
+        this.targetColumnIndexes = targetColumnIndexes;
+        return this;
+    }
+
+    /** Set target column indexes. */
+    public FlussSinkBuilder<IN> setDataLakeFormat(DataLakeFormat lakeFormat) {
+        this.lakeFormat = lakeFormat;
+        return this;
+    }
+
+    /** Set shuffle by bucket id. */
+    public FlussSinkBuilder<IN> setShuffleByBucketId(boolean shuffleByBucketId) {
+        if (!shuffleByBucketId) {
+            this.shuffleByBucketId = false;
+        }
         return this;
     }
 
@@ -125,8 +156,8 @@ public class FlussSinkBuilder<IN> {
     }
 
     /** Set the POJO class for automatic schema inference. */
-    public FlussSinkBuilder<IN> setPojoClass(Class<IN> pojoClass) {
-        this.pojoClass = pojoClass;
+    public FlussSinkBuilder<IN> setInputType(Class<IN> inputType) {
+        this.inputType = inputType;
         return this;
     }
 
@@ -145,12 +176,43 @@ public class FlussSinkBuilder<IN> {
 
         FlinkSink.SinkWriterBuilder<? extends FlinkSinkWriter> writerBuilder;
 
-        int numBucket = 0;
-        List<String> bucketKeys = null;
-        List<String> partitionKeys = null;
-        @Nullable DataLakeFormat lakeFormat = DataLakeFormat.PAIMON;
-        boolean shuffleByBucketId = false;
+        TablePath tablePath = new TablePath(database, tableName);
+        flussConfig.setString("bootstrap.servers", bootstrapServers);
 
+        System.out.println(tablePath);
+        TableInfo tableInfo;
+        try (Connection connection = ConnectionFactory.createConnection(flussConfig);
+             Admin admin = connection.getAdmin()) {
+            try {
+                tableInfo = admin.getTableInfo(tablePath).get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Interrupted while getting table info", e);
+            } catch (ExecutionException e) {
+                throw new RuntimeException("Failed to get table info", e);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "Failed to initialize FlussSource admin connection: " + e.getMessage(), e);
+        }
+        int numBucket = tableInfo.getNumBuckets();
+        List<String> bucketKeys = tableInfo.getBucketKeys();
+        List<String> partitionKeys = tableInfo.getPartitionKeys();
+
+        System.out.println(tableInfo);
+        System.out.println(numBucket);
+        System.out.println(bucketKeys);
+        System.out.println(partitionKeys);
+
+        System.out.println();
+        System.out.println(ignoreDelete);
+        System.out.println(targetColumnIndexes);
+        System.out.println(isUpsert);;
+
+
+        System.out.println();
+
+        System.out.println("Starting Fluss Sink with configuration: " + flussConfig);
         if (isUpsert) {
             LOG.info("Using upsert sink");
             writerBuilder =
@@ -185,10 +247,10 @@ public class FlussSinkBuilder<IN> {
 
     private void setupConverterAndRowType() {
         // If converter is not provided but we have a POJO class
-        if (converter == null && pojoClass != null) {
+        if (converter == null && inputType != null) {
             // Infer row type if not explicitly set
             if (tableRowType == null) {
-                tableRowType = RowConverters.inferRowTypeFromClass(pojoClass);
+                tableRowType = RowConverters.inferRowTypeFromClass(inputType);
                 LOG.info("Inferred RowType from POJO class: {}", tableRowType);
             }
 
@@ -202,7 +264,7 @@ public class FlussSinkBuilder<IN> {
                         return RowConverters.convertToRowData(element, finalRowType);
                     };
         } else if (converter == null
-                && RowData.class.isAssignableFrom((Class<?>) ((Class) pojoClass))) {
+                && RowData.class.isAssignableFrom((Class<?>) ((Class) inputType))) {
             // For RowData, use identity conversion
             converter = element -> (RowData) element;
         } else if (converter == null) {
@@ -219,17 +281,16 @@ public class FlussSinkBuilder<IN> {
     }
 
     private void validateConfiguration() {
-        if (tablePath == null) {
-            throw new IllegalArgumentException("Table path must be specified");
-        }
+        System.out.println(database);
+        System.out.println("edw -> " + database.isEmpty());
+        Preconditions.checkNotNull(bootstrapServers, "BootstrapServers is required but not provided.");
 
-        if (!configOptions.containsKey("bootstrap.servers")) {
-            throw new IllegalArgumentException("Bootstrap server must be specified");
-        }
+        Preconditions.checkNotNull(database, "DatabaseName is required but not provided.");
+        Preconditions.checkArgument(!database.isEmpty(), "Database cannot be empty.");
 
-        if (tableRowType == null && converter == null && pojoClass == null) {
-            throw new IllegalArgumentException(
-                    "Either rowType, converter, or pojoClass must be specified");
-        }
+        Preconditions.checkNotNull(tableName, "Table name is required but not provided.");
+        Preconditions.checkArgument(!tableName.isEmpty(), "Table name cannot be empty.");
+
+        Preconditions.checkArgument(tableRowType != null || converter != null || inputType != null, "Either rowType, converter, or inputType must be specified.");
     }
 }

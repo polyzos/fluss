@@ -122,10 +122,11 @@ public class FlussSinkITCase extends FlinkTestBase {
         FlinkSink<Order> flussSink =
                 FlussSink.<Order>builder()
                         .setBootstrapServers(bootstrapServers)
-                        .setTablePath(DEFAULT_DB, pkTableName)
+                        .setDatabase(DEFAULT_DB)
+                        .setTable(pkTableName)
                         .useUpsert()
                         .setRowType(rowType)
-                        .setPojoClass(Order.class) // Signals that no conversion is needed
+                        .setInputType(Order.class) // Signals that no conversion is needed
                         .build();
 
         stream.sinkTo(flussSink).name("Fluss Sink");
