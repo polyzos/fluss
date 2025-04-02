@@ -57,7 +57,7 @@ class FlinkSink<IN> implements Sink<IN>, SupportsPreWriteTopology<IN> {
         this.converter = element -> (RowData) element;
     }
 
-    private FlinkSink(
+    public FlinkSink(
             SinkWriterBuilder<? extends FlinkSinkWriter> builder, RowDataConverter<IN> converter) {
         this.builder = builder;
         this.converter = converter;
@@ -98,10 +98,10 @@ class FlinkSink<IN> implements Sink<IN>, SupportsPreWriteTopology<IN> {
         }
 
         // For non-RowData input, convert to RowData first
-        DataStream<RowData> rowDataInput = input.map(
-                (MapFunction<IN, RowData>) converter::convert,
-                org.apache.flink.api.common.typeinfo.TypeInformation.of(RowData.class)
-        );
+        DataStream<RowData> rowDataInput =
+                input.map(
+                        (MapFunction<IN, RowData>) converter::convert,
+                        org.apache.flink.api.common.typeinfo.TypeInformation.of(RowData.class));
 
         // Process with the builder
         DataStream<RowData> processed = builder.addPreWriteTopology(rowDataInput);
@@ -110,11 +110,6 @@ class FlinkSink<IN> implements Sink<IN>, SupportsPreWriteTopology<IN> {
         @SuppressWarnings("unchecked")
         DataStream<IN> result = (DataStream<IN>) processed;
         return result;
-    }
-
-    /** Interface for converting a generic type T to RowData. */
-    public interface RowDataConverter<T> extends Serializable {
-        RowData convert(T element) throws Exception;
     }
 
     @Internal
