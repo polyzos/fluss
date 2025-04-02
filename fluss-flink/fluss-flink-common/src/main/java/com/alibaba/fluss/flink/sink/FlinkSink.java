@@ -24,6 +24,7 @@ import com.alibaba.fluss.flink.sink.writer.UpsertSinkWriter;
 import com.alibaba.fluss.metadata.DataLakeFormat;
 import com.alibaba.fluss.metadata.TablePath;
 
+import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.api.connector.sink2.SinkWriter;
 import org.apache.flink.api.connector.sink2.WriterInitContext;
@@ -43,34 +44,77 @@ import static com.alibaba.fluss.flink.sink.FlinkStreamPartitioner.partition;
 import static com.alibaba.fluss.flink.utils.FlinkConversions.toFlussRowType;
 
 /** Flink sink for Fluss. */
-class FlinkSink implements Sink<RowData>, SupportsPreWriteTopology<RowData> {
+class FlinkSink<IN> implements Sink<IN>, SupportsPreWriteTopology<IN> {
 
     private static final long serialVersionUID = 1L;
 
     private final SinkWriterBuilder<? extends FlinkSinkWriter> builder;
 
-    FlinkSink(SinkWriterBuilder<? extends FlinkSinkWriter> builder) {
+    private final RowDataConverter<IN> converter;
+
+    public FlinkSink(SinkWriterBuilder<? extends FlinkSinkWriter> builder) {
         this.builder = builder;
+        this.converter = element -> (RowData) element;
+    }
+
+    private FlinkSink(
+            SinkWriterBuilder<? extends FlinkSinkWriter> builder, RowDataConverter<IN> converter) {
+        this.builder = builder;
+        this.converter = converter;
     }
 
     @Deprecated
     @Override
-    public SinkWriter<RowData> createWriter(InitContext context) throws IOException {
+    public SinkWriter<IN> createWriter(InitContext context) throws IOException {
         FlinkSinkWriter flinkSinkWriter = builder.createWriter();
         flinkSinkWriter.initialize(InternalSinkWriterMetricGroup.wrap(context.metricGroup()));
-        return flinkSinkWriter;
+        return new ConvertingSinkWriter<>(flinkSinkWriter, converter);
     }
 
     @Override
-    public SinkWriter<RowData> createWriter(WriterInitContext context) throws IOException {
+    public SinkWriter<IN> createWriter(WriterInitContext context) throws IOException {
         FlinkSinkWriter flinkSinkWriter = builder.createWriter();
         flinkSinkWriter.initialize(InternalSinkWriterMetricGroup.wrap(context.metricGroup()));
-        return flinkSinkWriter;
+        return new ConvertingSinkWriter<>(flinkSinkWriter, converter);
     }
 
     @Override
-    public DataStream<RowData> addPreWriteTopology(DataStream<RowData> input) {
-        return builder.addPreWriteTopology(input);
+    public DataStream<IN> addPreWriteTopology(DataStream<IN> input) {
+        // Check if input is already RowData (optimization for common case)
+        if (input.getType().getTypeClass() == RowData.class) {
+            @SuppressWarnings("unchecked")
+            DataStream<RowData> rowDataInput = (DataStream<RowData>) input;
+            DataStream<RowData> processed = builder.addPreWriteTopology(rowDataInput);
+
+            // If the builder didn't change the stream, return the original input
+            if (processed == rowDataInput) {
+                return input;
+            }
+
+            // Otherwise cast the processed stream back to IN
+            @SuppressWarnings("unchecked")
+            DataStream<IN> result = (DataStream<IN>) processed;
+            return result;
+        }
+
+        // For non-RowData input, convert to RowData first
+        DataStream<RowData> rowDataInput = input.map(
+                (MapFunction<IN, RowData>) converter::convert,
+                org.apache.flink.api.common.typeinfo.TypeInformation.of(RowData.class)
+        );
+
+        // Process with the builder
+        DataStream<RowData> processed = builder.addPreWriteTopology(rowDataInput);
+
+        // Convert back to original type.
+        @SuppressWarnings("unchecked")
+        DataStream<IN> result = (DataStream<IN>) processed;
+        return result;
+    }
+
+    /** Interface for converting a generic type T to RowData. */
+    public interface RowDataConverter<T> extends Serializable {
+        RowData convert(T element) throws Exception;
     }
 
     @Internal
@@ -78,6 +122,44 @@ class FlinkSink implements Sink<RowData>, SupportsPreWriteTopology<RowData> {
         W createWriter();
 
         DataStream<RowData> addPreWriteTopology(DataStream<RowData> input);
+    }
+
+    /** A SinkWriter that converts the input type to RowData before writing. */
+    private static class ConvertingSinkWriter<T> implements SinkWriter<T> {
+        private final SinkWriter<RowData> rowDataWriter;
+        private final RowDataConverter<T> converter;
+
+        public ConvertingSinkWriter(
+                SinkWriter<RowData> rowDataWriter, RowDataConverter<T> converter) {
+            this.rowDataWriter = rowDataWriter;
+            this.converter = converter;
+        }
+
+        @Override
+        public void write(T element, Context context) throws IOException {
+            RowData rowData;
+            try {
+                if (!(element instanceof RowData)) {
+                    rowData = converter.convert(element);
+
+                } else {
+                    rowData = (RowData) element;
+                }
+                rowDataWriter.write(rowData, context);
+            } catch (Exception e) {
+                throw new IOException("Error converting element to RowData", e);
+            }
+        }
+
+        @Override
+        public void flush(boolean endOfInput) throws IOException, InterruptedException {
+            rowDataWriter.flush(endOfInput);
+        }
+
+        @Override
+        public void close() throws Exception {
+            rowDataWriter.close();
+        }
     }
 
     @Internal
