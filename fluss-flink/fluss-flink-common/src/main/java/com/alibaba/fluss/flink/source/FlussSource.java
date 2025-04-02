@@ -63,6 +63,7 @@ public class FlussSource<OUT> extends FlinkSource<OUT> implements ResultTypeQuer
 
     private final FlussDeserializationSchema<OUT> deserializationSchema;
     private final RowType sourceOutputType;
+    private final boolean streaming;
 
     public FlussSource(
             Configuration flussConf,
@@ -88,6 +89,7 @@ public class FlussSource<OUT> extends FlinkSource<OUT> implements ResultTypeQuer
                 streaming);
         this.deserializationSchema = deserializationSchema;
         this.sourceOutputType = sourceOutputType;
+        this.streaming = streaming;
     }
 
     @Override
@@ -109,5 +111,9 @@ public class FlussSource<OUT> extends FlinkSource<OUT> implements ResultTypeQuer
     @Override
     public TypeInformation<OUT> getProducedType() {
         return deserializationSchema.getProducedType(sourceOutputType);
+    }
+
+    public boolean isStreaming() {
+        return this.streaming;
     }
 }

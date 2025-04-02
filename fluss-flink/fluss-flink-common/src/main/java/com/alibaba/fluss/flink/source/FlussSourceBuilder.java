@@ -29,8 +29,9 @@ import com.alibaba.fluss.types.RowType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Objects;
 import java.util.concurrent.ExecutionException;
+
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * Builder class for creating {@link FlussSource} instances.
@@ -104,8 +105,8 @@ public class FlussSourceBuilder<IN> {
         return this;
     }
 
-    public FlussSourceBuilder<IN> setIsBatch(boolean isBatch) {
-        if (isBatch) {
+    public FlussSourceBuilder<IN> setIsStreaming(boolean isStreaming) {
+        if (!isStreaming) {
             this.streaming = false;
         }
         return this;
@@ -122,27 +123,21 @@ public class FlussSourceBuilder<IN> {
     }
 
     public FlussSource<IN> build() {
-
-        Objects.requireNonNull(bootstrapServers, "bootstrapServers must not be set");
-        Objects.requireNonNull(deserializationSchema, "DeserializationSchema must be set");
-        //            Objects.requireNonNull(rowType, "RowType cannot be null");
-
-        if (database == null || database.isEmpty()) {
-            throw new IllegalArgumentException("Database must be set and not empty");
+        checkNotNull(bootstrapServers, "BootstrapServers is required but not provided.");
+        checkNotNull(database, "Database is required but not provided.");
+        if (database.isEmpty()) {
+            throw new IllegalArgumentException("Database must not be empty.");
         }
-
-        if (tableName == null || tableName.isEmpty()) {
-            throw new IllegalArgumentException("TableName must be set and not empty");
+        checkNotNull(tableName, "TableName is required but not provided.");
+        if (tableName.isEmpty()) {
+            throw new IllegalArgumentException("TableName must not be empty.");
         }
+        checkNotNull(deserializationSchema, "Deserialization schema is required but not provided.");
 
-        if (scanPartitionDiscoveryIntervalMs == null) {
-            throw new IllegalArgumentException(
-                    "`scanPartitionDiscoveryIntervalMs` must be set and not empty");
-        }
-
-        if (offsetsInitializer == null) {
-            throw new IllegalArgumentException("`offsetsInitializer` be set and not empty");
-        }
+        checkNotNull(
+                scanPartitionDiscoveryIntervalMs,
+                "ScanPartitionDiscoveryIntervalMs is required but not provided.");
+        checkNotNull(offsetsInitializer, "OffsetsInitializer is required but not provided.");
 
         if (this.flussConf == null) {
             this.flussConf = new Configuration();
