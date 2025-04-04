@@ -106,7 +106,6 @@ class FlinkSink<InputT> implements Sink<InputT>, SupportsPreWriteTopology<InputT
                         (MapFunction<InputT, RowData>) converter::convert,
                         org.apache.flink.api.common.typeinfo.TypeInformation.of(RowData.class));
 
-        // Process with the builder
         DataStream<RowData> processed = builder.addPreWriteTopology(rowDataInput);
 
         // Convert back to original type.
