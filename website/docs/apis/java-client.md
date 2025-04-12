@@ -29,7 +29,8 @@ sidebar_position: 1
 * Retrieving metadata (schemas, snapshots, server information)
 
 `Fluss Table` client allows you to interact with Fluss tables for reading and writing data. 
-## Installation
+## Dependency
+In order to use the client, you need to add the following dependency to your `pom.xml` file.
 
 ```shell
 <!-- https://mvnrepository.com/artifact/com.alibaba.fluss/fluss-client -->
