@@ -21,16 +21,26 @@ sidebar_position: 1
 
 # Fluss  Java Client
 ## Overview
-`Fluss Admin` is a thread-safe client that supports asynchronous operations for managing and inspecting Fluss resources. It communicates with the Fluss cluster via RPC calls and provides methods for:
-
+`Fluss Admin` is a thread-safe client that supports asynchronous operations for managing and inspecting Fluss resources. It communicates with the Fluss cluster and provides methods for:
 
 * Managing databases (create, drop, list)
 * Managing tables (create, drop, list)
 * Managing partitions (create, drop, list)
 * Retrieving metadata (schemas, snapshots, server information)
 
-## Initialization
+## Installation
 
+```shell
+<!-- https://mvnrepository.com/artifact/com.alibaba.fluss/fluss-client -->
+<dependency>
+    <groupId>com.alibaba.fluss</groupId>
+    <artifactId>fluss-client</artifactId>
+    <version>0.6.0</version>
+</dependency>
+```
+
+## Initialization
+Create a new `Admin` instance:
 ```java
 Configuration conf = new Configuration(); 
 conf.setString("bootstrap.servers", "localhost:9123");
@@ -66,7 +76,7 @@ admin.listDatabases()
     });
 ```
 
-## Database Operations
+## Creating Databases and Tables
 ### Creating a Database
 ```java
 
@@ -83,31 +93,6 @@ admin.createDatabase("test_db", descriptor, true)
         System.err.println("Failed to create database: " + ex.getMessage());
         return null;
     });
-```
-
-#### Example Output
-```shell
-Database created successfully
-{"version":1,"comment":"This is a test database","custom_properties":{"owner":"data-team"}}
-```
-### List Databases
-```java
-List<String> databases = admin.listDatabases().get();
-```
-
-###  Drop a Database
-```java
-admin.dropDatabase("test_db", true, true).get();
-```
-
-### Database Info
-```java
-DatabaseInfo dbInfo = admin.getDatabaseInfo("test_db").get();
-```
-
-### Database Exists
-```java
-admin.databaseExists("test_db").get()
 ```
 
 ## Managing Tables
@@ -130,78 +115,13 @@ TableDescriptor tableDescriptor = TableDescriptor.builder()
 
 TablePath tablePath = TablePath.of("fluss", "test");
 admin.createTable(tablePath, tableDescriptor, false).get();
-```
 
-### Table Info
-```java
 TableInfo tableInfo = admin.getTableInfo(tablePath).get();
 System.out.println(tableInfo);
 ```
 
-#### Example Output
-```shell
-TableInfo{tablePath=fluss.test, tableId=3, schemaId=1, schema=(id STRING NOT NULL,age INT,created_at TIMESTAMP(6),is_active BOOLEAN,CONSTRAINT PK_id PRIMARY KEY (id)), physicalPrimaryKeys=[id], bucketKeys=[id], partitionKeys=[], numBuckets=1, properties={table.replication.factor=1}, customProperties={}, comment='null', createdTime=1744267377500, modifiedTime=1744267377500}
-```
-### List Tables in a Database
-```java
-List<String> tables = admin.listTables("test_db").get();
-```
-
-### Table Schema
-```java
-SchemaInfo schemaInfo = admin.getTableSchema(tablePath).get();
-```
-
-### Drop a Table
-```java
-admin.dropTable(TablePath.of("test_db", "test_table"), true).get();
-```
-
-### Table Exists
-```java
-admin.tableExists(tablePath).get();
-```
-
-## Managing Partitions
-### Create Partition
-```java
-admin.createPartition(tablePath, new PartitionSpec(Collections.singletonMap("age", "10")).get();
-```
-
-### List Partitions
-```java
-List<PartitionInfo> partitions = admin.listPartitionInfos(TablePath.of("fluss", "test_table")).get();
-partitions.forEach(System.out::println);
-```
-
-### Drop Partition
-```java
-admin.dropPartition(tablePath, new PartitionSpec(Collections.singletonMap("age", "10")).get();
-```
-
-## Retrieving Metadata
-### Get Latest KV Snapshots
-```java
-KvSnapshots snapshots = admin.getLatestKvSnapshots(tablePath).get();
-System.out.println(snapshots.getSnapshotId(1));
-System.out.println(snapshots.getBucketIds());
-System.out.println(snapshots.getLogOffset(1));
-System.out.println(snapshots.getTableId());
-System.out.println(snapshots.getPartitionId());
-```
-
-### Get KV Snapshot Metadata
-```java
-KvSnapshotMetadata snapshotMetadata = admin.getKvSnapshotMetadata(tableBucket, snapshotId.getAsLong()).get();
-```
-
-### Get Server Nodes
-```java
-List<ServerNode> serverNodes = admin.getServerNodes().get();
-```
-
-
-## Writers
+## Table API
+### Writers
 In order to write data to Fluss tables, first you need to create a Table instance.
 ```java
 TablePath tablePath = TablePath.of("fluss", "users");
@@ -241,21 +161,25 @@ List<GenericRow> rows = users.stream().map(user -> {
 }).collect(Collectors.toList());
         
 System.out.println("Upserting rows to the table");
+UpsertWriter writer = table.newUpsert().createWriter();
+
 rows.forEach(row -> {     
     try {
-        table.newUpsert().createWriter().upsert(row).get();
+        writer.upsert(row);
     } catch (Exception e) {
         e.printStackTrace();
     }
 });
+
+writer.flush();
 ```
 
 For a Log table you can use the `Append` API to write data.
 ```java
-table.newAppend().createWriter().append(row).get();
+table.newAppend().createWriter().append(row);
 ```
 
-## Scanner
+### Scanner
 In order to read data from Fluss tables, first you need to create a Scanner instance. Then users can subscribe to the table buckets and 
 start polling for records.
 ```java
@@ -285,7 +209,7 @@ while (true) {
 }
 ```
 
-## Lookup
+### Lookup
 You can also use the Fluss API to perform lookups on a table. This is useful for querying specific records based on their primary key.
 ```java
 LookupResult lookup = table.newLookup().createLookuper().lookup(rowKey).get();
