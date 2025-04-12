@@ -21,13 +21,14 @@ sidebar_position: 1
 
 # Fluss  Java Client
 ## Overview
-`Fluss Admin` is a thread-safe client that supports asynchronous operations for managing and inspecting Fluss resources. It communicates with the Fluss cluster and provides methods for:
+`Fluss Admin` client that supports asynchronous operations for managing and inspecting Fluss resources. It communicates with the Fluss cluster and provides methods for:
 
 * Managing databases (create, drop, list)
 * Managing tables (create, drop, list)
 * Managing partitions (create, drop, list)
 * Retrieving metadata (schemas, snapshots, server information)
 
+`Fluss Table` client allows you to interact with Fluss tables for reading and writing data. 
 ## Installation
 
 ```shell
@@ -87,7 +88,7 @@ DatabaseDescriptor descriptor = DatabaseDescriptor.builder()
     .build();
 
 // Create database (true means ignore if exists)
-admin.createDatabase("test_db", descriptor, true)
+admin.createDatabase("test_db", descriptor, true) // non-blocking call
     .thenAccept(unused -> System.out.println("Database created successfully"))
     .exceptionally(ex -> {
         System.err.println("Failed to create database: " + ex.getMessage());
@@ -95,8 +96,8 @@ admin.createDatabase("test_db", descriptor, true)
     });
 ```
 
-## Managing Tables
-### Create a Table
+
+### Creating a Table
 ```java
 Schema schema = Schema.newBuilder()
         .column("id", DataTypes.STRING())
@@ -114,9 +115,9 @@ TableDescriptor tableDescriptor = TableDescriptor.builder()
         .build();
 
 TablePath tablePath = TablePath.of("fluss", "test");
-admin.createTable(tablePath, tableDescriptor, false).get();
+admin.createTable(tablePath, tableDescriptor, false).get(); // blocking call
 
-TableInfo tableInfo = admin.getTableInfo(tablePath).get();
+TableInfo tableInfo = admin.getTableInfo(tablePath).get(); // blocking call
 System.out.println(tableInfo);
 ```
 
@@ -202,7 +203,8 @@ while (true) {
     for (TableBucket bucket : scanRecords.buckets()) {
         for (ScanRecord record : scanRecords.records(bucket)) {
             InternalRow row = record.getRow();
-            System.out.println(row.toString());
+            // Process the row
+            ...
         }
     }
     scanned += scanRecords.count();
