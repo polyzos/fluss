@@ -19,20 +19,20 @@ sidebar_position: 1
  limitations under the License.
 -->
 
-# Fluss  Java Client
+# Fluss Java Client
 ## Overview
-`Fluss Admin` client that supports asynchronous operations for managing and inspecting Fluss resources. It communicates with the Fluss cluster and provides methods for:
+Fluss `Admin` API that supports asynchronous operations for managing and inspecting Fluss resources. It communicates with the Fluss cluster and provides methods for:
 
 * Managing databases (create, drop, list)
 * Managing tables (create, drop, list)
 * Managing partitions (create, drop, list)
 * Retrieving metadata (schemas, snapshots, server information)
 
-`Fluss Table` client allows you to interact with Fluss tables for reading and writing data. 
+Fluss `Table` API allows you to interact with Fluss tables for reading and writing data.
 ## Dependency
 In order to use the client, you need to add the following dependency to your `pom.xml` file.
 
-```shell
+```xml
 <!-- https://mvnrepository.com/artifact/com.alibaba.fluss/fluss-client -->
 <dependency>
     <groupId>com.alibaba.fluss</groupId>
@@ -42,16 +42,30 @@ In order to use the client, you need to add the following dependency to your `po
 ```
 
 ## Initialization
+
+`Connection` is the main entry point for the Fluss Java client. It is used to create `Admin` and `Table` instances.
+The `Connection` object is created using the `ConnectionFactory` class, which takes a `Configuration` object as an argument.
+The `Configuration` object contains the necessary configuration parameters for connecting to the Fluss cluster, such as the bootstrap servers.
+
+The `Connection` object is thread-safe and can be shared across multiple threads. It is recommended to create a
+single `Connection` instance per application and use it to create multiple `Admin` and `Table` instances.
+`Table` and `Admin` instances, on the other hand, are not thread-safe and should be created for each thread that needs to access them.
+ Caching or pooling of `Table` and `Admin` is not recommended.
+
 Create a new `Admin` instance:
 ```java
+// creating Connection object to connect with Fluss cluster
 Configuration conf = new Configuration(); 
 conf.setString("bootstrap.servers", "localhost:9123");
-
-
 Connection connection = ConnectionFactory.createConnection(conf);
-Admin admin = connection.getAdmin();
 
+// obtain Admin instance from the Connection
+Admin admin = connection.getAdmin();
 admin.listDatabases().get().forEach(System.out::println);
+
+// obtain Table instance from the Connection
+Table table = connection.getTable(TablePath.of("my_db", "my_table");
+System.out.println(table.getTableInfo());
 ```
 
 ## Working Operations
@@ -89,7 +103,7 @@ DatabaseDescriptor descriptor = DatabaseDescriptor.builder()
     .build();
 
 // Create database (true means ignore if exists)
-admin.createDatabase("test_db", descriptor, true) // non-blocking call
+admin.createDatabase("my_db", descriptor, true) // non-blocking call
     .thenAccept(unused -> System.out.println("Database created successfully"))
     .exceptionally(ex -> {
         System.err.println("Failed to create database: " + ex.getMessage());
@@ -115,7 +129,7 @@ TableDescriptor tableDescriptor = TableDescriptor.builder()
 //        .partitionedBy("")     // Partition by the partition key
         .build();
 
-TablePath tablePath = TablePath.of("fluss", "test");
+TablePath tablePath = TablePath.of("my_db", "user_table");
 admin.createTable(tablePath, tableDescriptor, false).get(); // blocking call
 
 TableInfo tableInfo = admin.getTableInfo(tablePath).get(); // blocking call
@@ -126,12 +140,12 @@ System.out.println(tableInfo);
 ### Writers
 In order to write data to Fluss tables, first you need to create a Table instance.
 ```java
-TablePath tablePath = TablePath.of("fluss", "users");
+TablePath tablePath = TablePath.of("my_db", "user_table");
 Table table = connection.getTable(tablePath);
 ```
 
-In Fluss we have both Primary Key tables and Log Tables, so the client provides different functionality depending on the table type.
-You can use an `UpsertWriter` to write data to a Primary Key table, and an `Append` to write data to a Log Table.
+In Fluss we have both Primary Key Tables and Log Tables, so the client provides different functionality depending on the table type.
+You can use an `UpsertWriter` to write data to a Primary Key table, and an `AppendWriter` to write data to a Log Table.
 ````java
 table.newUpsert().createWriter();
 table.newAppend().createWriter();
@@ -165,18 +179,14 @@ List<GenericRow> rows = users.stream().map(user -> {
 System.out.println("Upserting rows to the table");
 UpsertWriter writer = table.newUpsert().createWriter();
 
-rows.forEach(row -> {     
-    try {
-        writer.upsert(row);
-    } catch (Exception e) {
-        e.printStackTrace();
-    }
-});
+// upsert() is a non-blocking call that sends data to Fluss server with batching and timeout
+rows.forEach(writer::upsert);
 
+// call flush() to blocking the thread until all data is written successfully
 writer.flush();
 ```
 
-For a Log table you can use the `Append` API to write data.
+For a Log table you can use the `AppendWriter` API to write data.
 ```java
 table.newAppend().createWriter().append(row);
 ```
