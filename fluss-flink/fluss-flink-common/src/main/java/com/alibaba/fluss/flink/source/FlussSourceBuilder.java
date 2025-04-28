@@ -52,20 +52,17 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  *     .build();
  * }</pre>
  *
- * @param <IN> The type of records produced by the source being built
+ * @param <OUT> The type of records produced by the source being built
  */
-public class FlussSourceBuilder<IN> {
+public class FlussSourceBuilder<OUT> {
     private static final Logger LOG = LoggerFactory.getLogger(FlussSourceBuilder.class);
 
     private Configuration flussConf;
-    private TablePath tablePath;
-    private boolean hasPrimaryKey;
-    private boolean isPartitioned;
-    private RowType sourceOutputType;
+
     private int[] projectedFields;
     private Long scanPartitionDiscoveryIntervalMs;
     private OffsetsInitializer offsetsInitializer;
-    private FlussDeserializationSchema<IN> deserializationSchema;
+    private FlussDeserializationSchema<OUT> deserializationSchema;
 
     private String bootstrapServers;
 
@@ -73,56 +70,56 @@ public class FlussSourceBuilder<IN> {
     private String tableName;
     private boolean streaming = true;
 
-    public FlussSourceBuilder<IN> setBootstrapServers(String bootstrapServers) {
+    public FlussSourceBuilder<OUT> setBootstrapServers(String bootstrapServers) {
         this.bootstrapServers = bootstrapServers;
         return this;
     }
 
-    public FlussSourceBuilder<IN> setDatabase(String database) {
+    public FlussSourceBuilder<OUT> setDatabase(String database) {
         this.database = database;
         return this;
     }
 
-    public FlussSourceBuilder<IN> setTable(String table) {
+    public FlussSourceBuilder<OUT> setTable(String table) {
         this.tableName = table;
         return this;
     }
 
-    public FlussSourceBuilder<IN> setScanPartitionDiscoveryIntervalMs(
+    public FlussSourceBuilder<OUT> setScanPartitionDiscoveryIntervalMs(
             long scanPartitionDiscoveryIntervalMs) {
         this.scanPartitionDiscoveryIntervalMs = scanPartitionDiscoveryIntervalMs;
         return this;
     }
 
-    public FlussSourceBuilder<IN> setStartingOffsets(OffsetsInitializer offsetsInitializer) {
+    public FlussSourceBuilder<OUT> setStartingOffsets(OffsetsInitializer offsetsInitializer) {
         this.offsetsInitializer = offsetsInitializer;
         return this;
     }
 
-    public FlussSourceBuilder<IN> setDeserializationSchema(
-            FlussDeserializationSchema<IN> deserializationSchema) {
+    public FlussSourceBuilder<OUT> setDeserializationSchema(
+            FlussDeserializationSchema<OUT> deserializationSchema) {
         this.deserializationSchema = deserializationSchema;
         return this;
     }
 
-    public FlussSourceBuilder<IN> setIsStreaming(boolean isStreaming) {
+    public FlussSourceBuilder<OUT> setIsStreaming(boolean isStreaming) {
         if (!isStreaming) {
             this.streaming = false;
         }
         return this;
     }
 
-    public FlussSourceBuilder<IN> setProjectedFields(int[] projectedFields) {
+    public FlussSourceBuilder<OUT> setProjectedFields(int[] projectedFields) {
         this.projectedFields = projectedFields;
         return this;
     }
 
-    public FlussSourceBuilder<IN> setFlussConfig(Configuration flussConf) {
+    public FlussSourceBuilder<OUT> setFlussConfig(Configuration flussConf) {
         this.flussConf = flussConf;
         return this;
     }
 
-    public FlussSource<IN> build() {
+    public FlussSource<OUT> build() {
         checkNotNull(bootstrapServers, "BootstrapServers is required but not provided.");
         checkNotNull(database, "Database is required but not provided.");
         if (database.isEmpty()) {
@@ -143,7 +140,7 @@ public class FlussSourceBuilder<IN> {
             this.flussConf = new Configuration();
         }
 
-        this.tablePath = new TablePath(this.database, this.tableName);
+        TablePath tablePath = new TablePath(this.database, this.tableName);
         this.flussConf.setString("bootstrap.servers", bootstrapServers);
 
         TableInfo tableInfo;
@@ -165,17 +162,17 @@ public class FlussSourceBuilder<IN> {
         flussConf.addAll(tableInfo.getCustomProperties());
         flussConf.addAll(tableInfo.getProperties());
 
-        isPartitioned = !tableInfo.getPartitionKeys().isEmpty();
-        hasPrimaryKey = !tableInfo.getPrimaryKeys().isEmpty();
+        boolean isPartitioned = !tableInfo.getPartitionKeys().isEmpty();
+        boolean hasPrimaryKey = !tableInfo.getPrimaryKeys().isEmpty();
 
-        sourceOutputType =
+        RowType sourceOutputType =
                 projectedFields != null
                         ? tableInfo.getRowType().project(projectedFields)
                         : tableInfo.getRowType();
 
         LOG.info("Creating Fluss Source with Configuration: {}", flussConf);
 
-        return new FlussSource<IN>(
+        return new FlussSource<OUT>(
                 flussConf,
                 tablePath,
                 hasPrimaryKey,

@@ -18,8 +18,8 @@ package com.alibaba.fluss.flink.source;
 
 import com.alibaba.fluss.client.table.Table;
 import com.alibaba.fluss.config.ConfigOptions;
+import com.alibaba.fluss.flink.common.Order;
 import com.alibaba.fluss.flink.row.RowConverters;
-import com.alibaba.fluss.flink.source.deserializer.Order;
 import com.alibaba.fluss.flink.source.deserializer.OrderPartial;
 import com.alibaba.fluss.flink.source.deserializer.OrderPartialDeserializationSchema;
 import com.alibaba.fluss.flink.source.deserializer.RowDataDeserializationSchema;

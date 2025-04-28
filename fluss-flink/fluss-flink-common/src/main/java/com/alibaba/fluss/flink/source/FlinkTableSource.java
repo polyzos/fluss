@@ -262,8 +262,7 @@ public class FlinkTableSource
                         projectedFields,
                         offsetsInitializer,
                         scanPartitionDiscoveryIntervalMs,
-                        new RowDataDeserializationSchema(),
-                        streaming);
+                        new RowDataDeserializationSchema());
 
         if (!streaming) {
             // return a bounded source provide to make planner happy,

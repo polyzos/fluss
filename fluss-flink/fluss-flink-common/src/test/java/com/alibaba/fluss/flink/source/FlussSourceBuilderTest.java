@@ -255,25 +255,6 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
     }
 
     @Test
-    public void testSetBatchMode() {
-        // Given
-        FlussSource<TestRecord> source =
-                FlussSource.<TestRecord>builder()
-                        .setBootstrapServers(bootstrapServers)
-                        .setDatabase(DEFAULT_DB)
-                        .setTable(DEFAULT_TABLE_PATH.getTableName())
-                        .setStartingOffsets(OffsetsInitializer.earliest())
-                        .setScanPartitionDiscoveryIntervalMs(1000L)
-                        .setDeserializationSchema(new TestDeserializationSchema())
-                        .setIsStreaming(false)
-                        .build();
-
-        // Then
-        assertThat(source).isNotNull();
-        assertThat(source.isStreaming()).isFalse();
-    }
-
-    @Test
     public void testProjectedFields() {
         // Given
         int[] projectedFields = new int[] {0, 1}; // Only include orderId and amount fields

@@ -19,15 +19,8 @@ package com.alibaba.fluss.flink.source;
 import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
 import com.alibaba.fluss.flink.source.enumerator.initializer.OffsetsInitializer;
-import com.alibaba.fluss.flink.source.split.SourceSplitBase;
-import com.alibaba.fluss.flink.source.state.SourceEnumeratorState;
 import com.alibaba.fluss.metadata.TablePath;
 import com.alibaba.fluss.types.RowType;
-
-import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.connector.source.SplitEnumerator;
-import org.apache.flink.api.connector.source.SplitEnumeratorContext;
-import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 
 import javax.annotation.Nullable;
 
@@ -58,12 +51,11 @@ import javax.annotation.Nullable;
  *
  * @param <OUT> The type of records produced by this source
  */
-public class FlussSource<OUT> extends FlinkSource<OUT> implements ResultTypeQueryable {
+public class FlussSource<OUT> extends FlinkSource<OUT> {
     private static final long serialVersionUID = 1L;
 
     private final FlussDeserializationSchema<OUT> deserializationSchema;
     private final RowType sourceOutputType;
-    private final boolean streaming;
 
     public FlussSource(
             Configuration flussConf,
@@ -85,35 +77,12 @@ public class FlussSource<OUT> extends FlinkSource<OUT> implements ResultTypeQuer
                 projectedFields,
                 offsetsInitializer,
                 scanPartitionDiscoveryIntervalMs,
-                deserializationSchema,
-                streaming);
+                deserializationSchema);
         this.deserializationSchema = deserializationSchema;
         this.sourceOutputType = sourceOutputType;
-        this.streaming = streaming;
-    }
-
-    @Override
-    public SplitEnumerator createEnumerator(SplitEnumeratorContext splitEnumeratorContext) {
-        return super.createEnumerator(splitEnumeratorContext);
-    }
-
-    @Override
-    public SplitEnumerator<SourceSplitBase, SourceEnumeratorState> restoreEnumerator(
-            SplitEnumeratorContext splitEnumeratorContext,
-            SourceEnumeratorState sourceEnumeratorState) {
-        return super.restoreEnumerator(splitEnumeratorContext, sourceEnumeratorState);
     }
 
     public static <T> FlussSourceBuilder<T> builder() {
         return new FlussSourceBuilder<>();
-    }
-
-    @Override
-    public TypeInformation<OUT> getProducedType() {
-        return deserializationSchema.getProducedType(sourceOutputType);
-    }
-
-    public boolean isStreaming() {
-        return this.streaming;
     }
 }
