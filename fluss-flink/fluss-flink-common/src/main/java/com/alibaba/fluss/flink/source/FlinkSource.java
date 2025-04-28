@@ -59,7 +59,6 @@ public class FlinkSource<OUT>
     @Nullable private final int[] projectedFields;
     private final OffsetsInitializer offsetsInitializer;
     private final long scanPartitionDiscoveryIntervalMs;
-    private final boolean streaming;
     private final FlussDeserializationSchema<OUT> deserializationSchema;
 
     public FlinkSource(
@@ -71,8 +70,7 @@ public class FlinkSource<OUT>
             @Nullable int[] projectedFields,
             OffsetsInitializer offsetsInitializer,
             long scanPartitionDiscoveryIntervalMs,
-            FlussDeserializationSchema<OUT> deserializationSchema,
-            boolean streaming) {
+            FlussDeserializationSchema<OUT> deserializationSchema) {
         this.flussConf = flussConf;
         this.tablePath = tablePath;
         this.hasPrimaryKey = hasPrimaryKey;
@@ -82,12 +80,11 @@ public class FlinkSource<OUT>
         this.offsetsInitializer = offsetsInitializer;
         this.scanPartitionDiscoveryIntervalMs = scanPartitionDiscoveryIntervalMs;
         this.deserializationSchema = deserializationSchema;
-        this.streaming = streaming;
     }
 
     @Override
     public Boundedness getBoundedness() {
-        return streaming ? Boundedness.CONTINUOUS_UNBOUNDED : Boundedness.BOUNDED;
+        return Boundedness.CONTINUOUS_UNBOUNDED;
     }
 
     @Override
@@ -100,8 +97,7 @@ public class FlinkSource<OUT>
                 isPartitioned,
                 splitEnumeratorContext,
                 offsetsInitializer,
-                scanPartitionDiscoveryIntervalMs,
-                streaming);
+                scanPartitionDiscoveryIntervalMs);
     }
 
     @Override
@@ -118,7 +114,7 @@ public class FlinkSource<OUT>
                 sourceEnumeratorState.getAssignedPartitions(),
                 offsetsInitializer,
                 scanPartitionDiscoveryIntervalMs,
-                streaming);
+                true);
     }
 
     @Override

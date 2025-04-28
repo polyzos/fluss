@@ -78,6 +78,11 @@ public class FlussSource<OUT> extends FlinkSource<OUT> {
                 streaming);
     }
 
+    /**
+     * Get a FlussSourceBuilder to build a {@link FlussSource}.
+     *
+     * @return a Fluss source builder.
+     */
     public static <T> FlussSourceBuilder<T> builder() {
         return new FlussSourceBuilder<>();
     }

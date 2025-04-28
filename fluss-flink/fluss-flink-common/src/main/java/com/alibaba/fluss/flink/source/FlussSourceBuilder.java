@@ -131,10 +131,17 @@ public class FlussSourceBuilder<OUT> {
         }
         checkNotNull(deserializationSchema, "Deserialization schema is required but not provided.");
 
-        checkNotNull(
-                scanPartitionDiscoveryIntervalMs,
-                "ScanPartitionDiscoveryIntervalMs is required but not provided.");
-        checkNotNull(offsetsInitializer, "OffsetsInitializer is required but not provided.");
+        // if null use the default value, like:
+        // FlinkConnectorOptions.SCAN_PARTITION_DISCOVERY_INTERVAL.defaultValue();
+        if (offsetsInitializer == null) {
+            offsetsInitializer = OffsetsInitializer.initial();
+        }
+
+        // if null use the default value, like:
+        // FlinkConnectorOptions.SCAN_PARTITION_DISCOVERY_INTERVAL.defaultValue()
+        if (scanPartitionDiscoveryIntervalMs == null) {
+            scanPartitionDiscoveryIntervalMs = 10000L; // 10 seconds
+        }
 
         if (this.flussConf == null) {
             this.flussConf = new Configuration();
