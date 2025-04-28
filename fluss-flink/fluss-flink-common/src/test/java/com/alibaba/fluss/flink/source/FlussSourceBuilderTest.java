@@ -181,39 +181,33 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
     @Test
     public void testMissingScanPartitionDiscoveryInterval() {
         // Given
-        Executable executable =
-                () ->
-                        FlussSource.<TestRecord>builder()
-                                .setBootstrapServers(bootstrapServers)
-                                .setDatabase(DEFAULT_DB)
-                                .setTable(DEFAULT_TABLE_PATH.getTableName())
-                                .setStartingOffsets(OffsetsInitializer.earliest())
-                                .setDeserializationSchema(new TestDeserializationSchema())
-                                .build();
+        FlussSource<TestRecord> source =
+                FlussSource.<TestRecord>builder()
+                        .setBootstrapServers(bootstrapServers)
+                        .setDatabase(DEFAULT_DB)
+                        .setTable(DEFAULT_TABLE_PATH.getTableName())
+                        .setStartingOffsets(OffsetsInitializer.earliest())
+                        .setDeserializationSchema(new TestDeserializationSchema())
+                        .build();
 
         // Then
-        assertThatThrownBy(executable::execute)
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("ScanPartitionDiscoveryIntervalMs is required but not provided.");
+        assertThat(source.scanPartitionDiscoveryIntervalMs).isEqualTo(10000L);
     }
 
     @Test
     public void testMissingOffsetsInitializer() {
         // Given
-        Executable executable =
-                () ->
-                        FlussSource.<TestRecord>builder()
-                                .setBootstrapServers(bootstrapServers)
-                                .setDatabase(DEFAULT_DB)
-                                .setTable(DEFAULT_TABLE_PATH.getTableName())
-                                .setScanPartitionDiscoveryIntervalMs(1000L)
-                                .setDeserializationSchema(new TestDeserializationSchema())
-                                .build();
+        FlussSource<TestRecord> source =
+                FlussSource.<TestRecord>builder()
+                        .setBootstrapServers(bootstrapServers)
+                        .setDatabase(DEFAULT_DB)
+                        .setTable(DEFAULT_TABLE_PATH.getTableName())
+                        .setScanPartitionDiscoveryIntervalMs(1000L)
+                        .setDeserializationSchema(new TestDeserializationSchema())
+                        .build();
 
-        // Then
-        assertThatThrownBy(executable::execute)
-                .isInstanceOf(NullPointerException.class)
-                .hasMessage("OffsetsInitializer is required but not provided.");
+        assertThat(source.getOffsetsInitializer().getClass())
+                .isEqualTo(OffsetsInitializer.initial().getClass());
     }
 
     @Test
@@ -226,7 +220,7 @@ public class FlussSourceBuilderTest extends FlinkTestBase {
                                 .setDatabase(DEFAULT_DB)
                                 .setTable(DEFAULT_TABLE_PATH.getTableName())
                                 .setStartingOffsets(OffsetsInitializer.earliest())
-                                .setScanPartitionDiscoveryIntervalMs(1000L)
+                                .setScanPartitionDiscoveryIntervalMs(10000L)
                                 .build();
 
         // Then

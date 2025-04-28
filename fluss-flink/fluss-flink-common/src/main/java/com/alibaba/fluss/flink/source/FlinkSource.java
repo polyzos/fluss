@@ -57,8 +57,8 @@ public class FlinkSource<OUT>
     private final boolean isPartitioned;
     private final RowType sourceOutputType;
     @Nullable private final int[] projectedFields;
-    private final OffsetsInitializer offsetsInitializer;
-    private final long scanPartitionDiscoveryIntervalMs;
+    protected final OffsetsInitializer offsetsInitializer;
+    protected final long scanPartitionDiscoveryIntervalMs;
     private final boolean streaming;
     private final FlussDeserializationSchema<OUT> deserializationSchema;
 

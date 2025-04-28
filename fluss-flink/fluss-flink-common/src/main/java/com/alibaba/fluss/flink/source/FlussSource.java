@@ -16,6 +16,7 @@
 
 package com.alibaba.fluss.flink.source;
 
+import com.alibaba.fluss.annotation.VisibleForTesting;
 import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
 import com.alibaba.fluss.flink.source.enumerator.initializer.OffsetsInitializer;
@@ -85,5 +86,15 @@ public class FlussSource<OUT> extends FlinkSource<OUT> {
      */
     public static <T> FlussSourceBuilder<T> builder() {
         return new FlussSourceBuilder<>();
+    }
+
+    @VisibleForTesting
+    public OffsetsInitializer getOffsetsInitializer() {
+        return offsetsInitializer;
+    }
+
+    @VisibleForTesting
+    public long getScanPartitionDiscoveryIntervalMs() {
+        return scanPartitionDiscoveryIntervalMs;
     }
 }
