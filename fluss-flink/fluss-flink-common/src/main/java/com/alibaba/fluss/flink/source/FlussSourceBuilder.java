@@ -19,6 +19,7 @@ package com.alibaba.fluss.flink.source;
 import com.alibaba.fluss.client.Connection;
 import com.alibaba.fluss.client.ConnectionFactory;
 import com.alibaba.fluss.client.admin.Admin;
+import com.alibaba.fluss.config.ConfigOptions;
 import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
 import com.alibaba.fluss.flink.source.enumerator.initializer.OffsetsInitializer;
@@ -148,7 +149,7 @@ public class FlussSourceBuilder<OUT> {
         }
 
         TablePath tablePath = new TablePath(this.database, this.tableName);
-        this.flussConf.setString("bootstrap.servers", bootstrapServers);
+        this.flussConf.setString(ConfigOptions.BOOTSTRAP_SERVERS.key(), bootstrapServers);
 
         TableInfo tableInfo;
         try (Connection connection = ConnectionFactory.createConnection(flussConf);

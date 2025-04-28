@@ -54,6 +54,7 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
+import static com.alibaba.fluss.flink.source.testutils.MockDataUtils.binaryRowToGenericRow;
 import static com.alibaba.fluss.testutils.DataTestUtils.row;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
@@ -99,7 +100,8 @@ public class FlussSourceITCase extends FlinkTestBase {
         ordersLogTablePath = new TablePath(DEFAULT_DB, logTableName);
 
         initTables();
-        bootstrapServers = conn.getConfiguration().get(ConfigOptions.BOOTSTRAP_SERVERS).get(0);
+        //        bootstrapServers =
+        // conn.getConfiguration().get(ConfigOptions.BOOTSTRAP_SERVERS).get(0);
     }
 
     @AfterEach
@@ -232,23 +234,12 @@ public class FlussSourceITCase extends FlinkTestBase {
                         createRowData(700L, 22L, 601, "addr2", RowKind.UPDATE_BEFORE),
                         createRowData(700L, 22L, 801, "addr2", RowKind.UPDATE_AFTER));
 
-        List<RowData> collectedRows = new ArrayList<>();
-        try (CloseableIterator<RowData> iterator = stream.collectAsync()) {
-            env.executeAsync("Test Fluss RowData Source");
-            int count = 0;
-            while (iterator.hasNext() && count < expectedResult.size() - 1) {
-                RowData row = iterator.next();
-                RowData genericRow =
-                        MockDataUtils.binaryRowToGenericRow(row, table.getTableInfo().getRowType());
-                collectedRows.add(genericRow);
-                count++;
-            }
-            RowData genericRow =
-                    MockDataUtils.binaryRowToGenericRow(
-                            iterator.next(), table.getTableInfo().getRowType());
-            // at this point the iterator should have one more element
-            collectedRows.add(genericRow);
-        }
+        //        List<RowData> collectedRows = new ArrayList<>();
+        List<RowData> rawRows = stream.executeAndCollect(expectedResult.size());
+        List<RowData> collectedRows =
+                rawRows.stream()
+                        .map(row -> binaryRowToGenericRow(row, rowType))
+                        .collect(Collectors.toList());
 
         // Assert result size and elements match
         assertThat(expectedResult.size()).isEqualTo(collectedRows.size());
@@ -296,34 +287,20 @@ public class FlussSourceITCase extends FlinkTestBase {
                         createRowData(600L, 20L, 600, "addr1", RowKind.INSERT),
                         createRowData(700L, 22L, 601, "addr2", RowKind.INSERT));
 
-        List<RowData> collectedRows = new ArrayList<>();
-        try (CloseableIterator<RowData> iterator = stream.collectAsync()) {
-            env.executeAsync("Test Fluss Log RowData Source");
-            int count = 0;
-            while (iterator.hasNext() && count < expectedResult.size() - 1) {
-                RowData row = iterator.next();
-                RowData genericRow =
-                        MockDataUtils.binaryRowToGenericRow(row, table.getTableInfo().getRowType());
-                collectedRows.add(genericRow);
-                count++;
-            }
-            RowData genericRow =
-                    MockDataUtils.binaryRowToGenericRow(
-                            iterator.next(), table.getTableInfo().getRowType());
-            // at this point the iterator should have one more element
-            collectedRows.add(genericRow);
-        }
+        List<RowData> rawRows = stream.executeAndCollect(expectedResult.size());
+        List<RowData> collectedRows =
+                rawRows.stream()
+                        .map(row -> binaryRowToGenericRow(row, rowType))
+                        .collect(Collectors.toList());
 
         // Assert result size and elements match
         assertThat(expectedResult.size()).isEqualTo(collectedRows.size());
-        AssertionsForInterfaceTypes.assertThat(expectedResult).isEqualTo(collectedRows);
 
         AssertionsForInterfaceTypes.assertThat(expectedResult).hasSameElementsAs(collectedRows);
     }
 
     @Test
     public void testTableLogSourceWithProjectionPushdown() throws Exception {
-        //            FlinkTestBase.beforeAll();
         List<OrderPartial> expectedOutput =
                 Arrays.asList(
                         new OrderPartial(600, 600),
