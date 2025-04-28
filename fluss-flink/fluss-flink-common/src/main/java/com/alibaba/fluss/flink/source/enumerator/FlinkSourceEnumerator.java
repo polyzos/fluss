@@ -132,7 +132,8 @@ public class FlinkSourceEnumerator
             boolean isPartitioned,
             SplitEnumeratorContext<SourceSplitBase> context,
             OffsetsInitializer startingOffsetsInitializer,
-            long scanPartitionDiscoveryIntervalMs) {
+            long scanPartitionDiscoveryIntervalMs,
+            boolean streaming) {
         this(
                 tablePath,
                 flussConf,
@@ -143,7 +144,7 @@ public class FlinkSourceEnumerator
                 Collections.emptyMap(),
                 startingOffsetsInitializer,
                 scanPartitionDiscoveryIntervalMs,
-                true);
+                streaming);
     }
 
     public FlinkSourceEnumerator(

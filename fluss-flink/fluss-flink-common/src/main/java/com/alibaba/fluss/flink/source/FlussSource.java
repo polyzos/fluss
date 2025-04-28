@@ -54,9 +54,6 @@ import javax.annotation.Nullable;
 public class FlussSource<OUT> extends FlinkSource<OUT> {
     private static final long serialVersionUID = 1L;
 
-    private final FlussDeserializationSchema<OUT> deserializationSchema;
-    private final RowType sourceOutputType;
-
     public FlussSource(
             Configuration flussConf,
             TablePath tablePath,
@@ -77,9 +74,8 @@ public class FlussSource<OUT> extends FlinkSource<OUT> {
                 projectedFields,
                 offsetsInitializer,
                 scanPartitionDiscoveryIntervalMs,
-                deserializationSchema);
-        this.deserializationSchema = deserializationSchema;
-        this.sourceOutputType = sourceOutputType;
+                deserializationSchema,
+                streaming);
     }
 
     public static <T> FlussSourceBuilder<T> builder() {

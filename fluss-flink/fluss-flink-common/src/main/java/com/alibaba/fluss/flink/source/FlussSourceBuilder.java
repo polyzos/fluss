@@ -68,7 +68,7 @@ public class FlussSourceBuilder<OUT> {
 
     private String database;
     private String tableName;
-    private boolean streaming = true;
+    private boolean streaming = true; // currently only streaming is supported
 
     public FlussSourceBuilder<OUT> setBootstrapServers(String bootstrapServers) {
         this.bootstrapServers = bootstrapServers;
