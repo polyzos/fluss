@@ -17,7 +17,6 @@
 package com.alibaba.fluss.flink.source.testutils;
 
 import com.alibaba.fluss.flink.common.Order;
-import com.alibaba.fluss.flink.row.RowConverters;
 import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
 import com.alibaba.fluss.metadata.Schema;
 import com.alibaba.fluss.record.LogRecord;
@@ -78,7 +77,7 @@ public class MockDataUtils {
     public static RowData binaryRowToGenericRow(RowData binaryRow, RowType flussRowType) {
         // Convert Fluss RowType to Flink RowType
         org.apache.flink.table.types.logical.RowType flinkRowType =
-                RowConverters.flussRowTypeToFlinkRowType(flussRowType);
+                com.alibaba.fluss.flink.utils.FlinkConversions.toFlinkRowType(flussRowType);
 
         int fieldCount = binaryRow.getArity();
         GenericRowData genericRow = new GenericRowData(fieldCount);

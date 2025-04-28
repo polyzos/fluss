@@ -19,13 +19,13 @@ package com.alibaba.fluss.flink.source;
 import com.alibaba.fluss.client.table.Table;
 import com.alibaba.fluss.config.ConfigOptions;
 import com.alibaba.fluss.flink.common.Order;
-import com.alibaba.fluss.flink.row.RowConverters;
 import com.alibaba.fluss.flink.source.deserializer.OrderPartial;
 import com.alibaba.fluss.flink.source.deserializer.OrderPartialDeserializationSchema;
 import com.alibaba.fluss.flink.source.deserializer.RowDataDeserializationSchema;
 import com.alibaba.fluss.flink.source.enumerator.initializer.OffsetsInitializer;
 import com.alibaba.fluss.flink.source.testutils.FlinkTestBase;
 import com.alibaba.fluss.flink.source.testutils.MockDataUtils;
+import com.alibaba.fluss.flink.utils.PojoToRowConverter;
 import com.alibaba.fluss.metadata.Schema;
 import com.alibaba.fluss.metadata.TableDescriptor;
 import com.alibaba.fluss.metadata.TablePath;
@@ -43,7 +43,6 @@ import org.apache.flink.types.RowKind;
 import org.apache.flink.util.CloseableIterator;
 import org.assertj.core.api.AssertionsForClassTypes;
 import org.assertj.core.api.AssertionsForInterfaceTypes;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,48 +59,47 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 /** Integration tests for the {@link FlussSource} class with PK tables. */
 public class FlussSourceITCase extends FlinkTestBase {
+    private static StreamExecutionEnvironment env;
+
     private static final List<Order> orders = MockDataUtils.ORDERS;
 
     private static final Schema pkSchema = MockDataUtils.getOrdersSchemaPK();
     private static final Schema logSchema = MockDataUtils.getOrdersSchemaLog();
 
-    private static TableDescriptor logTableDescriptor;
-    private static TableDescriptor pkTableDescriptor;
+    private TablePath ordersLogTablePath;
+    private TablePath ordersPKTablePath;
 
-    private static String bootstrapServers;
+    private TableDescriptor logTableDescriptor;
+    private TableDescriptor pkTableDescriptor;
 
-    private static String pkTableName = "orders_test_pk";
-    private static String logTableName = "orders_test_log";
+    private String bootstrapServers;
 
-    private static TablePath ordersLogTablePath;
-    private static TablePath ordersPKTablePath;
+    private String pkTableName = "orders_test_pk";
+    private String logTableName = "orders_test_log";
 
     @BeforeEach
     public void setup() throws Exception {
         FlinkTestBase.beforeAll();
+
+        env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(4);
 
         bootstrapServers = conn.getConfiguration().get(ConfigOptions.BOOTSTRAP_SERVERS).get(0);
 
         pkTableDescriptor =
                 TableDescriptor.builder().schema(pkSchema).distributedBy(1, "orderId").build();
 
-        TablePath pkTablePath = TablePath.of(DEFAULT_DB, pkTableName);
+        ordersPKTablePath = new TablePath(DEFAULT_DB, pkTableName);
+        ordersLogTablePath = new TablePath(DEFAULT_DB, logTableName);
 
-        createTable(pkTablePath, pkTableDescriptor);
+        createTable(ordersPKTablePath, pkTableDescriptor);
 
         logTableDescriptor =
                 TableDescriptor.builder().schema(logSchema).distributedBy(1, "orderId").build();
 
-        TablePath logTablePath = TablePath.of(DEFAULT_DB, logTableName);
-
-        createTable(logTablePath, logTableDescriptor);
-
-        ordersPKTablePath = new TablePath(DEFAULT_DB, pkTableName);
-        ordersLogTablePath = new TablePath(DEFAULT_DB, logTableName);
+        createTable(ordersLogTablePath, logTableDescriptor);
 
         initTables();
-        //        bootstrapServers =
-        // conn.getConfiguration().get(ConfigOptions.BOOTSTRAP_SERVERS).get(0);
     }
 
     @AfterEach
@@ -110,14 +108,8 @@ public class FlussSourceITCase extends FlinkTestBase {
         admin.dropTable(ordersLogTablePath, false);
     }
 
-    @AfterAll
-    protected static void afterAll() throws Exception {
-        conn.close();
-    }
-
     @Test
     public void testTablePKSource() throws Exception {
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
 
         // Create a DataStream from the FlussSource
@@ -160,9 +152,6 @@ public class FlussSourceITCase extends FlinkTestBase {
                         new OrderPartial(900, 603),
                         new OrderPartial(1000, 604));
 
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setParallelism(1);
-
         // Create a DataStream from the FlussSource
         FlussSource<OrderPartial> flussSource =
                 FlussSource.<OrderPartial>builder()
@@ -196,9 +185,6 @@ public class FlussSourceITCase extends FlinkTestBase {
 
     @Test
     public void testRowDataPKTableSource() throws Exception {
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setParallelism(1);
-
         Table table = conn.getTable(ordersPKTablePath);
         RowType rowType = table.getTableInfo().getRowType();
 
@@ -248,11 +234,6 @@ public class FlussSourceITCase extends FlinkTestBase {
 
     @Test
     public void testRowDataLogTableSource() throws Exception {
-        //        FlinkTestBase.beforeAll();
-
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setParallelism(1);
-
         Table table = conn.getTable(ordersLogTablePath);
         RowType rowType = table.getTableInfo().getRowType();
 
@@ -309,9 +290,6 @@ public class FlussSourceITCase extends FlinkTestBase {
                         new OrderPartial(900, 603),
                         new OrderPartial(1000, 604));
 
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setParallelism(1);
-
         // Create a DataStream from the FlussSource
         FlussSource<OrderPartial> flussSource =
                 FlussSource.<OrderPartial>builder()
@@ -359,8 +337,13 @@ public class FlussSourceITCase extends FlinkTestBase {
     }
 
     private void initTables() {
+        Table table = conn.getTable(ordersPKTablePath);
+        RowType rowType = table.getTableInfo().getRowType();
+
+        PojoToRowConverter<Order> converter = new PojoToRowConverter<>(Order.class, rowType);
+
         List<GenericRow> rows =
-                orders.stream().map(RowConverters::pojoToGenericRow).collect(Collectors.toList());
+                orders.stream().map(converter::convert).collect(Collectors.toList());
 
         Table pkTable = conn.getTable(ordersPKTablePath);
         Table logTable = conn.getTable(ordersLogTablePath);
