@@ -18,9 +18,12 @@ package com.alibaba.fluss.flink.source.deserializer;
 
 import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.row.InternalRow;
+import com.alibaba.fluss.types.DataTypeRoot;
 import com.alibaba.fluss.types.RowType;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+
+import static com.alibaba.fluss.utils.Preconditions.checkArgument;
 
 /**
  * A deserialization schema for partially deserializing Order records to {@link OrderPartial}
@@ -29,7 +32,12 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 public class OrderPartialDeserializationSchema implements FlussDeserializationSchema<OrderPartial> {
 
     @Override
-    public void open(InitializationContext context) throws Exception {}
+    public void open(InitializationContext context) throws Exception {
+        RowType rowSchema = context.getRowSchema();
+        checkArgument(rowSchema.getFieldCount() == 2);
+        checkArgument(rowSchema.getFields().get(0).getType().getTypeRoot() == DataTypeRoot.BIGINT);
+        checkArgument(rowSchema.getFields().get(1).getType().getTypeRoot() == DataTypeRoot.INTEGER);
+    }
 
     @Override
     public OrderPartial deserialize(LogRecord record) throws Exception {

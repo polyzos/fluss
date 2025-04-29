@@ -32,6 +32,8 @@ import org.apache.flink.table.types.logical.LogicalType;
 import java.util.Arrays;
 import java.util.List;
 
+import static com.alibaba.fluss.flink.utils.FlinkConversions.toFlinkRowType;
+
 /**
  * Utility class for generating mock data and test infrastructure for Fluss-Flink integration tests.
  *
@@ -76,8 +78,7 @@ public class MockDataUtils {
      */
     public static RowData binaryRowToGenericRow(RowData binaryRow, RowType flussRowType) {
         // Convert Fluss RowType to Flink RowType
-        org.apache.flink.table.types.logical.RowType flinkRowType =
-                com.alibaba.fluss.flink.utils.FlinkConversions.toFlinkRowType(flussRowType);
+        org.apache.flink.table.types.logical.RowType flinkRowType = toFlinkRowType(flussRowType);
 
         int fieldCount = binaryRow.getArity();
         GenericRowData genericRow = new GenericRowData(fieldCount);

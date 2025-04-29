@@ -21,6 +21,7 @@ import com.alibaba.fluss.client.ConnectionFactory;
 import com.alibaba.fluss.client.admin.Admin;
 import com.alibaba.fluss.config.ConfigOptions;
 import com.alibaba.fluss.config.Configuration;
+import com.alibaba.fluss.flink.FlinkConnectorOptions;
 import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
 import com.alibaba.fluss.flink.source.enumerator.initializer.OffsetsInitializer;
 import com.alibaba.fluss.metadata.TableInfo;
@@ -69,7 +70,6 @@ public class FlussSourceBuilder<OUT> {
 
     private String database;
     private String tableName;
-    private boolean streaming = true; // currently only streaming is supported
 
     public FlussSourceBuilder<OUT> setBootstrapServers(String bootstrapServers) {
         this.bootstrapServers = bootstrapServers;
@@ -103,13 +103,8 @@ public class FlussSourceBuilder<OUT> {
         return this;
     }
 
-    public FlussSourceBuilder<OUT> setIsStreaming(boolean isStreaming) {
-        if (!isStreaming) {
-            this.streaming = false;
-        }
-        return this;
-    }
-
+    // TODO: refactor this method to use field names instead of indexes
+    //  see: https://github.com/alibaba/fluss/issues/804
     public FlussSourceBuilder<OUT> setProjectedFields(int[] projectedFields) {
         this.projectedFields = projectedFields;
         return this;
@@ -132,16 +127,17 @@ public class FlussSourceBuilder<OUT> {
         }
         checkNotNull(deserializationSchema, "Deserialization schema is required but not provided.");
 
-        // if null use the default value, like:
-        // FlinkConnectorOptions.SCAN_PARTITION_DISCOVERY_INTERVAL.defaultValue();
+        // if null use the default value:
         if (offsetsInitializer == null) {
             offsetsInitializer = OffsetsInitializer.initial();
         }
 
-        // if null use the default value, like:
-        // FlinkConnectorOptions.SCAN_PARTITION_DISCOVERY_INTERVAL.defaultValue()
+        // if null use the default value:
         if (scanPartitionDiscoveryIntervalMs == null) {
-            scanPartitionDiscoveryIntervalMs = 10000L; // 10 seconds
+            scanPartitionDiscoveryIntervalMs =
+                    FlinkConnectorOptions.SCAN_PARTITION_DISCOVERY_INTERVAL
+                            .defaultValue()
+                            .toMillis();
         }
 
         if (this.flussConf == null) {
@@ -180,7 +176,7 @@ public class FlussSourceBuilder<OUT> {
 
         LOG.info("Creating Fluss Source with Configuration: {}", flussConf);
 
-        return new FlussSource<OUT>(
+        return new FlussSource<>(
                 flussConf,
                 tablePath,
                 hasPrimaryKey,
@@ -190,6 +186,6 @@ public class FlussSourceBuilder<OUT> {
                 offsetsInitializer,
                 scanPartitionDiscoveryIntervalMs,
                 deserializationSchema,
-                streaming);
+                true);
     }
 }

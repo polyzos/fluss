@@ -17,6 +17,8 @@
 package com.alibaba.fluss.flink.source;
 
 import com.alibaba.fluss.client.table.Table;
+import com.alibaba.fluss.client.table.writer.AppendWriter;
+import com.alibaba.fluss.client.table.writer.UpsertWriter;
 import com.alibaba.fluss.config.ConfigOptions;
 import com.alibaba.fluss.flink.common.Order;
 import com.alibaba.fluss.flink.source.deserializer.OrderPartial;
@@ -40,78 +42,55 @@ import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.types.RowKind;
-import org.apache.flink.util.CloseableIterator;
-import org.assertj.core.api.AssertionsForClassTypes;
-import org.assertj.core.api.AssertionsForInterfaceTypes;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import static com.alibaba.fluss.flink.source.testutils.MockDataUtils.binaryRowToGenericRow;
 import static com.alibaba.fluss.testutils.DataTestUtils.row;
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /** Integration tests for the {@link FlussSource} class with PK tables. */
 public class FlussSourceITCase extends FlinkTestBase {
+    private static final List<Order> ORDERS = MockDataUtils.ORDERS;
+
+    private static final Schema PK_SCHEMA = MockDataUtils.getOrdersSchemaPK();
+    private static final Schema LOG_SCHEMA = MockDataUtils.getOrdersSchemaLog();
+
     private static StreamExecutionEnvironment env;
+    private static String bootstrapServers;
 
-    private static final List<Order> orders = MockDataUtils.ORDERS;
+    private final String pkTableName = "orders_test_pk";
+    private final String logTableName = "orders_test_log";
 
-    private static final Schema pkSchema = MockDataUtils.getOrdersSchemaPK();
-    private static final Schema logSchema = MockDataUtils.getOrdersSchemaLog();
+    private final TablePath ordersLogTablePath = new TablePath(DEFAULT_DB, logTableName);
+    private final TablePath ordersPKTablePath = new TablePath(DEFAULT_DB, pkTableName);
 
-    private TablePath ordersLogTablePath;
-    private TablePath ordersPKTablePath;
+    private final TableDescriptor logTableDescriptor =
+            TableDescriptor.builder().schema(LOG_SCHEMA).distributedBy(1, "orderId").build();
+    private final TableDescriptor pkTableDescriptor =
+            TableDescriptor.builder().schema(PK_SCHEMA).distributedBy(1, "orderId").build();
 
-    private TableDescriptor logTableDescriptor;
-    private TableDescriptor pkTableDescriptor;
-
-    private String bootstrapServers;
-
-    private String pkTableName = "orders_test_pk";
-    private String logTableName = "orders_test_log";
-
-    @BeforeEach
-    public void setup() throws Exception {
+    @BeforeAll
+    public static void beforeAll() {
         FlinkTestBase.beforeAll();
-
         env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(4);
-
-        bootstrapServers = conn.getConfiguration().get(ConfigOptions.BOOTSTRAP_SERVERS).get(0);
-
-        pkTableDescriptor =
-                TableDescriptor.builder().schema(pkSchema).distributedBy(1, "orderId").build();
-
-        ordersPKTablePath = new TablePath(DEFAULT_DB, pkTableName);
-        ordersLogTablePath = new TablePath(DEFAULT_DB, logTableName);
-
-        createTable(ordersPKTablePath, pkTableDescriptor);
-
-        logTableDescriptor =
-                TableDescriptor.builder().schema(logSchema).distributedBy(1, "orderId").build();
-
-        createTable(ordersLogTablePath, logTableDescriptor);
-
-        initTables();
-    }
-
-    @AfterEach
-    protected void afterEach() throws Exception {
-        admin.dropTable(ordersPKTablePath, false);
-        admin.dropTable(ordersLogTablePath, false);
+        bootstrapServers =
+                String.join(
+                        ",",
+                        FLUSS_CLUSTER_EXTENSION
+                                .getClientConfig()
+                                .get(ConfigOptions.BOOTSTRAP_SERVERS));
     }
 
     @Test
     public void testTablePKSource() throws Exception {
-        env.setParallelism(1);
-
+        createTable(ordersPKTablePath, pkTableDescriptor);
+        writeRowsToTable(ordersPKTablePath);
         // Create a DataStream from the FlussSource
         FlussSource<Order> flussSource =
                 FlussSource.<Order>builder()
@@ -126,24 +105,16 @@ public class FlussSourceITCase extends FlinkTestBase {
         DataStreamSource<Order> stream =
                 env.fromSource(flussSource, WatermarkStrategy.noWatermarks(), "Fluss Source");
 
-        List<Order> collectedElements = new ArrayList<>();
-        try (CloseableIterator<Order> data = stream.collectAsync()) {
-            env.executeAsync("Test Fluss Orders Source");
-            int count = 0;
-            while (data.hasNext() && count < orders.size() - 1) {
-                collectedElements.add(data.next());
-                count++;
-            }
-            collectedElements.add(data.next());
-        }
+        List<Order> collectedElements = stream.executeAndCollect(ORDERS.size());
 
         // Assert result size and elements match
-        assertThat(orders.size()).isEqualTo(collectedElements.size());
-        assertThat(orders).isEqualTo(collectedElements);
+        assertThat(collectedElements).hasSameElementsAs(ORDERS);
     }
 
     @Test
     public void testTablePKSourceWithProjectionPushdown() throws Exception {
+        createTable(ordersPKTablePath, pkTableDescriptor);
+        writeRowsToTable(ordersPKTablePath);
         List<OrderPartial> expectedOutput =
                 Arrays.asList(
                         new OrderPartial(600, 600),
@@ -167,24 +138,16 @@ public class FlussSourceITCase extends FlinkTestBase {
         DataStreamSource<OrderPartial> stream =
                 env.fromSource(flussSource, WatermarkStrategy.noWatermarks(), "Fluss Source");
 
-        List<OrderPartial> collectedElements = new ArrayList<>();
-        try (CloseableIterator<OrderPartial> data = stream.collectAsync()) {
-            env.executeAsync("Test Fluss Orders Source With Projection Pushdown");
-            int count = 0;
-            while (data.hasNext() && count < expectedOutput.size() - 1) {
-                collectedElements.add(data.next());
-                count++;
-            }
-            collectedElements.add(data.next());
-        }
+        List<OrderPartial> collectedElements = stream.executeAndCollect(ORDERS.size());
 
         // Assert result size and elements match
-        assertThat(expectedOutput.size()).isEqualTo(collectedElements.size());
-        assertThat(expectedOutput).isEqualTo(collectedElements);
+        assertThat(collectedElements).hasSameElementsAs(expectedOutput);
     }
 
     @Test
     public void testRowDataPKTableSource() throws Exception {
+        createTable(ordersPKTablePath, pkTableDescriptor);
+        writeRowsToTable(ordersPKTablePath);
         Table table = conn.getTable(ordersPKTablePath);
         RowType rowType = table.getTableInfo().getRowType();
 
@@ -220,7 +183,6 @@ public class FlussSourceITCase extends FlinkTestBase {
                         createRowData(700L, 22L, 601, "addr2", RowKind.UPDATE_BEFORE),
                         createRowData(700L, 22L, 801, "addr2", RowKind.UPDATE_AFTER));
 
-        //        List<RowData> collectedRows = new ArrayList<>();
         List<RowData> rawRows = stream.executeAndCollect(expectedResult.size());
         List<RowData> collectedRows =
                 rawRows.stream()
@@ -228,12 +190,13 @@ public class FlussSourceITCase extends FlinkTestBase {
                         .collect(Collectors.toList());
 
         // Assert result size and elements match
-        assertThat(expectedResult.size()).isEqualTo(collectedRows.size());
-        assertThat(expectedResult).isEqualTo(collectedRows);
+        assertThat(expectedResult).hasSameElementsAs(collectedRows);
     }
 
     @Test
     public void testRowDataLogTableSource() throws Exception {
+        createTable(ordersLogTablePath, logTableDescriptor);
+        writeRowsToTable(ordersLogTablePath);
         Table table = conn.getTable(ordersLogTablePath);
         RowType rowType = table.getTableInfo().getRowType();
 
@@ -275,13 +238,13 @@ public class FlussSourceITCase extends FlinkTestBase {
                         .collect(Collectors.toList());
 
         // Assert result size and elements match
-        assertThat(expectedResult.size()).isEqualTo(collectedRows.size());
-
-        AssertionsForInterfaceTypes.assertThat(expectedResult).hasSameElementsAs(collectedRows);
+        assertThat(expectedResult).hasSameElementsAs(collectedRows);
     }
 
     @Test
     public void testTableLogSourceWithProjectionPushdown() throws Exception {
+        createTable(ordersLogTablePath, logTableDescriptor);
+        writeRowsToTable(ordersLogTablePath);
         List<OrderPartial> expectedOutput =
                 Arrays.asList(
                         new OrderPartial(600, 600),
@@ -305,23 +268,10 @@ public class FlussSourceITCase extends FlinkTestBase {
         DataStreamSource<OrderPartial> stream =
                 env.fromSource(flussSource, WatermarkStrategy.noWatermarks(), "Fluss Source");
 
-        List<OrderPartial> collectedElements = new ArrayList<>();
-        try (CloseableIterator<OrderPartial> data = stream.collectAsync()) {
-            env.executeAsync("Test Fluss Log Orders Source With Projection Pushdown");
-            int count = 0;
-            while (data.hasNext() && count < expectedOutput.size() - 1) {
-                collectedElements.add(data.next());
-                count++;
-            }
-            collectedElements.add(data.next());
-        }
+        List<OrderPartial> collectedElements = stream.executeAndCollect(ORDERS.size());
 
         // Assert result size and elements match
-        AssertionsForClassTypes.assertThat(expectedOutput.size())
-                .isEqualTo(collectedElements.size());
-        AssertionsForInterfaceTypes.assertThat(expectedOutput).isEqualTo(collectedElements);
-
-        AssertionsForInterfaceTypes.assertThat(expectedOutput).hasSameElementsAs(collectedElements);
+        assertThat(collectedElements).hasSameElementsAs(expectedOutput);
     }
 
     private static RowData createRowData(
@@ -336,25 +286,24 @@ public class FlussSourceITCase extends FlinkTestBase {
         return row;
     }
 
-    private void initTables() {
-        Table table = conn.getTable(ordersPKTablePath);
-        RowType rowType = table.getTableInfo().getRowType();
+    private void writeRowsToTable(TablePath tablePath) throws Exception {
+        try (Table table = conn.getTable(tablePath)) {
+            RowType rowType = table.getTableInfo().getRowType();
+            boolean isLogTable = !table.getTableInfo().hasPrimaryKey();
 
-        PojoToRowConverter<Order> converter = new PojoToRowConverter<>(Order.class, rowType);
+            PojoToRowConverter<Order> converter = new PojoToRowConverter<>(Order.class, rowType);
 
-        List<GenericRow> rows =
-                orders.stream().map(converter::convert).collect(Collectors.toList());
+            List<GenericRow> rows =
+                    ORDERS.stream().map(converter::convert).collect(Collectors.toList());
 
-        Table pkTable = conn.getTable(ordersPKTablePath);
-        Table logTable = conn.getTable(ordersLogTablePath);
-
-        for (GenericRow row : rows) {
-            try {
-                pkTable.newUpsert().createWriter().upsert(row).get();
-
-                logTable.newAppend().createWriter().append(row).get();
-            } catch (InterruptedException | ExecutionException e) {
-                throw new RuntimeException("Failed to insert test data", e);
+            if (isLogTable) {
+                AppendWriter writer = table.newAppend().createWriter();
+                rows.forEach(writer::append);
+                writer.flush();
+            } else {
+                UpsertWriter writer = table.newUpsert().createWriter();
+                rows.forEach(writer::upsert);
+                writer.flush();
             }
         }
     }

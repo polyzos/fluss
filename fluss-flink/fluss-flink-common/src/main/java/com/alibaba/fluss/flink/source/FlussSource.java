@@ -55,7 +55,7 @@ import javax.annotation.Nullable;
 public class FlussSource<OUT> extends FlinkSource<OUT> {
     private static final long serialVersionUID = 1L;
 
-    public FlussSource(
+    FlussSource(
             Configuration flussConf,
             TablePath tablePath,
             boolean hasPrimaryKey,
@@ -89,12 +89,7 @@ public class FlussSource<OUT> extends FlinkSource<OUT> {
     }
 
     @VisibleForTesting
-    public OffsetsInitializer getOffsetsInitializer() {
+    OffsetsInitializer getOffsetsInitializer() {
         return offsetsInitializer;
-    }
-
-    @VisibleForTesting
-    public long getScanPartitionDiscoveryIntervalMs() {
-        return scanPartitionDiscoveryIntervalMs;
     }
 }

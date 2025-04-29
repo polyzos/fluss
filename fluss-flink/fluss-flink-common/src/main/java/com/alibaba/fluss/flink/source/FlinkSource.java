@@ -118,7 +118,7 @@ public class FlinkSource<OUT>
                 sourceEnumeratorState.getAssignedPartitions(),
                 offsetsInitializer,
                 scanPartitionDiscoveryIntervalMs,
-                true);
+                streaming);
     }
 
     @Override
