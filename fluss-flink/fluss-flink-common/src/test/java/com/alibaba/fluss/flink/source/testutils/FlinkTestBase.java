@@ -42,7 +42,7 @@ import com.alibaba.fluss.server.zk.data.TableAssignment;
 import com.alibaba.fluss.types.DataTypes;
 
 import org.apache.flink.types.Row;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -129,26 +129,25 @@ public class FlinkTestBase {
     protected static final TablePath DEFAULT_TABLE_PATH =
             TablePath.of(DEFAULT_DB, "test-flink-table");
 
-    protected Connection conn;
-    protected Admin admin;
+    protected static Connection conn;
+    protected static Admin admin;
 
     protected static Configuration clientConf;
 
     @BeforeAll
     protected static void beforeAll() {
         clientConf = FLUSS_CLUSTER_EXTENSION.getClientConfig();
+        conn = ConnectionFactory.createConnection(clientConf);
+        admin = conn.getAdmin();
     }
 
     @BeforeEach
     void beforeEach() throws Exception {
-        // re-create connection for every test to invalid client metadata cache
-        conn = ConnectionFactory.createConnection(clientConf);
-        admin = conn.getAdmin();
         admin.createDatabase(DEFAULT_DB, DatabaseDescriptor.EMPTY, true).get();
     }
 
-    @AfterEach
-    void afterEach() throws Exception {
+    @AfterAll
+    static void afterAll() throws Exception {
         if (admin != null) {
             admin.close();
             admin = null;
