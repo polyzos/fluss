@@ -14,8 +14,9 @@
  *  limitations under the License.
  */
 
-package com.alibaba.fluss.flink.source.deserializer;
+package com.alibaba.fluss.flink.source.testutils;
 
+import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
 import com.alibaba.fluss.record.LogRecord;
 import com.alibaba.fluss.row.InternalRow;
 import com.alibaba.fluss.types.DataTypeRoot;

@@ -16,7 +16,6 @@
 
 package com.alibaba.fluss.flink.source.testutils;
 
-import com.alibaba.fluss.flink.common.Order;
 import com.alibaba.fluss.flink.source.deserializer.FlussDeserializationSchema;
 import com.alibaba.fluss.metadata.Schema;
 import com.alibaba.fluss.record.LogRecord;
