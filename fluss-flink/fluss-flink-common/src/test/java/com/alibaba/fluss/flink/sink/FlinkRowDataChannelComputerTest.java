@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FlinkRowDataChannelComputerTest {
 
     private static final FlussSerializationSchema<RowData> serializationSchema =
-            new RowSerializationSchema();
+            new RowSerializationSchema(false, false);
 
     @BeforeAll
     static void init() throws Exception {

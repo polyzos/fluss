@@ -93,7 +93,7 @@ public class OrderSerializationSchemaTest {
         Order order = new Order(1001L, 5001L, 10, "A-12 Mumbai");
 
         RowWithOp rowWithOp = serializer.serialize(order);
-        InternalRow row = rowWithOp.getInternalRow();
+        InternalRow row = rowWithOp.getRow();
 
         assertThat(row.getFieldCount()).isEqualTo(4);
         assertThat(row.getLong(0)).isEqualTo(1001L);
@@ -105,18 +105,15 @@ public class OrderSerializationSchemaTest {
     // Test null input
     @Test
     public void testNullHandling() throws Exception {
-
-        RowWithOp rowWithOp1 = serializer.serialize(null);
-
-        InternalRow nullResult = rowWithOp1.getInternalRow();
-
-        assertThat(nullResult).isNull();
+        assertThatThrownBy(() -> serializer.serialize(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("row cannot be null");
 
         Order order = new Order(1002L, 5002L, 5, null);
 
         RowWithOp rowWithOp2 = serializer.serialize(order);
 
-        InternalRow result = rowWithOp2.getInternalRow();
+        InternalRow result = rowWithOp2.getRow();
         assertThat(result.getLong(0)).isEqualTo(1002L);
         assertThat(result.getLong(1)).isEqualTo(5002L);
         assertThat(result.getInt(2)).isEqualTo(5);
@@ -135,7 +132,7 @@ public class OrderSerializationSchemaTest {
         Order order = new Order(1003L, 5003L, 15, "1124 Rohtak");
 
         RowWithOp rowWithOp = extendedSerializer.serialize(order);
-        InternalRow result = rowWithOp.getInternalRow();
+        InternalRow result = rowWithOp.getRow();
 
         assertThat(result.getFieldCount()).isEqualTo(5);
         assertThat(result.getLong(0)).isEqualTo(1003L);

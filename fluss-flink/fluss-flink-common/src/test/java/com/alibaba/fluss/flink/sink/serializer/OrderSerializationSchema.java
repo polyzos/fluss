@@ -17,6 +17,7 @@
 package com.alibaba.fluss.flink.sink.serializer;
 
 import com.alibaba.fluss.annotation.PublicEvolving;
+import com.alibaba.fluss.flink.row.OperationType;
 import com.alibaba.fluss.flink.row.RowWithOp;
 import com.alibaba.fluss.flink.source.testutils.Order;
 import com.alibaba.fluss.row.BinaryString;
@@ -24,7 +25,6 @@ import com.alibaba.fluss.row.GenericRow;
 import com.alibaba.fluss.types.RowType;
 
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.types.RowKind;
 
 /**
  * A serialization schema that converts {@link Order} objects to {@link RowData} for writing to
@@ -91,6 +91,6 @@ public class OrderSerializationSchema implements FlussSerializationSchema<Order>
             row.setField(i, null);
         }
 
-        return new RowWithOp(row, RowKind.INSERT);
+        return new RowWithOp(row, OperationType.APPEND);
     }
 }

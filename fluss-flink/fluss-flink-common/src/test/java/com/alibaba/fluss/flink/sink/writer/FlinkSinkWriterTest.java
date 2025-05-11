@@ -40,6 +40,7 @@ import org.apache.flink.metrics.Metric;
 import org.apache.flink.runtime.metrics.MetricNames;
 import org.apache.flink.runtime.metrics.util.InterceptingOperatorMetricGroup;
 import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.types.logical.CharType;
 import org.apache.flink.table.types.logical.IntType;
@@ -205,9 +206,10 @@ public class FlinkSinkWriterTest extends FlinkTestBase {
         }
     }
 
-    private FlinkSinkWriter createSinkWriter(
+    private FlinkSinkWriter<RowData> createSinkWriter(
             Configuration configuration, MailboxExecutor mailboxExecutor) throws Exception {
-        FlussSerializationSchema serializationSchema = new RowSerializationSchema();
+        FlussSerializationSchema<RowData> serializationSchema =
+                new RowSerializationSchema(false, false);
         serializationSchema.open(
                 new FlussSerializationSchema.InitializationContext() {
                     @Override
@@ -225,13 +227,12 @@ public class FlinkSinkWriterTest extends FlinkTestBase {
                         return null;
                     }
                 });
-        return new AppendSinkWriter(
+        return new AppendSinkWriter<RowData>(
                 DEFAULT_SINK_TABLE_PATH,
                 configuration,
                 RowType.of(
                         new LogicalType[] {new IntType(), new CharType(10)},
                         new String[] {"id", "name"}),
-                false,
                 mailboxExecutor,
                 serializationSchema);
     }
