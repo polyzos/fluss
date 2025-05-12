@@ -84,13 +84,7 @@ public class RowSerializationSchema implements FlussSerializationSchema<RowData>
         }
         InternalRow row = converter.replace(value);
         OperationType opType = toOperationType(value.getRowKind());
-        // commenting this out for now to satisfy the FlinkRowDataChannelComputer since it doesn't
-        // support null
-        //        if (opType == null) {
-        //            return null;
-        //        } else {
-        //            return new RowWithOp(row, opType);
-        //        }
+
         return new RowWithOp(row, opType);
     }
 
@@ -106,7 +100,7 @@ public class RowSerializationSchema implements FlussSerializationSchema<RowData>
     private OperationType toOperationType(RowKind rowKind) {
         if (ignoreDelete) {
             if (rowKind == RowKind.DELETE || rowKind == RowKind.UPDATE_BEFORE) {
-                return null;
+                return OperationType.IGNORE;
             }
         }
 
