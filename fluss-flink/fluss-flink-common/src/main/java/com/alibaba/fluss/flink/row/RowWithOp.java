@@ -50,7 +50,8 @@ public class RowWithOp {
      */
     public RowWithOp(InternalRow row, @Nullable OperationType opType) {
         this.row = checkNotNull(row, "row cannot be null");
-        this.opType = checkNotNull(opType, "opType cannot be null");
+        //        this.opType = checkNotNull(opType, "opType cannot be null");
+        this.opType = opType;
     }
 
     /**

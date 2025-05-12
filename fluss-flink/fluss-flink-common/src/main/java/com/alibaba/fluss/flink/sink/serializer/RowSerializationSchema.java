@@ -79,16 +79,20 @@ public class RowSerializationSchema implements FlussSerializationSchema<RowData>
     @Override
     public RowWithOp serialize(RowData value) throws Exception {
         if (converter == null) {
-            this.converter = new FlinkAsFlussRow();
+            throw new IllegalStateException(
+                    "Converter not initialized. The open() method must be called before serializing records.");
         }
 
         InternalRow row = converter.replace(value);
         OperationType opType = toOperationType(value.getRowKind());
-        if (opType == null) {
-            return null;
-        } else {
-            return new RowWithOp(row, opType);
-        }
+        // commenting this out for now to satisfy the FlinkRowDataChannelComputer since it doesn't
+        // support null
+        //        if (opType == null) {
+        //            return null;
+        //        } else {
+        //            return new RowWithOp(row, opType);
+        //        }
+        return new RowWithOp(row, opType);
     }
 
     /**

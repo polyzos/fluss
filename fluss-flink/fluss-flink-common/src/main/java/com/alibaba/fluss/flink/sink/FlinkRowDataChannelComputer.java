@@ -22,11 +22,13 @@ import com.alibaba.fluss.client.table.getter.PartitionGetter;
 import com.alibaba.fluss.flink.row.RowWithOp;
 import com.alibaba.fluss.flink.sink.serializer.FlussSerializationSchema;
 import com.alibaba.fluss.metadata.DataLakeFormat;
+import com.alibaba.fluss.metrics.groups.MetricGroup;
 import com.alibaba.fluss.row.InternalRow;
 import com.alibaba.fluss.row.encode.KeyEncoder;
 import com.alibaba.fluss.types.RowType;
 
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.util.UserCodeClassLoader;
 
 import javax.annotation.Nullable;
 
@@ -88,6 +90,28 @@ public class FlinkRowDataChannelComputer<InputT> implements ChannelComputer<Inpu
         // situation becomes even more severe.
         this.combineShuffleWithPartitionName =
                 partitionGetter != null && numBucket % numChannels != 0;
+
+        try {
+            this.serializationSchema.open(
+                    new FlussSerializationSchema.InitializationContext() {
+                        @Override
+                        public MetricGroup getMetricGroup() {
+                            return null;
+                        }
+
+                        @Override
+                        public UserCodeClassLoader getUserCodeClassLoader() {
+                            return null;
+                        }
+
+                        @Override
+                        public RowType getRowSchema() {
+                            return flussRowType;
+                        }
+                    });
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
