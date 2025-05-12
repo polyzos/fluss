@@ -82,7 +82,6 @@ public class RowSerializationSchema implements FlussSerializationSchema<RowData>
             throw new IllegalStateException(
                     "Converter not initialized. The open() method must be called before serializing records.");
         }
-
         InternalRow row = converter.replace(value);
         OperationType opType = toOperationType(value.getRowKind());
         // commenting this out for now to satisfy the FlinkRowDataChannelComputer since it doesn't
@@ -110,13 +109,9 @@ public class RowSerializationSchema implements FlussSerializationSchema<RowData>
                 return null;
             }
         }
+
         if (isAppendOnly) {
-            if (rowKind == RowKind.INSERT) {
-                return OperationType.APPEND;
-            } else {
-                throw new UnsupportedOperationException(
-                        "Unsupported row kind: " + rowKind + " in append-only mode");
-            }
+            return OperationType.APPEND;
         } else {
             switch (rowKind) {
                 case INSERT:
