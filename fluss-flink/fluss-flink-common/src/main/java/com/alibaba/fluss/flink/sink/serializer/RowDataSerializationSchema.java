@@ -24,10 +24,8 @@ import com.alibaba.fluss.row.InternalRow;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.types.RowKind;
 
-import javax.annotation.Nullable;
-
 /** Default implementation of RowDataConverter for RowData. */
-public class RowSerializationSchema implements FlussSerializationSchema<RowData> {
+public class RowDataSerializationSchema implements FlussSerializationSchema<RowData> {
     private static final long serialVersionUID = 1L;
 
     /**
@@ -51,7 +49,7 @@ public class RowSerializationSchema implements FlussSerializationSchema<RowData>
      * @param isAppendOnly whether the schema is append-only (only INSERTs allowed)
      * @param ignoreDelete whether to ignore DELETE and UPDATE_BEFORE operations
      */
-    public RowSerializationSchema(boolean isAppendOnly, boolean ignoreDelete) {
+    public RowDataSerializationSchema(boolean isAppendOnly, boolean ignoreDelete) {
         this.isAppendOnly = isAppendOnly;
         this.ignoreDelete = ignoreDelete;
     }
@@ -96,7 +94,6 @@ public class RowSerializationSchema implements FlussSerializationSchema<RowData>
      * @return the corresponding operation type, or {@code null} if the operation should be ignored
      * @throws UnsupportedOperationException if the row kind is not supported in the current mode
      */
-    @Nullable
     private OperationType toOperationType(RowKind rowKind) {
         if (ignoreDelete) {
             if (rowKind == RowKind.DELETE || rowKind == RowKind.UPDATE_BEFORE) {

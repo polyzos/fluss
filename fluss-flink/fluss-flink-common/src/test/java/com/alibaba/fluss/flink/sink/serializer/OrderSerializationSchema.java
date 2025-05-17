@@ -66,10 +66,6 @@ public class OrderSerializationSchema implements FlussSerializationSchema<Order>
 
     @Override
     public RowWithOp serialize(Order order) throws Exception {
-        if (order == null) {
-            return new RowWithOp(null, null);
-        }
-
         // Create a new row with the same number of fields as the schema
         GenericRow row = new GenericRow(rowType.getFieldCount());
 

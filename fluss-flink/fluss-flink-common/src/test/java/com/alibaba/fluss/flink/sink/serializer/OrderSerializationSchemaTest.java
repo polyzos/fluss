@@ -105,10 +105,6 @@ public class OrderSerializationSchemaTest {
     // Test null input
     @Test
     public void testNullHandling() throws Exception {
-        assertThatThrownBy(() -> serializer.serialize(null))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessageContaining("row cannot be null");
-
         Order order = new Order(1002L, 5002L, 5, null);
 
         RowWithOp rowWithOp2 = serializer.serialize(order);

@@ -17,14 +17,12 @@
 package com.alibaba.fluss.flink.sink;
 
 import com.alibaba.fluss.flink.sink.serializer.FlussSerializationSchema;
-import com.alibaba.fluss.flink.sink.serializer.RowSerializationSchema;
-import com.alibaba.fluss.metrics.groups.MetricGroup;
-import com.alibaba.fluss.types.RowType;
+import com.alibaba.fluss.flink.sink.serializer.RowDataSerializationSchema;
+import com.alibaba.fluss.flink.sink.serializer.SerializerInitContextImpl;
 
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
-import org.apache.flink.util.UserCodeClassLoader;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -37,34 +35,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FlinkRowDataChannelComputerTest {
 
     private static final FlussSerializationSchema<RowData> serializationSchema =
-            new RowSerializationSchema(false, false);
+            new RowDataSerializationSchema(false, false);
 
     @BeforeAll
     static void init() throws Exception {
-        serializationSchema.open(
-                new FlussSerializationSchema.InitializationContext() {
-                    @Override
-                    public MetricGroup getMetricGroup() {
-                        return null;
-                    }
-
-                    @Override
-                    public UserCodeClassLoader getUserCodeClassLoader() {
-                        return null;
-                    }
-
-                    @Override
-                    public RowType getRowSchema() {
-                        return null;
-                    }
-                });
+        serializationSchema.open(new SerializerInitContextImpl(DATA1_ROW_TYPE));
     }
 
     @Test
     void testSelectChanel() {
 
-        FlinkRowDataChannelComputer channelComputer =
-                new FlinkRowDataChannelComputer(
+        FlinkRowDataChannelComputer<RowData> channelComputer =
+                new FlinkRowDataChannelComputer<>(
                         DATA1_ROW_TYPE,
                         Collections.singletonList("a"),
                         Collections.emptyList(),
@@ -93,8 +75,8 @@ class FlinkRowDataChannelComputerTest {
 
     @Test
     void testSelectChanelForPartitionedTable() {
-        FlinkRowDataChannelComputer channelComputer =
-                new FlinkRowDataChannelComputer(
+        FlinkRowDataChannelComputer<RowData> channelComputer =
+                new FlinkRowDataChannelComputer<>(
                         DATA1_ROW_TYPE,
                         Collections.singletonList("a"),
                         Collections.singletonList("b"),

@@ -22,17 +22,18 @@ import com.alibaba.fluss.client.ConnectionFactory;
 import com.alibaba.fluss.client.table.Table;
 import com.alibaba.fluss.client.table.writer.TableWriter;
 import com.alibaba.fluss.config.Configuration;
+import com.alibaba.fluss.exception.FlussRuntimeException;
 import com.alibaba.fluss.flink.metrics.FlinkMetricRegistry;
 import com.alibaba.fluss.flink.row.OperationType;
 import com.alibaba.fluss.flink.row.RowWithOp;
 import com.alibaba.fluss.flink.sink.serializer.FlussSerializationSchema;
+import com.alibaba.fluss.flink.sink.serializer.SerializerInitContextImpl;
 import com.alibaba.fluss.flink.utils.FlinkConversions;
 import com.alibaba.fluss.metadata.TableInfo;
 import com.alibaba.fluss.metadata.TablePath;
 import com.alibaba.fluss.metrics.Gauge;
 import com.alibaba.fluss.metrics.Metric;
 import com.alibaba.fluss.metrics.MetricNames;
-import com.alibaba.fluss.metrics.groups.MetricGroup;
 import com.alibaba.fluss.row.InternalRow;
 
 import org.apache.flink.api.common.operators.MailboxExecutor;
@@ -41,7 +42,6 @@ import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.groups.SinkWriterMetricGroup;
 import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.types.logical.RowType;
-import org.apache.flink.util.UserCodeClassLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -97,8 +97,7 @@ public abstract class FlinkSinkWriter<InputT> implements SinkWriter<InputT> {
         this.serializationSchema = serializationSchema;
     }
 
-    public void initialize(
-            SinkWriterMetricGroup metricGroup, UserCodeClassLoader userCodeClassLoader) {
+    public void initialize(SinkWriterMetricGroup metricGroup) {
         LOG.info(
                 "Opening Fluss {}, database: {} and table: {}",
                 this.getClass().getSimpleName(),
@@ -112,28 +111,11 @@ public abstract class FlinkSinkWriter<InputT> implements SinkWriter<InputT> {
         table = connection.getTable(tablePath);
         sanityCheck(table.getTableInfo());
 
-        com.alibaba.fluss.types.RowType rowType = table.getTableInfo().getRowType();
-
         try {
             this.serializationSchema.open(
-                    new FlussSerializationSchema.InitializationContext() {
-                        @Override
-                        public MetricGroup getMetricGroup() {
-                            return (MetricGroup) metricGroup.getIOMetricGroup();
-                        }
-
-                        @Override
-                        public UserCodeClassLoader getUserCodeClassLoader() {
-                            return userCodeClassLoader;
-                        }
-
-                        @Override
-                        public com.alibaba.fluss.types.RowType getRowSchema() {
-                            return rowType;
-                        }
-                    });
+                    new SerializerInitContextImpl(table.getTableInfo().getRowType()));
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw new FlussRuntimeException(e);
         }
 
         initMetrics();
@@ -173,10 +155,7 @@ public abstract class FlinkSinkWriter<InputT> implements SinkWriter<InputT> {
 
             numRecordsOutCounter.inc();
         } catch (Exception e) {
-            LOG.error(
-                    "Failed to serialize input value of type '{}': {}",
-                    inputValue.getClass().getName(),
-                    e.getMessage());
+            throw new IOException(e.getMessage(), e);
         }
     }
 

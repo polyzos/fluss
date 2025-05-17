@@ -22,14 +22,13 @@ import com.alibaba.fluss.client.admin.Admin;
 import com.alibaba.fluss.config.ConfigOptions;
 import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.exception.NetworkException;
-import com.alibaba.fluss.flink.sink.serializer.FlussSerializationSchema;
-import com.alibaba.fluss.flink.sink.serializer.RowSerializationSchema;
+import com.alibaba.fluss.flink.sink.serializer.RowDataSerializationSchema;
+import com.alibaba.fluss.flink.sink.serializer.SerializerInitContextImpl;
 import com.alibaba.fluss.flink.source.testutils.FlinkTestBase;
 import com.alibaba.fluss.metadata.DatabaseDescriptor;
 import com.alibaba.fluss.metadata.Schema;
 import com.alibaba.fluss.metadata.TableDescriptor;
 import com.alibaba.fluss.metadata.TablePath;
-import com.alibaba.fluss.metrics.groups.MetricGroup;
 import com.alibaba.fluss.server.testutils.FlussClusterExtension;
 
 import org.apache.flink.api.common.operators.MailboxExecutor;
@@ -40,18 +39,19 @@ import org.apache.flink.metrics.Metric;
 import org.apache.flink.runtime.metrics.MetricNames;
 import org.apache.flink.runtime.metrics.util.InterceptingOperatorMetricGroup;
 import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.types.logical.CharType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
-import org.apache.flink.util.UserCodeClassLoader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.function.BiConsumer;
 
+import static com.alibaba.fluss.flink.utils.FlinkConversions.toFlussRowType;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -85,12 +85,10 @@ public class FlinkSinkWriterTest extends FlinkTestBase {
                 new InterceptingOperatorMetricGroup();
         MockWriterInitContext mockWriterInitContext =
                 new MockWriterInitContext(interceptingOperatorMetricGroup);
-        FlinkSinkWriter flinkSinkWriter =
+        FlinkSinkWriter<RowData> flinkSinkWriter =
                 createSinkWriter(flussConf, mockWriterInitContext.getMailboxExecutor());
 
-        flinkSinkWriter.initialize(
-                mockWriterInitContext.metricGroup(),
-                mockWriterInitContext.getUserCodeClassLoader());
+        flinkSinkWriter.initialize(mockWriterInitContext.metricGroup());
         flinkSinkWriter.write(
                 GenericRowData.of(1, StringData.fromString("a")), new MockSinkWriterContext());
         flinkSinkWriter.flush(false);
@@ -165,7 +163,7 @@ public class FlinkSinkWriterTest extends FlinkTestBase {
     }
 
     private void testExceptionWhenFlussUnavailable(
-            BiConsumer<FlinkSinkWriter, MailboxExecutor> actionAfterFlussUnavailable)
+            BiConsumer<FlinkSinkWriter<RowData>, MailboxExecutor> actionAfterFlussUnavailable)
             throws Exception {
         FlussClusterExtension flussClusterExtension = FlussClusterExtension.builder().build();
         try {
@@ -188,11 +186,9 @@ public class FlinkSinkWriterTest extends FlinkTestBase {
             MockWriterInitContext mockWriterInitContext =
                     new MockWriterInitContext(new InterceptingOperatorMetricGroup());
             // test fluss unavailable.
-            try (FlinkSinkWriter writer =
+            try (FlinkSinkWriter<RowData> writer =
                     createSinkWriter(clientConfig, mockWriterInitContext.getMailboxExecutor())) {
-                writer.initialize(
-                        mockWriterInitContext.metricGroup(),
-                        mockWriterInitContext.getUserCodeClassLoader());
+                writer.initialize(mockWriterInitContext.metricGroup());
                 flussClusterExtension.close();
                 writer.write(
                         GenericRowData.of(1, StringData.fromString("a")),
@@ -205,32 +201,19 @@ public class FlinkSinkWriterTest extends FlinkTestBase {
         }
     }
 
-    private FlinkSinkWriter createSinkWriter(
+    private FlinkSinkWriter<RowData> createSinkWriter(
             Configuration configuration, MailboxExecutor mailboxExecutor) throws Exception {
-        RowSerializationSchema serializationSchema = new RowSerializationSchema(true, false);
-        serializationSchema.open(
-                new FlussSerializationSchema.InitializationContext() {
-                    @Override
-                    public MetricGroup getMetricGroup() {
-                        return null;
-                    }
-
-                    @Override
-                    public UserCodeClassLoader getUserCodeClassLoader() {
-                        return null;
-                    }
-
-                    @Override
-                    public com.alibaba.fluss.types.RowType getRowSchema() {
-                        return null;
-                    }
-                });
-        return new AppendSinkWriter(
-                DEFAULT_SINK_TABLE_PATH,
-                configuration,
+        RowType tableRowType =
                 RowType.of(
                         new LogicalType[] {new IntType(), new CharType(10)},
-                        new String[] {"id", "name"}),
+                        new String[] {"id", "name"});
+        RowDataSerializationSchema serializationSchema =
+                new RowDataSerializationSchema(true, false);
+        serializationSchema.open(new SerializerInitContextImpl(toFlussRowType(tableRowType)));
+        return new AppendSinkWriter<>(
+                DEFAULT_SINK_TABLE_PATH,
+                configuration,
+                tableRowType,
                 mailboxExecutor,
                 serializationSchema);
     }

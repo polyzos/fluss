@@ -27,7 +27,6 @@ import com.alibaba.fluss.row.InternalRow;
 import org.apache.flink.api.common.operators.MailboxExecutor;
 import org.apache.flink.metrics.groups.SinkWriterMetricGroup;
 import org.apache.flink.table.types.logical.RowType;
-import org.apache.flink.util.UserCodeClassLoader;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
@@ -49,9 +48,8 @@ public class AppendSinkWriter<InputT> extends FlinkSinkWriter<InputT> {
     }
 
     @Override
-    public void initialize(
-            SinkWriterMetricGroup metricGroup, UserCodeClassLoader userCodeClassLoader) {
-        super.initialize(metricGroup, userCodeClassLoader);
+    public void initialize(SinkWriterMetricGroup metricGroup) {
+        super.initialize(metricGroup);
 
         appendWriter = table.newAppend().createWriter();
         LOG.info("Finished opening Fluss {}.", this.getClass().getSimpleName());

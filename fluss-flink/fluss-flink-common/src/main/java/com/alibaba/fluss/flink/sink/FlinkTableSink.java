@@ -17,7 +17,7 @@
 package com.alibaba.fluss.flink.sink;
 
 import com.alibaba.fluss.config.Configuration;
-import com.alibaba.fluss.flink.sink.serializer.RowSerializationSchema;
+import com.alibaba.fluss.flink.sink.serializer.RowDataSerializationSchema;
 import com.alibaba.fluss.flink.sink.writer.FlinkSinkWriter;
 import com.alibaba.fluss.flink.utils.PushdownUtils;
 import com.alibaba.fluss.flink.utils.PushdownUtils.FieldEqual;
@@ -179,17 +179,11 @@ public class FlinkTableSink
             // else, it's full update, ignore the given target columns as we don't care the order
         }
 
-        FlinkSink<RowData> flinkSink = null;
-        try {
-            flinkSink = getFlinkSink(targetColumnIndexes);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
+        FlinkSink<RowData> flinkSink = getFlinkSink(targetColumnIndexes);
         return SinkV2Provider.of(flinkSink);
     }
 
-    private FlinkSink<RowData> getFlinkSink(int[] targetColumnIndexes) throws Exception {
+    private FlinkSink<RowData> getFlinkSink(int[] targetColumnIndexes) {
         FlinkSink.SinkWriterBuilder<? extends FlinkSinkWriter, RowData> flinkSinkWriterBuilder =
                 (primaryKeyIndexes.length > 0)
                         ? new FlinkSink.UpsertSinkWriterBuilder<>(
@@ -202,7 +196,7 @@ public class FlinkTableSink
                                 partitionKeys,
                                 lakeFormat,
                                 shuffleByBucketId,
-                                new RowSerializationSchema(false, ignoreDelete))
+                                new RowDataSerializationSchema(false, ignoreDelete))
                         : new FlinkSink.AppendSinkWriterBuilder<>(
                                 tablePath,
                                 flussConfig,
@@ -212,7 +206,7 @@ public class FlinkTableSink
                                 partitionKeys,
                                 lakeFormat,
                                 shuffleByBucketId,
-                                new RowSerializationSchema(true, ignoreDelete));
+                                new RowDataSerializationSchema(true, ignoreDelete));
 
         return new FlinkSink<>(flinkSinkWriterBuilder);
     }

@@ -39,7 +39,7 @@ public class RowWithOp {
     private final InternalRow row;
 
     /** The type of operation associated with this row (e.g., APPEND, UPSERT, DELETE). */
-    @Nullable private final OperationType opType;
+    private final OperationType opType;
 
     /**
      * Constructs a {@code RowWithOp} with the specified internal row and operation type.
@@ -50,8 +50,7 @@ public class RowWithOp {
      */
     public RowWithOp(InternalRow row, @Nullable OperationType opType) {
         this.row = checkNotNull(row, "row cannot be null");
-        //        this.opType = checkNotNull(opType, "opType cannot be null");
-        this.opType = opType;
+        this.opType = checkNotNull(opType, "opType cannot be null");
     }
 
     /**

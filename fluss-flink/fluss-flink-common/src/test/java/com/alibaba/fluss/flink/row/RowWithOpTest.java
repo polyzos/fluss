@@ -40,15 +40,9 @@ public class RowWithOpTest {
     void testConstructor_withNullRow_shouldThrowException() {
         assertThatThrownBy(() -> new RowWithOp(null, OperationType.APPEND))
                 .isInstanceOf(NullPointerException.class);
-    }
 
-    @Test
-    void testConstructor_withNullOpType() {
         InternalRow row = new GenericRow(1);
-        RowWithOp rowWithOp = new RowWithOp(row, null);
-
-        assertThat(rowWithOp.getRow()).isSameAs(row);
-        assertThat(rowWithOp.getOperationType()).isNull();
+        assertThatThrownBy(() -> new RowWithOp(row, null)).isInstanceOf(NullPointerException.class);
     }
 
     @Test
