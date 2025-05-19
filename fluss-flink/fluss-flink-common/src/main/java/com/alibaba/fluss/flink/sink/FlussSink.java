@@ -21,9 +21,9 @@ import com.alibaba.fluss.flink.sink.writer.FlinkSinkWriter;
 /**
  * FlussSink is a specialized Flink sink for writing data to Fluss.
  *
- * <p>This class extends {@link FlinkSink} and provides a builder for constructing
- * Fluss sink instances with custom configurations. It is intended to be used as the
- * main entry point for integrating Fluss as a sink in Flink data pipelines.
+ * <p>This class extends {@link FlinkSink} and provides a builder for constructing Fluss sink
+ * instances with custom configurations. It is intended to be used as the main entry point for
+ * integrating Fluss as a sink in Flink data pipelines.
  *
  * @param <InputT> the type of input elements accepted by the sink
  */
