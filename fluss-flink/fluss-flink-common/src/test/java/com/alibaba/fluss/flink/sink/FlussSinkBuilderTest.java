@@ -36,9 +36,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Tests for {@link FlussSinkBuilder} configuration and argument handling. */
 class FlussSinkBuilderTest {
-    private String BOOTSTRAP_SERVERS = "localhost:9123";
-    private String DATABASE_NAME = "testDb";
-    private String TABLE_NAME = "testTable";
+    private String bootstrapServers = "localhost:9123";
+    private String databaseName = "testDb";
+    private String tableName = "testTable";
 
     private FlussSinkBuilder<Order> builder;
     private RowType orderRowType;
@@ -76,8 +76,8 @@ class FlussSinkBuilderTest {
         assertThatThrownBy(
                         () ->
                                 new FlussSinkBuilder<Order>()
-                                        .setBootstrapServers(BOOTSTRAP_SERVERS)
-                                        .setTable(TABLE_NAME)
+                                        .setBootstrapServers(bootstrapServers)
+                                        .setTable(tableName)
                                         .setRowType(orderRowType)
                                         .build())
                 .isInstanceOf(RuntimeException.class)
@@ -87,9 +87,9 @@ class FlussSinkBuilderTest {
         assertThatThrownBy(
                         () ->
                                 new FlussSinkBuilder<Order>()
-                                        .setBootstrapServers(BOOTSTRAP_SERVERS)
+                                        .setBootstrapServers(bootstrapServers)
                                         .setDatabase("")
-                                        .setTable(TABLE_NAME)
+                                        .setTable(tableName)
                                         .setRowType(orderRowType)
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class)
@@ -99,7 +99,7 @@ class FlussSinkBuilderTest {
         assertThatThrownBy(
                         () ->
                                 new FlussSinkBuilder<Order>()
-                                        .setBootstrapServers(BOOTSTRAP_SERVERS)
+                                        .setBootstrapServers(bootstrapServers)
                                         .setDatabase("testDb")
                                         .setRowType(orderRowType)
                                         .build())
@@ -110,7 +110,7 @@ class FlussSinkBuilderTest {
         assertThatThrownBy(
                         () ->
                                 new FlussSinkBuilder<Order>()
-                                        .setBootstrapServers(BOOTSTRAP_SERVERS)
+                                        .setBootstrapServers(bootstrapServers)
                                         .setDatabase("testDb")
                                         .setTable("")
                                         .setRowType(orderRowType)
@@ -122,16 +122,16 @@ class FlussSinkBuilderTest {
     @Test
     void testTablePathSetting() throws Exception {
         // Using setDatabase and setTable
-        builder.setBootstrapServers(BOOTSTRAP_SERVERS)
-                .setDatabase(DATABASE_NAME)
-                .setTable(TABLE_NAME)
+        builder.setBootstrapServers(bootstrapServers)
+                .setDatabase(databaseName)
+                .setTable(tableName)
                 .setRowType(orderRowType);
 
         String database = getFieldValue(builder, "database");
         String tableName = getFieldValue(builder, "tableName");
 
-        assertThat(database).isEqualTo(DATABASE_NAME);
-        assertThat(tableName).isEqualTo(TABLE_NAME);
+        assertThat(database).isEqualTo(databaseName);
+        assertThat(tableName).isEqualTo(this.tableName);
     }
 
     @Test
@@ -239,9 +239,9 @@ class FlussSinkBuilderTest {
         assertThat(bootstrapServers).isNull();
 
         // Test setting bootstrap servers
-        builder.setBootstrapServers(BOOTSTRAP_SERVERS);
+        builder.setBootstrapServers(this.bootstrapServers);
         bootstrapServers = getFieldValue(builder, "bootstrapServers");
-        assertThat(bootstrapServers).isEqualTo(BOOTSTRAP_SERVERS);
+        assertThat(bootstrapServers).isEqualTo(this.bootstrapServers);
     }
 
     @Test
@@ -249,9 +249,9 @@ class FlussSinkBuilderTest {
         // Test that all methods can be chained
         FlussSinkBuilder<Order> chainedBuilder =
                 new FlussSinkBuilder<Order>()
-                        .setBootstrapServers(BOOTSTRAP_SERVERS)
-                        .setDatabase(DATABASE_NAME)
-                        .setTable(TABLE_NAME)
+                        .setBootstrapServers(bootstrapServers)
+                        .setDatabase(databaseName)
+                        .setTable(tableName)
                         .setRowType(orderRowType)
                         .setIgnoreDelete(true)
                         .setTargetColumnIndexes(new int[] {0, 1})
