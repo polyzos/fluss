@@ -25,7 +25,6 @@ import com.alibaba.fluss.flink.sink.writer.FlinkSinkWriter;
 import com.alibaba.fluss.metadata.DataLakeFormat;
 import com.alibaba.fluss.metadata.TableInfo;
 import com.alibaba.fluss.metadata.TablePath;
-import com.alibaba.fluss.utils.Preconditions;
 
 import org.apache.flink.table.types.logical.RowType;
 import org.slf4j.Logger;
@@ -37,6 +36,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+
+import static com.alibaba.fluss.utils.Preconditions.checkArgument;
+import static com.alibaba.fluss.utils.Preconditions.checkNotNull;
 
 /**
  * Builder for creating and configuring Fluss sink connectors for Apache Flink.
@@ -213,17 +215,16 @@ public class FlussSinkBuilder<InputT> {
                             serializationSchema);
         }
 
-        return new FlinkSink<>(writerBuilder);
+        return new FlussSink<>(writerBuilder);
     }
 
     private void validateConfiguration() {
-        Preconditions.checkNotNull(
-                bootstrapServers, "BootstrapServers is required but not provided.");
+        checkNotNull(bootstrapServers, "BootstrapServers is required but not provided.");
 
-        Preconditions.checkNotNull(database, "Database is required but not provided.");
-        Preconditions.checkArgument(!database.isEmpty(), "Database cannot be empty.");
+        checkNotNull(database, "Database is required but not provided.");
+        checkArgument(!database.isEmpty(), "Database cannot be empty.");
 
-        Preconditions.checkNotNull(tableName, "Table name is required but not provided.");
-        Preconditions.checkArgument(!tableName.isEmpty(), "Table name cannot be empty.");
+        checkNotNull(tableName, "Table name is required but not provided.");
+        checkArgument(!tableName.isEmpty(), "Table name cannot be empty.");
     }
 }
