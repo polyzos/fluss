@@ -289,7 +289,9 @@ public class FlussSinkITCase extends FlinkTestBase {
 
         @Override
         public boolean equals(Object o) {
-            if (o == null || getClass() != o.getClass()) return false;
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
             TestOrder testOrder = (TestOrder) o;
             return orderId == testOrder.orderId
                     && itemId == testOrder.itemId
