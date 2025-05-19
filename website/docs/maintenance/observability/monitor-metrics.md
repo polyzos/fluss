@@ -28,12 +28,12 @@ sidebar_position: 3
 
 ## Metric Primitives
 
-| Type        | Purpose                                                                                                                  | Example             |
-|-------------|--------------------------------------------------------------------------------------------------------------------------|---------------------|
-| **Gauge**   | Provides a value of any type at a point in time.                                                                         | JVM heap used       |
-| **Counter** | Used to count values by incrementing and decrementing.                                                                   | Total bytes written |
+| Type          | Purpose                                                                                                                  | Example             |
+|---------------|--------------------------------------------------------------------------------------------------------------------------|---------------------|
+| **Gauge**     | Provides a value of any type at a point in time.                                                                         | JVM heap used       |
+| **Counter**   | Used to count values by incrementing and decrementing.                                                                   | Total bytes written |
 | **Histogram** | Measure the statistical distribution of a set of values including the min, max, mean, standard deviation and percentile. | Request latency     |
-| **Meter**   | The gauge exports the meter's rate.                                                                                      | Records/second     |
+| **Meter**     | The gauge exports the meter's rate.                                                                                      | Records/second      |
 
 ---
 
@@ -89,7 +89,7 @@ See **[Metric Reporters](metric-reporters.md)** for setup details.
 ---
 
 ### CPU Metrics 
-#### Scope: Coordinator / TabletServer
+#### Scope: ` Coordinator / TabletServer`, Infix: `status_JVM_CPU`
 
 | Infix            | Metric | Description           | Type  |
 |------------------|--------|-----------------------|-------|
@@ -99,57 +99,57 @@ See **[Metric Reporters](metric-reporters.md)** for setup details.
 ---
 
 ### Memory Metrics 
-#### Scope: Coordinator / TabletServer
+#### Scope: `Coordinator / TabletServer`, Infix: `status_JVM_memory`
 
-| Infix               | Metric                 | Description                     | Type  |
-|---------------------|------------------------|---------------------------------|-------|
-| `status_JVM_memory` | `heap_used`            | Heap used (bytes).              | Gauge |
-|                     | `heap_committed`       | Heap committed (bytes).         | Gauge |
-|                     | `heap_max`             | Max heap available (bytes).     | Gauge |
-|                     | `nonHeap_used`         | Non-heap used (bytes).          | Gauge |
-|                     | `nonHeap_committed`    | Non-heap committed (bytes).     | Gauge |
-|                     | `nonHeap_max`          | Max non-heap (bytes).           | Gauge |
-|                     | `metaspace_used`       | Metaspace used (bytes).         | Gauge |
-|                     | `metaspace_committed`  | Metaspace committed (bytes).    | Gauge |
-|                     | `metaspace_max`        | Metaspace max (bytes).          | Gauge |
-|                     | `direct_count`         | Direct buffer count.            | Gauge |
-|                     | `direct_memoryUsed`    | Direct buffer memory (bytes).   | Gauge |
-|                     | `direct_totalCapacity` | Direct buffer capacity (bytes). | Gauge |
-|                     | `mapped_count`         | Mapped buffer count.            | Gauge |
-|                     | `mapped_memoryUsed`    | Mapped buffer memory (bytes).   | Gauge |
-|                     | `mapped_totalCapacity` | Mapped buffer capacity (bytes). | Gauge |
+| Metric                 | Description                     | Type  |
+|------------------------|---------------------------------|-------|
+| `heap_used`            | Heap used (bytes).              | Gauge |
+| `heap_committed`       | Heap committed (bytes).         | Gauge |
+| `heap_max`             | Max heap available (bytes).     | Gauge |
+| `nonHeap_used`         | Non-heap used (bytes).          | Gauge |
+| `nonHeap_committed`    | Non-heap committed (bytes).     | Gauge |
+| `nonHeap_max`          | Max non-heap (bytes).           | Gauge |
+| `metaspace_used`       | Metaspace used (bytes).         | Gauge |
+| `metaspace_committed`  | Metaspace committed (bytes).    | Gauge |
+| `metaspace_max`        | Metaspace max (bytes).          | Gauge |
+| `direct_count`         | Direct buffer count.            | Gauge |
+| `direct_memoryUsed`    | Direct buffer memory (bytes).   | Gauge |
+| `direct_totalCapacity` | Direct buffer capacity (bytes). | Gauge |
+| `mapped_count`         | Mapped buffer count.            | Gauge |
+| `mapped_memoryUsed`    | Mapped buffer memory (bytes).   | Gauge |
+| `mapped_totalCapacity` | Mapped buffer capacity (bytes). | Gauge |
 
 ---
 
 ### Thread Metrics 
-#### Scope: Coordinator / TabletServer
+#### Scope: `Coordinator / TabletServer`, Infix: `status_JVM_threads`
 
-| Infix                | Metric  | Description  | Type  |
-|----------------------|---------|--------------|-------|
-| `status_JVM_threads` | `count` | Live threads | Gauge |
+| Metric  | Description  | Type  |
+|---------|--------------|-------|
+| `count` | Live threads | Gauge |
 
 ---
 
 ### Garbage Collection Metrics 
-#### Scope: Coordinator / TabletServer
+#### Scope: `Coordinator / TabletServer`, Infix: `status_JVM_GC`
 
-| Infix           | Metric                             | Description           | Type  |
-|-----------------|------------------------------------|-----------------------|-------|
-| `status_JVM_GC` | `<collector\|all>_count`           | Total GC collections. | Gauge |
-|                 | `<collector\|all>_time`            | Total GC time.        | Gauge |
-|                 | `<collector\|all>_timeMsPerSecond` | GC time (ms) per s.   | Gauge |
+| Metric                             | Description           | Type  |
+|------------------------------------|-----------------------|-------|
+| `<collector\|all>_count`           | Total GC collections. | Gauge |
+| `<collector\|all>_time`            | Total GC time.        | Gauge |
+| `<collector\|all>_timeMsPerSecond` | GC time (ms) per s.   | Gauge |
 
 ---
 
 ### Netty Metrics (
-#### Scope: Coordinator / TabletServer / Client
+#### Scope: `Coordinator / TabletServer / Client`, Infix: `netty`
 
-| Infix   | Metric                        | Description                  | Type  |
-|---------|-------------------------------|------------------------------|-------|
-| `netty` | `usedDirectMemory`            | Direct memory used by Netty. | Gauge |
-|         | `numDirectArenas`             | Number of direct arenas.     | Gauge |
-|         | `numAllocationsPerSecond`     | Allocations per second.      | Meter |
-|         | `numHugeAllocationsPerSecond` | Huge allocations per second. | Meter |
+|  Metric                       | Description                  | Type  |
+|-------------------------------|------------------------------|-------|
+| `usedDirectMemory`            | Direct memory used by Netty. | Gauge |
+| `numDirectArenas`             | Number of direct arenas.     | Gauge |
+| `numAllocationsPerSecond`     | Allocations per second.      | Meter |
+| `numHugeAllocationsPerSecond` | Huge allocations per second. | Meter |
 
 ---
 
@@ -172,38 +172,38 @@ See **[Metric Reporters](metric-reporters.md)** for setup details.
 
 ### Request Metrics
 
-#### Coordinator
+#### Scope: `coordinator`, Infix: `request`
 
-| Infix     | Metric             | Description         | Type  |
-|-----------|--------------------|---------------------|-------|
-| `request` | `requestQueueSize` | Network queue size. | Gauge |
+| Metric             | Description         | Type  |
+|--------------------|---------------------|-------|
+| `requestQueueSize` | Network queue size. | Gauge |
 
-#### TabletServer
+#### Scope: `tabletserver`, Infix: `request`
 
-| Infix         | Metric                 | Description                           | Type      |
-|---------------|------------------------|---------------------------------------|-----------|
-| `request`     | `requestQueueSize`     | Network queue size.                   | Gauge     |
-| `request_*`   | `requestsPerSecond`    | Requests per second *(per type)*.     | Meter     |
-|               | `errorsPerSecond`      | Errors per second *(per type)*.       | Meter     |
-|               | `requestBytes`         | Request-size distribution.            | Histogram |
-|               | `totalTimeMs`          | End-to-end latency.                   | Histogram |
-|               | `requestProcessTimeMs` | Processing time.                      | Histogram |
-|               | `requestQueueTimeMs`   | Queue wait time.                      | Histogram |
-|               | `responseSendTimeMs`   | Response send time.                   | Histogram |
+| Metric                 | Description                       | Type      |
+|------------------------|-----------------------------------|-----------|
+| `requestQueueSize`     | Network queue size.               | Gauge     |
+| `requestsPerSecond`    | Requests per second *(per type)*. | Meter     |
+| `errorsPerSecond`      | Errors per second *(per type)*.   | Meter     |
+| `requestBytes`         | Request-size distribution.        | Histogram |
+| `totalTimeMs`          | End-to-end latency.               | Histogram |
+| `requestProcessTimeMs` | Processing time.                  | Histogram |
+| `requestQueueTimeMs`   | Queue wait time.                  | Histogram |
+| `responseSendTimeMs`   | Response send time.               | Histogram |
 
 > **Request types**  
 > `request_productLog`, `request_putKv`, `request_lookup`, `request_prefixLookup`, `request_metadata`
 
-#### Client
+#### Scope: `client`, Infix: `request`
 
-| Infix     | Metric               | Description                | Type  |
-|-----------|----------------------|----------------------------|-------|
-| `request` | `bytesInPerSecond`   | Bytes received per second. | Gauge |
-|           | `bytesOutPerSecond`  | Bytes sent per second.     | Meter |
-|           | `requestsPerSecond`  | Requests per second.       | Meter |
-|           | `responsesPerSecond` | Responses per second.      | Meter |
-|           | `requestLatencyMs`   | Request latency.           | Gauge |
-|           | `requestsInFlight`   | In-flight requests.        | Gauge |
+| Metric               | Description                | Type  |
+|----------------------|----------------------------|-------|
+| `bytesInPerSecond`   | Bytes received per second. | Gauge |
+| `bytesOutPerSecond`  | Bytes sent per second.     | Meter |
+| `requestsPerSecond`  | Requests per second.       | Meter |
+| `responsesPerSecond` | Responses per second.      | Meter |
+| `requestLatencyMs`   | Request latency.           | Gauge |
+| `requestsInFlight`   | In-flight requests.        | Gauge |
 
 ---
 
