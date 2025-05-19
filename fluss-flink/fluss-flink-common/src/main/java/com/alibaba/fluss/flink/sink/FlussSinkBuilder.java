@@ -25,8 +25,8 @@ import com.alibaba.fluss.flink.sink.writer.FlinkSinkWriter;
 import com.alibaba.fluss.metadata.DataLakeFormat;
 import com.alibaba.fluss.metadata.TableInfo;
 import com.alibaba.fluss.metadata.TablePath;
-
 import com.alibaba.fluss.utils.Preconditions;
+
 import org.apache.flink.table.types.logical.RowType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,7 +55,7 @@ import java.util.concurrent.ExecutionException;
  *     .build();
  * }</pre>
  *
- * @param <IN> The input type of records to be written to Fluss
+ * @param <InputT>> The input type of records to be written to Fluss
  */
 public class FlussSinkBuilder<InputT> {
     private static final Logger LOG = LoggerFactory.getLogger(FlussSinkBuilder.class);
@@ -89,7 +89,6 @@ public class FlussSinkBuilder<InputT> {
         this.tableName = table;
         return this;
     }
-
 
     /** Set the row type for the sink. */
     public FlussSinkBuilder<InputT> setRowType(RowType rowType) {
@@ -148,11 +147,11 @@ public class FlussSinkBuilder<InputT> {
     }
 
     /** Set a FlussSerializationSchema. */
-    public FlussSinkBuilder<InputT> setSerializer(FlussSerializationSchema<InputT> serializationSchema) {
+    public FlussSinkBuilder<InputT> setSerializer(
+            FlussSerializationSchema<InputT> serializationSchema) {
         this.serializationSchema = serializationSchema;
         return this;
     }
-
 
     /** Build the FlussSink. */
     public FlinkSink<InputT> build() {
@@ -167,7 +166,7 @@ public class FlussSinkBuilder<InputT> {
 
         TableInfo tableInfo;
         try (Connection connection = ConnectionFactory.createConnection(flussConfig);
-             Admin admin = connection.getAdmin()) {
+                Admin admin = connection.getAdmin()) {
             try {
                 tableInfo = admin.getTableInfo(tablePath).get();
             } catch (InterruptedException e) {
@@ -186,7 +185,7 @@ public class FlussSinkBuilder<InputT> {
 
         System.out.println("Starting Fluss Sink with configuration: " + flussConfig);
         if (isUpsert) {
-            LOG.info("Using upsert sink");
+            LOG.info("Initializing Fluss upsert sink writer ...");
             writerBuilder =
                     new FlinkSink.UpsertSinkWriterBuilder<>(
                             tablePath,
@@ -198,10 +197,9 @@ public class FlussSinkBuilder<InputT> {
                             partitionKeys,
                             lakeFormat,
                             shuffleByBucketId,
-                            serializationSchema
-                    );
+                            serializationSchema);
         } else {
-            LOG.info("Using append sink");
+            LOG.info("Initializing Fluss append sink writer ...");
             writerBuilder =
                     new FlinkSink.AppendSinkWriterBuilder<>(
                             tablePath,
@@ -212,22 +210,20 @@ public class FlussSinkBuilder<InputT> {
                             partitionKeys,
                             lakeFormat,
                             shuffleByBucketId,
-                            serializationSchema
-                    );
+                            serializationSchema);
         }
 
         return new FlinkSink<>(writerBuilder);
     }
 
-
     private void validateConfiguration() {
-        Preconditions.checkNotNull(bootstrapServers, "BootstrapServers is required but not provided.");
+        Preconditions.checkNotNull(
+                bootstrapServers, "BootstrapServers is required but not provided.");
 
-        Preconditions.checkNotNull(database, "DatabaseName is required but not provided.");
+        Preconditions.checkNotNull(database, "Database is required but not provided.");
         Preconditions.checkArgument(!database.isEmpty(), "Database cannot be empty.");
 
         Preconditions.checkNotNull(tableName, "Table name is required but not provided.");
         Preconditions.checkArgument(!tableName.isEmpty(), "Table name cannot be empty.");
-
     }
 }
