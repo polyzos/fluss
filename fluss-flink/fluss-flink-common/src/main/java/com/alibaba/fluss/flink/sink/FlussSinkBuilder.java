@@ -149,7 +149,7 @@ public class FlussSinkBuilder<InputT> {
     }
 
     /** Set a FlussSerializationSchema. */
-    public FlussSinkBuilder<InputT> setSerializer(
+    public FlussSinkBuilder<InputT> setSerializationSchema(
             FlussSerializationSchema<InputT> serializationSchema) {
         this.serializationSchema = serializationSchema;
         return this;
@@ -185,7 +185,6 @@ public class FlussSinkBuilder<InputT> {
         List<String> bucketKeys = tableInfo.getBucketKeys();
         List<String> partitionKeys = tableInfo.getPartitionKeys();
 
-        System.out.println("Starting Fluss Sink with configuration: " + flussConfig);
         if (isUpsert) {
             LOG.info("Initializing Fluss upsert sink writer ...");
             writerBuilder =
