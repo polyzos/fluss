@@ -16,6 +16,7 @@
 
 package com.alibaba.fluss.flink.sink;
 
+import com.alibaba.fluss.flink.sink.serializer.OrderSerializationSchema;
 import com.alibaba.fluss.flink.source.testutils.Order;
 import com.alibaba.fluss.metadata.DataLakeFormat;
 
@@ -79,6 +80,7 @@ class FlussSinkBuilderTest {
                                         .setBootstrapServers(bootstrapServers)
                                         .setTable(tableName)
                                         .setRowType(orderRowType)
+                                        .setSerializationSchema(new OrderSerializationSchema())
                                         .build())
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Database is required but not provided.");
@@ -91,6 +93,7 @@ class FlussSinkBuilderTest {
                                         .setDatabase("")
                                         .setTable(tableName)
                                         .setRowType(orderRowType)
+                                        .setSerializationSchema(new OrderSerializationSchema())
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Database cannot be empty");
@@ -102,6 +105,7 @@ class FlussSinkBuilderTest {
                                         .setBootstrapServers(bootstrapServers)
                                         .setDatabase("testDb")
                                         .setRowType(orderRowType)
+                                        .setSerializationSchema(new OrderSerializationSchema())
                                         .build())
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("Table name is required");
@@ -114,6 +118,7 @@ class FlussSinkBuilderTest {
                                         .setDatabase("testDb")
                                         .setTable("")
                                         .setRowType(orderRowType)
+                                        .setSerializationSchema(new OrderSerializationSchema())
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Table name cannot be empty");
