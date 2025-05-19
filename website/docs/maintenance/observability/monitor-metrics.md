@@ -77,14 +77,14 @@ See **[Metric Reporters](metric-reporters.md)** for setup details.
 ### Cluster-level Metrics 
 #### Scope: Coordinator scope
 
-| Metric                | Description                                  | Type  |
-|-----------------------|----------------------------------------------|-------|
-| `activeCoordinatorCount` | Active CoordinatorServers in the cluster. | Gauge |
-| `activeTabletServerCount` | Active TabletServers.                    | Gauge |
-| `offlineBucketCount`  | Buckets currently offline.                   | Gauge |
-| `tableCount`          | Total tables.                                | Gauge |
-| `bucketCount`         | Total buckets.                               | Gauge |
-| `replicasToDeleteCount` | Replicas scheduled for deletion.           | Gauge |
+| Metric                    | Description                                | Type  |
+|---------------------------|--------------------------------------------|-------|
+| `activeCoordinatorCount`  | Active CoordinatorServers in the cluster.  | Gauge |
+| `activeTabletServerCount` | Active TabletServers.                      | Gauge |
+| `offlineBucketCount`      | Buckets currently offline.                 | Gauge |
+| `tableCount`              | Total tables.                              | Gauge |
+| `bucketCount`             | Total buckets.                             | Gauge |
+| `replicasToDeleteCount`   | Replicas scheduled for deletion.           | Gauge |
 
 ---
 
@@ -101,72 +101,72 @@ See **[Metric Reporters](metric-reporters.md)** for setup details.
 ### Memory Metrics 
 #### Scope: Coordinator / TabletServer
 
-| Infix               | Metric               | Description                              | Type  |
-|---------------------|----------------------|------------------------------------------|-------|
-| `status_JVM_memory` | `heap_used`          | Heap used (bytes).                       | Gauge |
-|                     | `heap_committed`     | Heap committed (bytes).                  | Gauge |
-|                     | `heap_max`           | Max heap available (bytes).              | Gauge |
-|                     | `nonHeap_used`       | Non-heap used (bytes).                   | Gauge |
-|                     | `nonHeap_committed`  | Non-heap committed (bytes).              | Gauge |
-|                     | `nonHeap_max`        | Max non-heap (bytes).                    | Gauge |
-|                     | `metaspace_used`     | Metaspace used (bytes).                  | Gauge |
-|                     | `metaspace_committed`| Metaspace committed (bytes).             | Gauge |
-|                     | `metaspace_max`      | Metaspace max (bytes).                   | Gauge |
-|                     | `direct_count`       | Direct buffer count.                     | Gauge |
-|                     | `direct_memoryUsed`  | Direct buffer memory (bytes).            | Gauge |
-|                     | `direct_totalCapacity`| Direct buffer capacity (bytes).         | Gauge |
-|                     | `mapped_count`       | Mapped buffer count.                     | Gauge |
-|                     | `mapped_memoryUsed`  | Mapped buffer memory (bytes).            | Gauge |
-|                     | `mapped_totalCapacity`| Mapped buffer capacity (bytes).         | Gauge |
+| Infix               | Metric                 | Description                     | Type  |
+|---------------------|------------------------|---------------------------------|-------|
+| `status_JVM_memory` | `heap_used`            | Heap used (bytes).              | Gauge |
+|                     | `heap_committed`       | Heap committed (bytes).         | Gauge |
+|                     | `heap_max`             | Max heap available (bytes).     | Gauge |
+|                     | `nonHeap_used`         | Non-heap used (bytes).          | Gauge |
+|                     | `nonHeap_committed`    | Non-heap committed (bytes).     | Gauge |
+|                     | `nonHeap_max`          | Max non-heap (bytes).           | Gauge |
+|                     | `metaspace_used`       | Metaspace used (bytes).         | Gauge |
+|                     | `metaspace_committed`  | Metaspace committed (bytes).    | Gauge |
+|                     | `metaspace_max`        | Metaspace max (bytes).          | Gauge |
+|                     | `direct_count`         | Direct buffer count.            | Gauge |
+|                     | `direct_memoryUsed`    | Direct buffer memory (bytes).   | Gauge |
+|                     | `direct_totalCapacity` | Direct buffer capacity (bytes). | Gauge |
+|                     | `mapped_count`         | Mapped buffer count.            | Gauge |
+|                     | `mapped_memoryUsed`    | Mapped buffer memory (bytes).   | Gauge |
+|                     | `mapped_totalCapacity` | Mapped buffer capacity (bytes). | Gauge |
 
 ---
 
 ### Thread Metrics 
 #### Scope: Coordinator / TabletServer
 
-| Infix               | Metric | Description  | Type  |
-|---------------------|--------|--------------|-------|
-| `status_JVM_threads`| `count`| Live threads | Gauge |
+| Infix                | Metric  | Description  | Type  |
+|----------------------|---------|--------------|-------|
+| `status_JVM_threads` | `count` | Live threads | Gauge |
 
 ---
 
 ### Garbage Collection Metrics 
 #### Scope: Coordinator / TabletServer
 
-| Infix           | Metric                         | Description           | Type  |
-|-----------------|--------------------------------|-----------------------|-------|
-| `status_JVM_GC` | `<collector\|all>_count`       | Total GC collections. | Gauge |
-|                 | `<collector\|all>_time`        | Total GC time.        | Gauge |
-|                 | `<collector\|all>_timeMsPerSecond` | GC time (ms) per s. | Gauge |
+| Infix           | Metric                             | Description           | Type  |
+|-----------------|------------------------------------|-----------------------|-------|
+| `status_JVM_GC` | `<collector\|all>_count`           | Total GC collections. | Gauge |
+|                 | `<collector\|all>_time`            | Total GC time.        | Gauge |
+|                 | `<collector\|all>_timeMsPerSecond` | GC time (ms) per s.   | Gauge |
 
 ---
 
 ### Netty Metrics (
 #### Scope: Coordinator / TabletServer / Client
 
-| Infix  | Metric                       | Description                        | Type  |
-|--------|------------------------------|------------------------------------|-------|
-| `netty`| `usedDirectMemory`           | Direct memory used by Netty.       | Gauge |
-|        | `numDirectArenas`            | Number of direct arenas.           | Gauge |
-|        | `numAllocationsPerSecond`    | Allocations per second.            | Meter |
-|        | `numHugeAllocationsPerSecond`| Huge allocations per second.       | Meter |
+| Infix   | Metric                        | Description                  | Type  |
+|---------|-------------------------------|------------------------------|-------|
+| `netty` | `usedDirectMemory`            | Direct memory used by Netty. | Gauge |
+|         | `numDirectArenas`             | Number of direct arenas.     | Gauge |
+|         | `numAllocationsPerSecond`     | Allocations per second.      | Meter |
+|         | `numHugeAllocationsPerSecond` | Huge allocations per second. | Meter |
 
 ---
 
 ### TabletServer Metrics
 
-| Metric                                     | Description                                               | Type  |
-|--------------------------------------------|-----------------------------------------------------------|-------|
-| `replicationBytesInPerSecond`              | Bytes written to follower replicas per second.           | Meter |
-| `replicationBytesOutPerSecond`             | Bytes read from leader replica per second.               | Meter |
-| `leaderCount`                              | Leader replicas.                                          | Gauge |
-| `replicaCount`                             | Total replicas.                                           | Gauge |
-| `writerIdCount`                            | Writer IDs.                                               | Gauge |
-| `delayedWriteCount`                        | Delayed writes.                                           | Gauge |
-| `delayedFetchCount`                        | Delayed fetch-log operations.                             | Gauge |
-| `delayedWriteExpiresPerSecond`             | Expired delayed writes per second.                        | Meter |
-| `delayedFetchFromFollowerExpiresPerSecond` | Expired delayed fetches (follower) per second.           | Meter |
-| `delayedFetchFromClientExpiresPerSecond`   | Expired delayed fetches (client) per second.             | Meter |
+| Metric                                     | Description                                    | Type  |
+|--------------------------------------------|------------------------------------------------|-------|
+| `replicationBytesInPerSecond`              | Bytes written to follower replicas per second. | Meter |
+| `replicationBytesOutPerSecond`             | Bytes read from leader replica per second.     | Meter |
+| `leaderCount`                              | Leader replicas.                               | Gauge |
+| `replicaCount`                             | Total replicas.                                | Gauge |
+| `writerIdCount`                            | Writer IDs.                                    | Gauge |
+| `delayedWriteCount`                        | Delayed writes.                                | Gauge |
+| `delayedFetchCount`                        | Delayed fetch-log operations.                  | Gauge |
+| `delayedWriteExpiresPerSecond`             | Expired delayed writes per second.             | Meter |
+| `delayedFetchFromFollowerExpiresPerSecond` | Expired delayed fetches (follower) per second. | Meter |
+| `delayedFetchFromClientExpiresPerSecond`   | Expired delayed fetches (client) per second.   | Meter |
 
 ---
 
@@ -174,8 +174,8 @@ See **[Metric Reporters](metric-reporters.md)** for setup details.
 
 #### Coordinator
 
-| Infix   | Metric           | Description          | Type  |
-|---------|------------------|----------------------|-------|
+| Infix     | Metric             | Description         | Type  |
+|-----------|--------------------|---------------------|-------|
 | `request` | `requestQueueSize` | Network queue size. | Gauge |
 
 #### TabletServer
@@ -196,19 +196,19 @@ See **[Metric Reporters](metric-reporters.md)** for setup details.
 
 #### Client
 
-| Infix   | Metric                | Description                   | Type  |
-|---------|-----------------------|-------------------------------|-------|
-| `request` | `bytesInPerSecond`  | Bytes received per second.    | Gauge |
-|          | `bytesOutPerSecond`  | Bytes sent per second.        | Meter |
-|          | `requestsPerSecond`  | Requests per second.          | Meter |
-|          | `responsesPerSecond` | Responses per second.         | Meter |
-|          | `requestLatencyMs`   | Request latency.              | Gauge |
-|          | `requestsInFlight`   | In-flight requests.           | Gauge |
+| Infix     | Metric               | Description                | Type  |
+|-----------|----------------------|----------------------------|-------|
+| `request` | `bytesInPerSecond`   | Bytes received per second. | Gauge |
+|           | `bytesOutPerSecond`  | Bytes sent per second.     | Meter |
+|           | `requestsPerSecond`  | Requests per second.       | Meter |
+|           | `responsesPerSecond` | Responses per second.      | Meter |
+|           | `requestLatencyMs`   | Request latency.           | Gauge |
+|           | `requestsInFlight`   | In-flight requests.        | Gauge |
 
 ---
 
 ### Table Metrics 
-#### Scope: TabletServer, `table` infix
+#### Scope: `tabletserver`, Infix: `table`
 
 | Metric                                    | Description                                   | Type  |
 |-------------------------------------------|-----------------------------------------------|-------|
@@ -236,7 +236,7 @@ See **[Metric Reporters](metric-reporters.md)** for setup details.
 ---
 
 ### Bucket Metrics 
-#### Scope:`table_bucket` infix
+#### Scope:`tabletserver` Infix: `table_bucket`
 
 | Metric                     | Description                                | Type  |
 |----------------------------|--------------------------------------------|-------|
@@ -249,7 +249,7 @@ See **[Metric Reporters](metric-reporters.md)** for setup details.
 | `failedIsrUpdatesPerSecond`| Failed ISR updates per second.             | Meter |
 
 #### Bucket Log Metrics 
-#### Scope: `table_bucket_log` infix
+#### Scope: `tabletserver` Infix: `table_bucket_log`
 
 | Metric              | Description                           | Type      |
 |---------------------|---------------------------------------|-----------|
@@ -260,16 +260,16 @@ See **[Metric Reporters](metric-reporters.md)** for setup details.
 | `flushLatencyMs`    | Log-flush latency (ms).               | Histogram |
 
 #### Remote-Log Metrics 
-#### Scope: `table_bucket_remoteLog` infix
+#### Scope: `tabletserver`, Infix: `table_bucket_remoteLog`
 
-| Metric       | Description                         | Type  |
-|--------------|-------------------------------------|-------|
-| `numSegments`| Segments in remote storage.         | Gauge |
-| `endOffset`  | End offset in remote storage.       | Gauge |
-| `size`       | Total remote log size (bytes).      | Gauge |
+| Metric        | Description                    | Type  |
+|---------------|--------------------------------|-------|
+| `numSegments` | Segments in remote storage.    | Gauge |
+| `endOffset`   | End offset in remote storage.  | Gauge |
+| `size`        | Total remote log size (bytes). | Gauge |
 
 #### KV Buffer Metrics 
-#### Scope: `table_bucket_kv` infix
+#### Scope: `tabletserver`, Infix: `table_bucket_kv`
 
 | Metric                                         | Description                                            | Type      |
 |------------------------------------------------|--------------------------------------------------------|-----------|
@@ -279,7 +279,7 @@ See **[Metric Reporters](metric-reporters.md)** for setup details.
 | `preWriteBufferTruncateAsErrorPerSecond`       | Buffer truncations due to errors per second.           | Meter     |
 
 #### KV Snapshot Metrics 
-#### Scope: `table_bucket_kv_snapshot` infix
+#### Scope: `tabletserver`, Infix: `table_bucket_kv_snapshot`
 
 | Metric               | Description                         | Type  |
 |----------------------|-------------------------------------|-------|
@@ -300,12 +300,12 @@ Fluss implements [FLIP-33](https://cwiki.apache.org/confluence/display/FLINK/FLI
 
 ### Sink Metrics
 
-| Metric                 | Level | Description                 | Type    |
-|------------------------|-------|-----------------------------|---------|
-| `numBytesOut`          | Table | Total output bytes.         | Counter |
-| `numBytesOutPerSecond` | Table | Output bytes per second.    | Meter   |
-| `numRecordsOut`        | Table | Total output records.       | Counter |
-| `numRecordsOutPerSecond`| Table | Output records per second.  | Meter   |
+| Metric                   | Level | Description                | Type    |
+|--------------------------|-------|----------------------------|---------|
+| `numBytesOut`            | Table | Total output bytes.        | Counter |
+| `numBytesOutPerSecond`   | Table | Output bytes per second.   | Meter   |
+| `numRecordsOut`          | Table | Total output records.      | Counter |
+| `numRecordsOutPerSecond` | Table | Output records per second. | Meter   |
 
 ---
 
