@@ -219,6 +219,8 @@ public class FlussSinkBuilder<InputT> {
 
     private void validateConfiguration() {
         checkNotNull(bootstrapServers, "BootstrapServers is required but not provided.");
+        checkNotNull(serializationSchema, "SerializationSchema is required but not provided.");
+        checkNotNull(tableRowType, "Table row type is required but not provided.");
 
         checkNotNull(database, "Database is required but not provided.");
         checkArgument(!database.isEmpty(), "Database cannot be empty.");
