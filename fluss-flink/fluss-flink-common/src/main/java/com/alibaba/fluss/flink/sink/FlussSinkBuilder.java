@@ -50,11 +50,11 @@ import static com.alibaba.fluss.utils.Preconditions.checkNotNull;
  *
  * <pre>{@code
  * FlinkSink<Order> sink = new FlussSinkBuilder<Order>()
- *     .setBootstrapServers("localhost:9123")
- *     .setTablePath("mydb", "orders")
- *     .setPojoClass(Order.class)
- *     .useUpsert()
- *     .build();
+ *          .setBootstrapServers(bootstrapServers)
+ *          .setTable(tableName)
+ *          .setRowType(orderRowType)
+ *          .setSerializationSchema(new OrderSerializationSchema())
+ *          .build())
  * }</pre>
  *
  * @param <InputT>> The input type of records to be written to Fluss
@@ -67,7 +67,7 @@ public class FlussSinkBuilder<InputT> {
     private String tableName;
     private RowType tableRowType;
     private boolean ignoreDelete;
-    private int[] targetColumnIndexes;
+    private int[] partialUpdateColumns;
     private boolean isUpsert;
     private final Map<String, String> configOptions = new HashMap<>();
     private FlussSerializationSchema<InputT> serializationSchema;
@@ -105,8 +105,8 @@ public class FlussSinkBuilder<InputT> {
     }
 
     /** Set target column indexes. */
-    public FlussSinkBuilder<InputT> setTargetColumnIndexes(int[] targetColumnIndexes) {
-        this.targetColumnIndexes = targetColumnIndexes;
+    public FlussSinkBuilder<InputT> setPartialUpdateColumns(int[] partialUpdateColumns) {
+        this.partialUpdateColumns = partialUpdateColumns;
         return this;
     }
 
@@ -185,6 +185,10 @@ public class FlussSinkBuilder<InputT> {
         List<String> bucketKeys = tableInfo.getBucketKeys();
         List<String> partitionKeys = tableInfo.getPartitionKeys();
 
+        if (!isUpsert && partialUpdateColumns != null) {
+            LOG.error("Partial updates are not supported in append mode.");
+        }
+
         if (isUpsert) {
             LOG.info("Initializing Fluss upsert sink writer ...");
             writerBuilder =
@@ -192,7 +196,7 @@ public class FlussSinkBuilder<InputT> {
                             tablePath,
                             flussConfig,
                             tableRowType,
-                            targetColumnIndexes,
+                            partialUpdateColumns,
                             numBucket,
                             bucketKeys,
                             partitionKeys,
