@@ -215,13 +215,13 @@ class FlussSinkBuilderTest {
     @Test
     void testTargetColumnIndexes() throws Exception {
         // Default should be null
-        int[] targetColumnIndexes = getFieldValue(builder, "targetColumnIndexes");
+        int[] targetColumnIndexes = getFieldValue(builder, "partialUpdateColumns");
         assertThat(targetColumnIndexes).isNull();
 
         // Test setting indexes
         int[] indexes = {0, 2, 3};
         builder.setPartialUpdateColumns(indexes);
-        targetColumnIndexes = getFieldValue(builder, "targetColumnIndexes");
+        targetColumnIndexes = getFieldValue(builder, "partialUpdateColumns");
         assertThat(targetColumnIndexes).isEqualTo(indexes);
     }
 
