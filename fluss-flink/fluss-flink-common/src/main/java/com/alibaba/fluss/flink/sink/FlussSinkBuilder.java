@@ -185,10 +185,6 @@ public class FlussSinkBuilder<InputT> {
         List<String> bucketKeys = tableInfo.getBucketKeys();
         List<String> partitionKeys = tableInfo.getPartitionKeys();
 
-        if (!isUpsert && partialUpdateColumns != null) {
-            LOG.error("Partial updates are not supported in append mode.");
-        }
-
         if (isUpsert) {
             LOG.info("Initializing Fluss upsert sink writer ...");
             writerBuilder =
@@ -231,5 +227,9 @@ public class FlussSinkBuilder<InputT> {
 
         checkNotNull(tableName, "Table name is required but not provided.");
         checkArgument(!tableName.isEmpty(), "Table name cannot be empty.");
+
+        checkArgument(
+                isUpsert && partialUpdateColumns == null,
+                "Partial updates are not supported in append mode.");
     }
 }
