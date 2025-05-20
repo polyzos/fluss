@@ -220,7 +220,7 @@ class FlussSinkBuilderTest {
 
         // Test setting indexes
         int[] indexes = {0, 2, 3};
-        builder.setTargetColumnIndexes(indexes);
+        builder.setPartialUpdateColumns(indexes);
         targetColumnIndexes = getFieldValue(builder, "targetColumnIndexes");
         assertThat(targetColumnIndexes).isEqualTo(indexes);
     }
@@ -259,7 +259,7 @@ class FlussSinkBuilderTest {
                         .setTable(tableName)
                         .setRowType(orderRowType)
                         .setIgnoreDelete(true)
-                        .setTargetColumnIndexes(new int[] {0, 1})
+                        .setPartialUpdateColumns(new int[] {0, 1})
                         .useUpsert()
                         .setOption("key1", "value1")
                         .setOptions(new HashMap<>())
