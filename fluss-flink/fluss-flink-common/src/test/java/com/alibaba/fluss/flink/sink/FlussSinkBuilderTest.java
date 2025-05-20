@@ -250,6 +250,22 @@ class FlussSinkBuilderTest {
     }
 
     @Test
+    void testPartialUpdateColumnsNotAllowedInAppendMode() {
+        FlussSinkBuilder<Order> builder = new FlussSinkBuilder<>();
+        builder.setBootstrapServers("localhost:9123")
+                .setDatabase("testDb")
+                .setTable("testTable")
+                .setRowType(orderRowType)
+                .setSerializationSchema(new OrderSerializationSchema())
+                .setPartialUpdateColumns(new int[] {0, 1, 2})
+                .useAppend();
+
+        assertThatThrownBy(builder::build)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Partial updates are not supported in append mode.");
+    }
+
+    @Test
     void testFluentChaining() {
         // Test that all methods can be chained
         FlussSinkBuilder<Order> chainedBuilder =
