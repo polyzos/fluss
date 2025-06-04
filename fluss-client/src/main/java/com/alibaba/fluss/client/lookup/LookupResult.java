@@ -17,6 +17,7 @@
 package com.alibaba.fluss.client.lookup;
 
 import com.alibaba.fluss.annotation.PublicEvolving;
+import com.alibaba.fluss.client.row.RowSerializer;
 import com.alibaba.fluss.row.InternalRow;
 
 import javax.annotation.Nullable;
@@ -28,29 +29,101 @@ import java.util.Objects;
 /**
  * The result of {@link Lookuper#lookup(InternalRow)}.
  *
+ * @param <T> The type of data returned. Can be {@link InternalRow} or a POJO type.
  * @since 0.1
  */
 @PublicEvolving
-public final class LookupResult {
-    private final List<InternalRow> rowList;
+public final class LookupResult<T> {
+    private final List<T> rowList;
+    private final @Nullable RowSerializer<T> rowSerializer;
 
-    public LookupResult(@Nullable InternalRow row) {
-        this(row == null ? Collections.emptyList() : Collections.singletonList(row));
+    /**
+     * Creates a LookupResult with a single row or null.
+     *
+     * @param row The row, can be null
+     */
+    public LookupResult(@Nullable T row) {
+        this(row == null ? Collections.emptyList() : Collections.singletonList(row), null);
     }
 
-    public LookupResult(List<InternalRow> rowList) {
+    /**
+     * Creates a LookupResult with a list of rows.
+     *
+     * @param rowList The list of rows
+     */
+    public LookupResult(List<T> rowList) {
+        this(rowList, null);
+    }
+
+    /**
+     * Creates a LookupResult with a list of InternalRows and a converter.
+     *
+     * @param rowList The list of InternalRows
+     * @param rowSerializer The rowSerializer to use for converting InternalRows to POJOs
+     */
+    @SuppressWarnings("unchecked")
+    private LookupResult(List<T> rowList, @Nullable RowSerializer<T> rowSerializer) {
         this.rowList = rowList;
+        this.rowSerializer = rowSerializer;
     }
 
-    public List<InternalRow> getRowList() {
+    /**
+     * Creates a LookupResult with InternalRows that can be converted to POJOs.
+     *
+     * @param rowList The list of InternalRows
+     * @param converter The converter to use for converting InternalRows to POJOs
+     * @param <P> The POJO type
+     * @return A new LookupResult that can convert InternalRows to POJOs
+     */
+    @SuppressWarnings("unchecked")
+    public static <P> LookupResult<P> withRowSerializer(
+            List<InternalRow> rowList, RowSerializer<P> converter) {
+        return new LookupResult<>((List<P>) (Object) rowList, converter);
+    }
+
+    /**
+     * Creates a LookupResult with InternalRows that can be converted to POJOs.
+     *
+     * @param row The InternalRow, can be null
+     * @param rowSerializer The rowSerializer to use for converting InternalRows to POJOs
+     * @param <P> The POJO type
+     * @return A new LookupResult that can convert InternalRows to POJOs
+     */
+    @SuppressWarnings("unchecked")
+    public static <P> LookupResult<P> withRowSerializer(
+            @Nullable InternalRow row, RowSerializer<P> rowSerializer) {
+        List<InternalRow> rowList =
+                row == null ? Collections.emptyList() : Collections.singletonList(row);
+        return withRowSerializer(rowList, rowSerializer);
+    }
+
+    /**
+     * Returns the list of rows.
+     *
+     * @return The list of rows
+     */
+    public List<T> getRowList() {
         return rowList;
     }
 
-    public @Nullable InternalRow getSingletonRow() {
+    /**
+     * Returns a single row or null if there are no rows. Throws an exception if there are multiple
+     * rows.
+     *
+     * @return The single row or null
+     * @throws IllegalStateException if there are multiple rows
+     */
+    @SuppressWarnings("unchecked")
+    public @Nullable T getSingletonRow() {
         if (rowList.isEmpty()) {
             return null;
         } else if (rowList.size() == 1) {
-            return rowList.get(0);
+            T row = rowList.get(0);
+            // If we have a converter and the row is an InternalRow, convert it
+            if (rowSerializer != null && row instanceof InternalRow) {
+                return rowSerializer.fromInternalRow((InternalRow) row);
+            }
+            return row;
         } else {
             throw new IllegalStateException(
                     "Expecting exactly one row, but got: " + rowList.size());

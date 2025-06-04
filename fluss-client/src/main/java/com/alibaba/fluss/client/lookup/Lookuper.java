@@ -17,6 +17,7 @@
 package com.alibaba.fluss.client.lookup;
 
 import com.alibaba.fluss.annotation.PublicEvolving;
+import com.alibaba.fluss.client.row.RowSerializer;
 import com.alibaba.fluss.row.InternalRow;
 
 import java.util.concurrent.CompletableFuture;
@@ -24,10 +25,11 @@ import java.util.concurrent.CompletableFuture;
 /**
  * The lookup-er is used to lookup row of a primary key table by primary key or prefix key.
  *
+ * @param <T> The type of data returned. Can be {@link InternalRow} or a POJO type.
  * @since 0.6
  */
 @PublicEvolving
-public interface Lookuper {
+public interface Lookuper<T> {
 
     /**
      * Lookups certain row from the given lookup key.
@@ -39,5 +41,15 @@ public interface Lookuper {
      * @param lookupKey the lookup key.
      * @return the result of lookup.
      */
-    CompletableFuture<LookupResult> lookup(InternalRow lookupKey);
+    CompletableFuture<LookupResult<T>> lookup(InternalRow lookupKey);
+
+    /**
+     * Creates a new Lookuper that returns POJOs of type P by converting InternalRows using the
+     * provided converter.
+     *
+     * @param rowSerializer The rowSerializer to use for converting InternalRows to POJOs
+     * @param <P> The POJO type
+     * @return A new Lookuper that returns POJOs
+     */
+    <P> Lookuper<P> withRowSerializer(RowSerializer<P> rowSerializer);
 }

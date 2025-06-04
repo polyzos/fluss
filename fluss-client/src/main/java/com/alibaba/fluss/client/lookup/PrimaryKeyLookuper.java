@@ -18,6 +18,7 @@ package com.alibaba.fluss.client.lookup;
 
 import com.alibaba.fluss.bucketing.BucketingFunction;
 import com.alibaba.fluss.client.metadata.MetadataUpdater;
+import com.alibaba.fluss.client.row.RowSerializer;
 import com.alibaba.fluss.client.table.getter.PartitionGetter;
 import com.alibaba.fluss.metadata.DataLakeFormat;
 import com.alibaba.fluss.metadata.TableBucket;
@@ -37,7 +38,7 @@ import static com.alibaba.fluss.client.utils.ClientUtils.getPartitionId;
 import static com.alibaba.fluss.utils.Preconditions.checkArgument;
 
 /** An implementation of {@link Lookuper} that lookups by primary key. */
-class PrimaryKeyLookuper implements Lookuper {
+class PrimaryKeyLookuper implements Lookuper<InternalRow> {
 
     private final TableInfo tableInfo;
 
@@ -98,7 +99,7 @@ class PrimaryKeyLookuper implements Lookuper {
     }
 
     @Override
-    public CompletableFuture<LookupResult> lookup(InternalRow lookupKey) {
+    public CompletableFuture<LookupResult<InternalRow>> lookup(InternalRow lookupKey) {
         // encoding the key row using a compacted way consisted with how the key is encoded when put
         // a row
         byte[] pkBytes = primaryKeyEncoder.encodeKey(lookupKey);
@@ -124,7 +125,37 @@ class PrimaryKeyLookuper implements Lookuper {
                                     valueBytes == null
                                             ? null
                                             : kvValueDecoder.decodeValue(valueBytes).row;
-                            return new LookupResult(row);
+                            return new LookupResult<>(row);
                         });
+    }
+
+    @Override
+    public <P> Lookuper<P> withRowSerializer(RowSerializer<P> rowSerializer) {
+        return new LookuperWithSerializer<>(this, rowSerializer);
+    }
+
+    /** A wrapper class that converts between InternalRow and POJOs using a RowConverter. */
+    private static class LookuperWithSerializer<P> implements Lookuper<P> {
+        private final Lookuper<InternalRow> delegate;
+        private final RowSerializer<P> rowSerializer;
+
+        LookuperWithSerializer(Lookuper<InternalRow> delegate, RowSerializer<P> rowSerializer) {
+            this.delegate = delegate;
+            this.rowSerializer = rowSerializer;
+        }
+
+        @Override
+        public CompletableFuture<LookupResult<P>> lookup(InternalRow lookupKey) {
+            return delegate.lookup(lookupKey)
+                    .thenApply(
+                            result ->
+                                    LookupResult.withRowSerializer(
+                                            result.getRowList(), rowSerializer));
+        }
+
+        @Override
+        public <Q> Lookuper<Q> withRowSerializer(RowSerializer<Q> newSerializer) {
+            return new LookuperWithSerializer<>(delegate, newSerializer);
+        }
     }
 }
