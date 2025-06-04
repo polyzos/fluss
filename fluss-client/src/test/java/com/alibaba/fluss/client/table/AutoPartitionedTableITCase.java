@@ -69,7 +69,7 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
         Map<String, Long> partitionIdByNames =
                 FLUSS_CLUSTER_EXTENSION.waitUntilPartitionAllReady(DATA1_TABLE_PATH_PK);
         Table table = conn.getTable(DATA1_TABLE_PATH_PK);
-        UpsertWriter upsertWriter = table.newUpsert().createWriter();
+        UpsertWriter<InternalRow> upsertWriter = table.newUpsert().createWriter();
         int recordsPerPartition = 5;
         // now, put some data to the partitions
         Map<Long, List<InternalRow>> expectPutRows = new HashMap<>();
@@ -84,7 +84,7 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
         }
         upsertWriter.flush();
 
-        Lookuper lookuper = table.newLookup().createLookuper();
+        Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
         // now, let's lookup the written data by look up
         for (String partition : partitionIdByNames.keySet()) {
             for (int i = 0; i < recordsPerPartition; i++) {
@@ -141,7 +141,8 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
                     i == 0
                             ? Arrays.asList("b", "a", "c")
                             : i == 1 ? Arrays.asList("a", "b", "c") : Arrays.asList("a", "c", "b");
-            Lookuper prefixLookuper = table.newLookup().lookupBy(lookupColumns).createLookuper();
+            Lookuper<InternalRow> prefixLookuper =
+                    table.newLookup().lookupBy(lookupColumns).createLookuper();
             for (String partition : partitionIdByNames.keySet()) {
                 Object[] lookupRow =
                         i == 0
@@ -149,8 +150,9 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
                                 : i == 1
                                         ? new Object[] {1, partition, 1L}
                                         : new Object[] {1, 1L, partition};
-                CompletableFuture<LookupResult> result = prefixLookuper.lookup(row(lookupRow));
-                LookupResult prefixLookupResult = result.get();
+                CompletableFuture<LookupResult<InternalRow>> result =
+                        prefixLookuper.lookup(row(lookupRow));
+                LookupResult<InternalRow> prefixLookupResult = result.get();
                 assertThat(prefixLookupResult).isNotNull();
                 List<InternalRow> rowList = prefixLookupResult.getRowList();
                 assertThat(rowList.size()).isEqualTo(1);
@@ -200,7 +202,7 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
         Map<String, Long> partitionIdByNames =
                 FLUSS_CLUSTER_EXTENSION.waitUntilPartitionAllReady(DATA1_TABLE_PATH);
         Table table = conn.getTable(DATA1_TABLE_PATH);
-        AppendWriter appendWriter = table.newAppend().createWriter();
+        AppendWriter<InternalRow> appendWriter = table.newAppend().createWriter();
         int recordsPerPartition = 5;
         Map<Long, List<InternalRow>> expectPartitionAppendRows = new HashMap<>();
         for (String partition : partitionIdByNames.keySet()) {
@@ -231,7 +233,7 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
                 writeRows(table, partitionIdByNames);
 
         // then, let's verify the logs
-        try (LogScanner logScanner = table.newScan().createLogScanner()) {
+        try (LogScanner<InternalRow> logScanner = table.newScan().createLogScanner()) {
             for (Long partitionId : expectPartitionAppendRows.keySet()) {
                 logScanner.subscribeFromBeginning(partitionId, 0);
             }
@@ -259,7 +261,7 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
 
     private Map<Long, List<InternalRow>> writeRows(
             Table table, Map<String, Long> partitionIdByNames) {
-        AppendWriter appendWriter = table.newAppend().createWriter();
+        AppendWriter<InternalRow> appendWriter = table.newAppend().createWriter();
         int recordsPerPartition = 5;
         Map<Long, List<InternalRow>> expectPartitionAppendRows = new HashMap<>();
         for (String partition : partitionIdByNames.keySet()) {
@@ -276,14 +278,14 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
     }
 
     private Map<Long, List<InternalRow>> pollRecords(
-            LogScanner logScanner, int expectRecordsCount) {
+            LogScanner<InternalRow> logScanner, int expectRecordsCount) {
         int scanRecordCount = 0;
         Map<Long, List<InternalRow>> actualRows = new HashMap<>();
         while (scanRecordCount < expectRecordsCount) {
-            ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+            ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
             for (TableBucket scanBucket : scanRecords.buckets()) {
-                List<ScanRecord> records = scanRecords.records(scanBucket);
-                for (ScanRecord scanRecord : records) {
+                List<ScanRecord<InternalRow>> records = scanRecords.records(scanBucket);
+                for (ScanRecord<InternalRow> scanRecord : records) {
                     actualRows
                             .computeIfAbsent(scanBucket.getPartitionId(), k -> new ArrayList<>())
                             .add(scanRecord.getRow());
@@ -298,7 +300,7 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
     void testOperateNotExistPartitionShouldThrowException() throws Exception {
         Schema schema = createPartitionedTable(DATA1_TABLE_PATH_PK, true);
         Table table = conn.getTable(DATA1_TABLE_PATH_PK);
-        Lookuper lookuper = table.newLookup().createLookuper();
+        Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
 
         // test get for a not exist partition
         assertThatThrownBy(() -> lookuper.lookup(row(1, "notExistPartition")).get())
@@ -309,7 +311,7 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
                         PhysicalTablePath.of(DATA1_TABLE_PATH_PK, "notExistPartition"));
 
         // test write to not exist partition
-        UpsertWriter upsertWriter = table.newUpsert().createWriter();
+        UpsertWriter<InternalRow> upsertWriter = table.newUpsert().createWriter();
         GenericRow row = row(1, "a", "notExistPartition");
         assertThatThrownBy(() -> upsertWriter.upsert(row).get())
                 .cause()
@@ -319,7 +321,7 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
                         PhysicalTablePath.of(DATA1_TABLE_PATH_PK, "notExistPartition"));
 
         // test scan a not exist partition's log
-        LogScanner logScanner = table.newScan().createLogScanner();
+        LogScanner<InternalRow> logScanner = table.newScan().createLogScanner();
         assertThatThrownBy(() -> logScanner.subscribe(100L, 0, 0))
                 .cause()
                 .isInstanceOf(PartitionNotExistException.class)
@@ -354,7 +356,7 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
                 .containsExactlyInAnyOrderElementsOf(expectedPartitions);
 
         Table table = conn.getTable(tablePath);
-        AppendWriter appendWriter = table.newAppend().createWriter();
+        AppendWriter<InternalRow> appendWriter = table.newAppend().createWriter();
         int recordsPerPartition = 5;
         Map<Long, List<InternalRow>> expectPartitionAppendRows = new HashMap<>();
         for (String partition : partitionIdByNames.keySet()) {

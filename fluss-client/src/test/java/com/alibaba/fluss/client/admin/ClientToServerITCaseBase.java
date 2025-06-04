@@ -120,15 +120,15 @@ public abstract class ClientToServerITCaseBase {
         return conf;
     }
 
-    protected static LogScanner createLogScanner(Table table) {
+    protected static LogScanner<InternalRow> createLogScanner(Table table) {
         return table.newScan().createLogScanner();
     }
 
-    protected static LogScanner createLogScanner(Table table, int[] projectFields) {
+    protected static LogScanner<InternalRow> createLogScanner(Table table, int[] projectFields) {
         return table.newScan().project(projectFields).createLogScanner();
     }
 
-    protected static void subscribeFromBeginning(LogScanner logScanner, Table table) {
+    protected static void subscribeFromBeginning(LogScanner<?> logScanner, Table table) {
         int bucketCount = table.getTableInfo().getNumBuckets();
         for (int i = 0; i < bucketCount; i++) {
             logScanner.subscribeFromBeginning(i);
@@ -140,7 +140,7 @@ public abstract class ClientToServerITCaseBase {
             @Nullable String partitionName,
             @Nullable Long partitionId,
             Table table,
-            LogScanner logScanner,
+            LogScanner<?> logScanner,
             Admin admin,
             long timestamp)
             throws Exception {
@@ -173,7 +173,7 @@ public abstract class ClientToServerITCaseBase {
             @Nullable String partitionName,
             @Nullable Long partitionId,
             Table table,
-            LogScanner logScanner,
+            LogScanner<?> logScanner,
             Admin admin)
             throws Exception {
         Map<Integer, Long> offsetsMap =
@@ -202,15 +202,15 @@ public abstract class ClientToServerITCaseBase {
                 expectPartitionsRows.values().stream().map(List::size).reduce(0, Integer::sum);
         int scanRecordCount = 0;
         Map<Long, List<InternalRow>> actualRows = new HashMap<>();
-        try (LogScanner logScanner = table.newScan().createLogScanner()) {
+        try (LogScanner<InternalRow> logScanner = table.newScan().createLogScanner()) {
             for (Long partitionId : expectPartitionsRows.keySet()) {
                 logScanner.subscribeFromBeginning(partitionId, 0);
             }
             while (scanRecordCount < totalRecords) {
-                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
                 for (TableBucket scanBucket : scanRecords.buckets()) {
-                    List<ScanRecord> records = scanRecords.records(scanBucket);
-                    for (ScanRecord scanRecord : records) {
+                    List<ScanRecord<InternalRow>> records = scanRecords.records(scanBucket);
+                    for (ScanRecord<InternalRow> scanRecord : records) {
                         actualRows
                                 .computeIfAbsent(
                                         scanBucket.getPartitionId(), k -> new ArrayList<>())
@@ -254,18 +254,19 @@ public abstract class ClientToServerITCaseBase {
         Schema schema = table.getTableInfo().getSchema();
         // put data.
         InternalRow row = row(fields);
-        UpsertWriter upsertWriter = table.newUpsert().createWriter();
+        UpsertWriter<InternalRow> upsertWriter = table.newUpsert().createWriter();
         // put data.
         upsertWriter.upsert(row);
         upsertWriter.flush();
         // lookup this key.
-        Lookuper lookuper = table.newLookup().createLookuper();
+        Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
         ProjectedRow keyRow = ProjectedRow.from(schema.getPrimaryKeyIndexes());
         keyRow.replaceRow(row);
         assertThatRow(lookupRow(lookuper, keyRow)).withSchema(schema.getRowType()).isEqualTo(row);
     }
 
-    protected static InternalRow lookupRow(Lookuper lookuper, InternalRow keyRow) throws Exception {
+    protected static InternalRow lookupRow(Lookuper<InternalRow> lookuper, InternalRow keyRow)
+            throws Exception {
         // lookup this key.
         return lookuper.lookup(keyRow).get().getSingletonRow();
     }

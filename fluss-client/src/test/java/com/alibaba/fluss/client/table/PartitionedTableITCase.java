@@ -62,7 +62,7 @@ class PartitionedTableITCase extends ClientToServerITCaseBase {
         assertThat(partitionInfos.size()).isEqualTo(3);
 
         Table table = conn.getTable(tablePath);
-        UpsertWriter upsertWriter = table.newUpsert().createWriter();
+        UpsertWriter<InternalRow> upsertWriter = table.newUpsert().createWriter();
         int recordsPerPartition = 5;
         // now, put some data to the partitions
         Map<Long, List<InternalRow>> expectPutRows = new HashMap<>();
@@ -78,7 +78,7 @@ class PartitionedTableITCase extends ClientToServerITCaseBase {
 
         upsertWriter.flush();
 
-        Lookuper lookuper = table.newLookup().createLookuper();
+        Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
         // now, let's lookup the written data by look up.
         for (PartitionInfo partitionInfo : partitionInfos) {
             String partitionName = partitionInfo.getPartitionName();
@@ -110,7 +110,7 @@ class PartitionedTableITCase extends ClientToServerITCaseBase {
         assertThat(partitionInfos.size()).isEqualTo(3);
 
         Table table = conn.getTable(tablePath);
-        AppendWriter appendWriter = table.newAppend().createWriter();
+        AppendWriter<InternalRow> appendWriter = table.newAppend().createWriter();
         int recordsPerPartition = 5;
         Map<Long, List<InternalRow>> expectPartitionAppendRows = new HashMap<>();
         for (PartitionInfo partitionInfo : partitionInfos) {

@@ -130,14 +130,14 @@ class FlussLakeTableITCase {
         TablePath tablePath = TablePath.of("fluss", "test_pk_table_1");
         createTable(tablePath, TestData.DATA1_TABLE_DESCRIPTOR_PK, false);
         try (Table table = conn.getTable(tablePath)) {
-            UpsertWriter tableWriter = table.newUpsert().createWriter();
+            UpsertWriter<InternalRow> tableWriter = table.newUpsert().createWriter();
             tableWriter.upsert(row(1, "b1"));
             tableWriter.upsert(row(2, "b2"));
             tableWriter.upsert(row(3, "b3"));
             tableWriter.delete(row(2, null));
             tableWriter.flush();
 
-            Lookuper lookuper = table.newLookup().createLookuper();
+            Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
             List<InternalRow> row1 = lookuper.lookup(row(1)).get().getRowList();
             assertThatRows(row1)
                     .withSchema(TestData.DATA1_SCHEMA_PK.getRowType())
@@ -207,7 +207,8 @@ class FlussLakeTableITCase {
         }
         // lookup
         try (Table table = conn.getTable(tablePath)) {
-            Lookuper lookuper = table.newLookup().lookupBy(lookUpColumns).createLookuper();
+            Lookuper<InternalRow> lookuper =
+                    table.newLookup().lookupBy(lookUpColumns).createLookuper();
             for (InternalRow row : allRows) {
                 GenericRow lookupKeyRow = new GenericRow(lookUpFieldGetter.size());
                 for (int i = 0; i < lookUpFieldGetter.size(); i++) {
@@ -316,7 +317,7 @@ class FlussLakeTableITCase {
         int scanCount = 0;
         Map<TableBucket, List<InternalRow>> actualRows = new HashMap<>();
         try (Table table = conn.getTable(tablePath);
-                LogScanner logScanner = table.newScan().createLogScanner()) {
+                LogScanner<InternalRow> logScanner = table.newScan().createLogScanner()) {
             for (int bucket = 0; bucket < DEFAULT_BUCKET_COUNT; bucket++) {
                 if (partitionIdByNames != null) {
                     for (long partitionId : partitionIdByNames.values()) {
@@ -327,13 +328,13 @@ class FlussLakeTableITCase {
                 }
             }
             while (scanCount < totalRows) {
-                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
                 for (TableBucket tableBucket : scanRecords.buckets()) {
                     actualRows
                             .computeIfAbsent(tableBucket, (k) -> new ArrayList<>())
                             .addAll(
                                     scanRecords.records(tableBucket).stream()
-                                            .map(ScanRecord::getRow)
+                                            .map(ScanRecord<InternalRow>::getRow)
                                             .collect(Collectors.toList()));
                 }
                 scanCount += scanRecords.count();
@@ -352,9 +353,9 @@ class FlussLakeTableITCase {
 
     private void writeRow(TableWriter tableWriter, InternalRow row) {
         if (tableWriter instanceof AppendWriter) {
-            ((AppendWriter) tableWriter).append(row);
+            ((AppendWriter<InternalRow>) tableWriter).append(row);
         } else {
-            ((UpsertWriter) tableWriter).upsert(row);
+            ((UpsertWriter<InternalRow>) tableWriter).upsert(row);
         }
     }
 }

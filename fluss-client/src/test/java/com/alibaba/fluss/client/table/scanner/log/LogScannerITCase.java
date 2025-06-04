@@ -62,19 +62,19 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
         int recordSize = 10;
         List<GenericRow> expectedRows = new ArrayList<>();
         try (Table table = conn.getTable(DATA1_TABLE_PATH)) {
-            AppendWriter appendWriter = table.newAppend().createWriter();
+            AppendWriter<InternalRow> appendWriter = table.newAppend().createWriter();
             for (int i = 0; i < recordSize; i++) {
                 GenericRow row = row(i, "a");
                 expectedRows.add(row);
                 appendWriter.append(row).get();
             }
 
-            LogScanner logScanner = createLogScanner(table);
+            LogScanner<InternalRow> logScanner = createLogScanner(table);
             subscribeFromBeginning(logScanner, table);
             List<GenericRow> rowList = new ArrayList<>();
             while (rowList.size() < recordSize) {
-                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord scanRecord : scanRecords) {
+                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     rowList.add(row(row.getInt(0), row.getString(1)));
@@ -97,19 +97,19 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
         int recordSize = 10;
         List<GenericRow> expectedRows = new ArrayList<>();
         try (Table table = conn.getTable(DATA1_TABLE_PATH)) {
-            AppendWriter appendWriter = table.newAppend().createWriter();
+            AppendWriter<InternalRow> appendWriter = table.newAppend().createWriter();
             for (int i = 0; i < recordSize; i++) {
                 GenericRow row = row(i, "a");
                 expectedRows.add(row);
                 appendWriter.append(row).get();
             }
 
-            LogScanner logScanner = createLogScanner(table);
+            LogScanner<InternalRow> logScanner = createLogScanner(table);
             subscribeFromBeginning(logScanner, table);
             List<GenericRow> rowList = new ArrayList<>();
             while (rowList.size() < recordSize) {
-                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord scanRecord : scanRecords) {
+                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     rowList.add(row(row.getInt(0), row.getString(1)));
@@ -128,14 +128,14 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
         int recordSize = 10;
         List<GenericRow> expectedRows = new ArrayList<>();
         try (Table table = conn.getTable(DATA1_TABLE_PATH)) {
-            AppendWriter appendWriter = table.newAppend().createWriter();
+            AppendWriter<InternalRow> appendWriter = table.newAppend().createWriter();
             for (int i = 0; i < recordSize; i++) {
                 GenericRow row = row(i, "a");
                 expectedRows.add(row);
                 appendWriter.append(row).get();
             }
 
-            LogScanner logScanner = table.newScan().createLogScanner();
+            LogScanner<InternalRow> logScanner = table.newScan().createLogScanner();
             ExecutorService executor = Executors.newSingleThreadExecutor();
             // subscribe in thread1
             executor.submit(() -> logScanner.subscribe(0, LogScanner.EARLIEST_OFFSET)).get();
@@ -147,8 +147,8 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
             // should be able to poll data from all buckets
             List<GenericRow> rowList = new ArrayList<>();
             while (rowList.size() < recordSize) {
-                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord scanRecord : scanRecords) {
+                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     rowList.add(row(row.getInt(0), row.getString(1)));
@@ -184,7 +184,7 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
         long recordSize = 1_000;
         RowType rowType = descriptor.getSchema().getRowType();
         try (Table table = conn.getTable(TablePath.of(db, tbl))) {
-            AppendWriter appendWriter = table.newAppend().createWriter();
+            AppendWriter<InternalRow> appendWriter = table.newAppend().createWriter();
             for (long i = 0; i < recordSize; i++) {
                 final Object[] columns =
                         new Object[] {randomAlphanumeric(10), i, randomAlphanumeric(1000)};
@@ -195,13 +195,13 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
             }
             appendWriter.flush();
 
-            LogScanner logScanner = createLogScanner(table);
+            LogScanner<InternalRow> logScanner = createLogScanner(table);
             subscribeFromBeginning(logScanner, table);
             long scanned = 0;
             long total = 0;
             while (scanned < recordSize) {
-                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord scanRecord : scanRecords) {
+                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     assertThat(scanRecord.getRow().getString(0).getSizeInBytes()).isEqualTo(10);
                     assertThat(scanRecord.getRow().getLong(1)).isEqualTo(scanned);
@@ -240,7 +240,7 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
         long recordSize = 1_000;
         RowType rowType = descriptor.getSchema().getRowType();
         try (Table table = conn.getTable(TablePath.of(db, tbl))) {
-            UpsertWriter upsertWriter = table.newUpsert().createWriter();
+            UpsertWriter<InternalRow> upsertWriter = table.newUpsert().createWriter();
             for (long i = 0; i < recordSize; i++) {
                 final Object[] columns =
                         new Object[] {randomAlphanumeric(10), i, randomAlphanumeric(1000)};
@@ -251,13 +251,13 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
             }
             upsertWriter.flush();
 
-            LogScanner logScanner = createLogScanner(table);
+            LogScanner<InternalRow> logScanner = createLogScanner(table);
             subscribeFromBeginning(logScanner, table);
             long scanned = 0;
             long total = 0;
             while (scanned < recordSize) {
-                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord scanRecord : scanRecords) {
+                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.INSERT);
                     assertThat(scanRecord.getRow().getString(0).getSizeInBytes()).isEqualTo(10);
                     assertThat(scanRecord.getRow().getLong(1)).isEqualTo(scanned);
@@ -304,7 +304,7 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
         List<GenericRow> expectedRows = new ArrayList<>();
         try (Table table = conn.getTable(tablePath)) {
             // 1. first write one batch of data.
-            AppendWriter appendWriter = table.newAppend().createWriter();
+            AppendWriter<InternalRow> appendWriter = table.newAppend().createWriter();
             for (int i = 0; i < batchRecordSize; i++) {
                 GenericRow row = row(i, partitionName == null ? "a" : partitionName);
                 expectedRows.add(row);
@@ -319,7 +319,7 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
             // as early as possible to avoid potential time backwards
             long secondStartTimestamp = System.currentTimeMillis();
 
-            LogScanner logScanner = createLogScanner(table);
+            LogScanner<InternalRow> logScanner = createLogScanner(table);
             // try to fetch from firstStartTimestamp, which smaller than the first batch commit
             // timestamp.
             subscribeFromTimestamp(
@@ -332,8 +332,8 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
                     firstStartTimestamp);
             List<GenericRow> rowList = new ArrayList<>();
             while (rowList.size() < batchRecordSize) {
-                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord scanRecord : scanRecords) {
+                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     rowList.add(row(row.getInt(0), row.getString(1)));
@@ -362,8 +362,8 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
                     secondStartTimestamp);
             rowList = new ArrayList<>();
             while (rowList.size() < batchRecordSize) {
-                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord scanRecord : scanRecords) {
+                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     rowList.add(row(row.getInt(0), row.getString(1)));
@@ -402,12 +402,12 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
         int batchRecordSize = 10;
         try (Table table = conn.getTable(tablePath)) {
             // 1. first write one batch of data.
-            AppendWriter appendWriter = table.newAppend().createWriter();
+            AppendWriter<InternalRow> appendWriter = table.newAppend().createWriter();
             for (int i = 0; i < batchRecordSize; i++) {
                 appendWriter.append(row(i, partitionName == null ? "a" : partitionName)).get();
             }
 
-            LogScanner logScanner = createLogScanner(table);
+            LogScanner<InternalRow> logScanner = createLogScanner(table);
             // try to fetch from the latest offsets. For the first batch, it cannot get any data.
             subscribeFromLatestOffset(
                     tablePath, partitionName, partitionId, table, logScanner, admin);
@@ -423,8 +423,8 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
 
             List<InternalRow> rowList = new ArrayList<>();
             while (rowList.size() < batchRecordSize) {
-                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord scanRecord : scanRecords) {
+                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     rowList.add(row(row.getInt(0), row.getString(1)));
@@ -449,13 +449,13 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
                         .build();
         createTable(tablePath, tableDescriptor, false);
         try (Table table = conn.getTable(tablePath)) {
-            AppendWriter appendWriter = table.newAppend().createWriter();
+            AppendWriter<InternalRow> appendWriter = table.newAppend().createWriter();
             for (int n = 0; n < 10; n++) {
                 appendWriter.append(row(1, "a"));
             }
             appendWriter.flush();
 
-            try (LogScanner logScanner = table.newScan().createLogScanner()) {
+            try (LogScanner<InternalRow> logScanner = table.newScan().createLogScanner()) {
                 logScanner.subscribe(0, Long.MIN_VALUE);
 
                 assertThatThrownBy(() -> logScanner.poll(Duration.ofSeconds(1)))

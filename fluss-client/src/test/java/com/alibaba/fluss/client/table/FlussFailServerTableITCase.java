@@ -57,7 +57,7 @@ class FlussFailServerTableITCase extends ClientToServerITCaseBase {
     void testAppend() throws Exception {
         createTable(DATA1_TABLE_PATH, DATA1_TABLE_DESCRIPTOR, false);
         try (Table table = conn.getTable(DATA1_TABLE_PATH)) {
-            AppendWriter appendWriter = table.newAppend().createWriter();
+            AppendWriter<InternalRow> appendWriter = table.newAppend().createWriter();
             GenericRow row = row(1, "a");
 
             // append a row
@@ -82,7 +82,7 @@ class FlussFailServerTableITCase extends ClientToServerITCaseBase {
         createTable(DATA1_TABLE_PATH_PK, DATA1_TABLE_DESCRIPTOR_PK, false);
         // put one row
         try (Table table = conn.getTable(DATA1_TABLE_PATH_PK)) {
-            UpsertWriter upsertWriter = table.newUpsert().createWriter();
+            UpsertWriter<InternalRow> upsertWriter = table.newUpsert().createWriter();
             InternalRow row = row(1, "a");
             upsertWriter.upsert(row).get();
 
@@ -108,13 +108,13 @@ class FlussFailServerTableITCase extends ClientToServerITCaseBase {
         // append one row.
         GenericRow row = row(1, "a");
         try (Table table = conn.getTable(DATA1_TABLE_PATH);
-                LogScanner logScanner = createLogScanner(table)) {
+                LogScanner<InternalRow> logScanner = createLogScanner(table)) {
             subscribeFromBeginning(logScanner, table);
-            AppendWriter appendWriter = table.newAppend().createWriter();
+            AppendWriter<InternalRow> appendWriter = table.newAppend().createWriter();
             appendWriter.append(row).get();
 
             // poll data util we get one record
-            ScanRecords scanRecords;
+            ScanRecords<InternalRow> scanRecords;
             do {
                 scanRecords = logScanner.poll(Duration.ofSeconds(1));
             } while (scanRecords.isEmpty());
@@ -146,9 +146,9 @@ class FlussFailServerTableITCase extends ClientToServerITCaseBase {
         }
     }
 
-    private List<InternalRow> toRows(ScanRecords scanRecords) {
+    private List<InternalRow> toRows(ScanRecords<InternalRow> scanRecords) {
         List<InternalRow> rows = new ArrayList<>();
-        for (ScanRecord scanRecord : scanRecords) {
+        for (ScanRecord<InternalRow> scanRecord : scanRecords) {
             rows.add(scanRecord.getRow());
         }
         return rows;
