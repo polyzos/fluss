@@ -17,16 +17,19 @@
 package com.alibaba.fluss.client.table.scanner.log;
 
 import com.alibaba.fluss.annotation.PublicEvolving;
+import com.alibaba.fluss.client.row.RowSerializer;
 
 import java.time.Duration;
 
 /**
  * The scanner is used to scan log data of specify table from Fluss.
  *
+ * @param <T> The type of data in the records. Can be {@link com.alibaba.fluss.row.InternalRow} or a
+ *     POJO type.
  * @since 0.1
  */
 @PublicEvolving
-public interface LogScanner extends AutoCloseable {
+public interface LogScanner<T> extends AutoCloseable {
 
     /**
      * The earliest offset to fetch from. Fluss uses "-2" to indicate fetching from log start
@@ -47,7 +50,17 @@ public interface LogScanner extends AutoCloseable {
      * @throws java.lang.IllegalStateException if the scanner is not subscribed to any buckets to
      *     read from.
      */
-    ScanRecords poll(Duration timeout);
+    ScanRecords<T> poll(Duration timeout);
+
+    /**
+     * Creates a new LogScanner that returns POJOs of type P by converting InternalRows using the
+     * provided converter.
+     *
+     * @param converter The converter to use for converting InternalRows to POJOs
+     * @param <P> The POJO type
+     * @return A new LogScanner that returns POJOs
+     */
+    <P> LogScanner<P> withRowSerializer(RowSerializer<P> converter);
 
     /**
      * Subscribe to the given table bucket in given offset dynamically. If the table bucket is

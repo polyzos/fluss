@@ -19,6 +19,7 @@ package com.alibaba.fluss.client.table.scanner.log;
 import com.alibaba.fluss.annotation.PublicEvolving;
 import com.alibaba.fluss.client.metadata.MetadataUpdater;
 import com.alibaba.fluss.client.metrics.ScannerMetricGroup;
+import com.alibaba.fluss.client.row.RowSerializer;
 import com.alibaba.fluss.client.table.scanner.RemoteFileDownloader;
 import com.alibaba.fluss.client.table.scanner.ScanRecord;
 import com.alibaba.fluss.config.Configuration;
@@ -38,8 +39,10 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.ConcurrentModificationException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -55,7 +58,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * @since 0.1
  */
 @PublicEvolving
-public class LogScannerImpl implements LogScanner {
+public class LogScannerImpl<T> implements LogScanner<T> {
     private static final Logger LOG = LoggerFactory.getLogger(LogScannerImpl.class);
 
     private static final long NO_CURRENT_THREAD = -1L;
@@ -129,7 +132,7 @@ public class LogScannerImpl implements LogScanner {
     }
 
     @Override
-    public ScanRecords poll(Duration timeout) {
+    public ScanRecords<T> poll(Duration timeout) {
         acquireAndEnsureOpen();
         try {
             if (!logScannerStatus.prepareToPoll()) {
@@ -140,17 +143,17 @@ public class LogScannerImpl implements LogScanner {
             long timeoutNanos = timeout.toNanos();
             long startNanos = System.nanoTime();
             do {
-                Map<TableBucket, List<ScanRecord>> fetchRecords = pollForFetches();
+                Map<TableBucket, List<ScanRecord<T>>> fetchRecords = pollForFetches();
                 if (fetchRecords.isEmpty()) {
                     try {
                         if (!logFetcher.awaitNotEmpty(startNanos + timeoutNanos)) {
                             // logFetcher waits for the timeout and no data in buffer,
                             // so we return empty
-                            return new ScanRecords(fetchRecords);
+                            return new ScanRecords<>(fetchRecords);
                         }
                     } catch (WakeupException e) {
                         // wakeup() is called, we need to return empty
-                        return new ScanRecords(fetchRecords);
+                        return new ScanRecords<>(fetchRecords);
                     }
                 } else {
                     // before returning the fetched records, we can send off the next round of
@@ -158,11 +161,11 @@ public class LogScannerImpl implements LogScanner {
                     // while the user is handling the fetched records.
                     logFetcher.sendFetches();
 
-                    return new ScanRecords(fetchRecords);
+                    return new ScanRecords<>(fetchRecords);
                 }
             } while (System.nanoTime() - startNanos < timeoutNanos);
 
-            return ScanRecords.EMPTY;
+            return new ScanRecords<>(Collections.emptyMap());
         } finally {
             release();
             scannerMetricGroup.recordPollEnd(System.currentTimeMillis());
@@ -229,16 +232,18 @@ public class LogScannerImpl implements LogScanner {
         logFetcher.wakeup();
     }
 
-    private Map<TableBucket, List<ScanRecord>> pollForFetches() {
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private Map<TableBucket, List<ScanRecord<T>>> pollForFetches() {
+        // Use raw types to handle the conversion between non-generic and generic types
         Map<TableBucket, List<ScanRecord>> fetchedRecords = logFetcher.collectFetch();
         if (!fetchedRecords.isEmpty()) {
-            return fetchedRecords;
+            return (Map) fetchedRecords;
         }
 
         // send any new fetches (won't resend pending fetches).
         logFetcher.sendFetches();
 
-        return logFetcher.collectFetch();
+        return (Map) logFetcher.collectFetch();
     }
 
     /**
@@ -288,6 +293,13 @@ public class LogScannerImpl implements LogScanner {
     }
 
     @Override
+    public <P> LogScanner<P> withRowSerializer(
+            com.alibaba.fluss.client.row.RowSerializer<P> converter) {
+        // Create a new LogScannerWithSerializer that wraps this scanner and applies the converter
+        return new LogScannerWithSerializer<>(this, converter);
+    }
+
+    @Override
     public void close() {
         acquire();
         try {
@@ -302,6 +314,77 @@ public class LogScannerImpl implements LogScanner {
         } finally {
             closed = true;
             release();
+        }
+    }
+
+    /** A wrapper class that converts ScanRecords to use a RowConverter. */
+    private static class LogScannerWithSerializer<T, P> implements LogScanner<P> {
+        private final LogScanner<T> delegate;
+        private final RowSerializer<P> converter;
+
+        LogScannerWithSerializer(LogScanner<T> delegate, RowSerializer<P> converter) {
+            this.delegate = delegate;
+            this.converter = converter;
+        }
+
+        @Override
+        public ScanRecords<P> poll(Duration timeout) {
+            ScanRecords<T> records = delegate.poll(timeout);
+            if (records.isEmpty()) {
+                return (ScanRecords<P>) ScanRecords.EMPTY;
+            }
+
+            // Convert the records using the converter
+            Map<TableBucket, List<ScanRecord<P>>> convertedRecords = new HashMap<>();
+            for (TableBucket bucket : records.buckets()) {
+                List<ScanRecord<P>> convertedBucketRecords = new ArrayList<>();
+                for (ScanRecord<T> record : records.records(bucket)) {
+                    if (record.getRow() instanceof com.alibaba.fluss.row.InternalRow) {
+                        convertedBucketRecords.add(
+                                ScanRecord.withRowSerializer(
+                                        record.logOffset(),
+                                        record.timestamp(),
+                                        record.getChangeType(),
+                                        record.getRow(),
+                                        converter));
+                    }
+                }
+                if (!convertedBucketRecords.isEmpty()) {
+                    convertedRecords.put(bucket, convertedBucketRecords);
+                }
+            }
+
+            return new ScanRecords<>(convertedRecords);
+        }
+
+        @Override
+        public <Q> LogScanner<Q> withRowSerializer(RowSerializer<Q> newRowSerializer) {
+            return new LogScannerWithSerializer<>(delegate, newRowSerializer);
+        }
+
+        @Override
+        public void subscribe(int bucket, long offset) {
+            delegate.subscribe(bucket, offset);
+        }
+
+        @Override
+        public void subscribe(long partitionId, int bucket, long offset) {
+            delegate.subscribe(partitionId, bucket, offset);
+        }
+
+        @Override
+        public void unsubscribe(long partitionId, int bucket) {
+            delegate.unsubscribe(partitionId, bucket);
+        }
+
+        @Override
+        public void wakeup() {
+            delegate.wakeup();
+        }
+
+        @Override
+        public void close() throws Exception {
+            delegate.close();
         }
     }
 }
