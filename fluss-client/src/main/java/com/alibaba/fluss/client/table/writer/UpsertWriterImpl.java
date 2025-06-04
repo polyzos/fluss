@@ -17,6 +17,7 @@
 package com.alibaba.fluss.client.table.writer;
 
 import com.alibaba.fluss.client.metadata.MetadataUpdater;
+import com.alibaba.fluss.client.row.RowSerializer;
 import com.alibaba.fluss.client.write.WriteRecord;
 import com.alibaba.fluss.client.write.WriterClient;
 import com.alibaba.fluss.metadata.DataLakeFormat;
@@ -39,7 +40,8 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /** The writer to write data to the primary key table. */
-class UpsertWriterImpl extends AbstractTableWriter implements UpsertWriter {
+class UpsertWriterImpl<T> extends AbstractTableWriter implements UpsertWriter<T> {
+    private final @Nullable RowSerializer<T> rowSerializer;
     private static final UpsertResult UPSERT_SUCCESS = new UpsertResult();
     private static final DeleteResult DELETE_SUCCESS = new DeleteResult();
 
@@ -59,10 +61,21 @@ class UpsertWriterImpl extends AbstractTableWriter implements UpsertWriter {
             @Nullable int[] partialUpdateColumns,
             WriterClient writerClient,
             MetadataUpdater metadataUpdater) {
+        this(tablePath, tableInfo, partialUpdateColumns, writerClient, metadataUpdater, null);
+    }
+
+    private UpsertWriterImpl(
+            TablePath tablePath,
+            TableInfo tableInfo,
+            @Nullable int[] partialUpdateColumns,
+            WriterClient writerClient,
+            MetadataUpdater metadataUpdater,
+            @Nullable RowSerializer<T> rowSerializer) {
         super(tablePath, tableInfo, metadataUpdater, writerClient);
         RowType rowType = tableInfo.getRowType();
         sanityCheck(rowType, tableInfo.getPrimaryKeys(), partialUpdateColumns);
 
+        this.rowSerializer = rowSerializer;
         this.targetColumns = partialUpdateColumns;
         DataLakeFormat lakeFormat = tableInfo.getTableConfig().getDataLakeFormat().orElse(null);
         // encode primary key using physical primary key
@@ -123,7 +136,23 @@ class UpsertWriterImpl extends AbstractTableWriter implements UpsertWriter {
      * @param row the row to upsert.
      * @return A {@link CompletableFuture} that always returns null when complete normally.
      */
-    public CompletableFuture<UpsertResult> upsert(InternalRow row) {
+    @SuppressWarnings("unchecked")
+    public CompletableFuture<UpsertResult> upsert(T row) {
+        InternalRow internalRow;
+        if (rowSerializer != null) {
+            internalRow = rowSerializer.toInternalRow(row);
+        } else if (row instanceof InternalRow) {
+            internalRow = (InternalRow) row;
+        } else {
+            throw new IllegalArgumentException(
+                    "Row is not an InternalRow and no RowConverter was provided. "
+                            + "Use withRowConverter() to provide a converter for your POJO type.");
+        }
+
+        return upsertInternal(internalRow);
+    }
+
+    private CompletableFuture<UpsertResult> upsertInternal(InternalRow row) {
         checkFieldCount(row);
         byte[] key = primaryKeyEncoder.encodeKey(row);
         byte[] bucketKey =
@@ -141,7 +170,23 @@ class UpsertWriterImpl extends AbstractTableWriter implements UpsertWriter {
      * @param row the row to delete.
      * @return A {@link CompletableFuture} that always returns null when complete normally.
      */
-    public CompletableFuture<DeleteResult> delete(InternalRow row) {
+    @SuppressWarnings("unchecked")
+    public CompletableFuture<DeleteResult> delete(T row) {
+        InternalRow internalRow;
+        if (rowSerializer != null) {
+            internalRow = rowSerializer.toInternalRow(row);
+        } else if (row instanceof InternalRow) {
+            internalRow = (InternalRow) row;
+        } else {
+            throw new IllegalArgumentException(
+                    "Row is not an InternalRow and no RowSerializer was provided. "
+                            + "Use withRowSerializer() to provide a row serializer for your POJO type.");
+        }
+
+        return deleteInternal(internalRow);
+    }
+
+    private CompletableFuture<DeleteResult> deleteInternal(InternalRow row) {
         checkFieldCount(row);
         byte[] key = primaryKeyEncoder.encodeKey(row);
         byte[] bucketKey =
@@ -164,5 +209,49 @@ class UpsertWriterImpl extends AbstractTableWriter implements UpsertWriter {
             rowEncoder.encodeField(i, fieldGetters[i].getFieldOrNull(row));
         }
         return rowEncoder.finishRow();
+    }
+
+    @Override
+    public <P> UpsertWriter<P> withRowSerializer(RowSerializer<P> rowSerializer) {
+        return new UpsertWriterWithSerializer<>(this, rowSerializer);
+    }
+
+    /** A wrapper class that converts POJOs to InternalRow using a RowConverter. */
+    private static class UpsertWriterWithSerializer<P> implements UpsertWriter<P> {
+        private final UpsertWriter<?> delegate;
+        private final RowSerializer<P> rowSerializer;
+
+        UpsertWriterWithSerializer(UpsertWriter<?> delegate, RowSerializer<P> rowSerializer) {
+            this.delegate = delegate;
+            this.rowSerializer = rowSerializer;
+        }
+
+        @Override
+        public CompletableFuture<UpsertResult> upsert(P row) {
+            if (row == null) {
+                throw new IllegalArgumentException("Cannot upsert null row");
+            }
+            InternalRow internalRow = rowSerializer.toInternalRow(row);
+            return ((UpsertWriter<InternalRow>) delegate).upsert(internalRow);
+        }
+
+        @Override
+        public CompletableFuture<DeleteResult> delete(P row) {
+            if (row == null) {
+                throw new IllegalArgumentException("Cannot delete null row");
+            }
+            InternalRow internalRow = rowSerializer.toInternalRow(row);
+            return ((UpsertWriter<InternalRow>) delegate).delete(internalRow);
+        }
+
+        @Override
+        public void flush() {
+            delegate.flush();
+        }
+
+        @Override
+        public <T> UpsertWriter<T> withRowSerializer(RowSerializer<T> rowSerializer) {
+            return new UpsertWriterWithSerializer<>(delegate, rowSerializer);
+        }
     }
 }

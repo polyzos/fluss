@@ -17,6 +17,7 @@
 package com.alibaba.fluss.client.table.writer;
 
 import com.alibaba.fluss.annotation.PublicEvolving;
+import com.alibaba.fluss.client.row.RowSerializer;
 import com.alibaba.fluss.row.InternalRow;
 
 import java.util.concurrent.CompletableFuture;
@@ -24,10 +25,11 @@ import java.util.concurrent.CompletableFuture;
 /**
  * The writer to write data to the log table.
  *
+ * @param <T> The type of data to write. Can be {@link InternalRow} or a POJO type.
  * @since 0.2
  */
 @PublicEvolving
-public interface AppendWriter extends TableWriter {
+public interface AppendWriter<T> extends TableWriter {
 
     /**
      * Append row into a Log Table.
@@ -35,5 +37,15 @@ public interface AppendWriter extends TableWriter {
      * @param row the row to append.
      * @return A {@link CompletableFuture} that always returns append result when complete normally.
      */
-    CompletableFuture<AppendResult> append(InternalRow row);
+    CompletableFuture<AppendResult> append(T row);
+
+    /**
+     * Creates a new AppendWriter that accepts POJOs of type P and converts them to InternalRow
+     * using the provided converter.
+     *
+     * @param rowSerializer The rowSerializer to use for converting POJOs to InternalRow
+     * @param <P> The POJO type
+     * @return A new AppendWriter that accepts POJOs
+     */
+    <P> AppendWriter<P> withRowSerializer(RowSerializer<P> rowSerializer);
 }

@@ -17,6 +17,7 @@
 package com.alibaba.fluss.client.table.writer;
 
 import com.alibaba.fluss.annotation.PublicEvolving;
+import com.alibaba.fluss.row.InternalRow;
 
 /**
  * Used to configure and create a {@link AppendWriter} to write data to a Log Table.
@@ -32,5 +33,5 @@ public interface Append {
     //  apply overwrites, etc.
 
     /** Create a new {@link AppendWriter} to write data to a Log Table. */
-    AppendWriter createWriter();
+    AppendWriter<InternalRow> createWriter();
 }

@@ -17,6 +17,7 @@
 package com.alibaba.fluss.client.table.writer;
 
 import com.alibaba.fluss.annotation.PublicEvolving;
+import com.alibaba.fluss.client.row.RowSerializer;
 import com.alibaba.fluss.row.InternalRow;
 
 import java.util.concurrent.CompletableFuture;
@@ -24,10 +25,11 @@ import java.util.concurrent.CompletableFuture;
 /**
  * The writer to write data to the primary key table.
  *
+ * @param <T> The type of data to write. Can be {@link InternalRow} or a POJO type.
  * @since 0.2
  */
 @PublicEvolving
-public interface UpsertWriter extends TableWriter {
+public interface UpsertWriter<T> extends TableWriter {
 
     /**
      * Inserts row into Fluss table if they do not already exist, or updates them if they do exist.
@@ -35,7 +37,7 @@ public interface UpsertWriter extends TableWriter {
      * @param row the row to upsert.
      * @return A {@link CompletableFuture} that always returns upsert result when complete normally.
      */
-    CompletableFuture<UpsertResult> upsert(InternalRow row);
+    CompletableFuture<UpsertResult> upsert(T row);
 
     /**
      * Delete certain row by the input row in Fluss table, the input row must contain the primary
@@ -44,5 +46,15 @@ public interface UpsertWriter extends TableWriter {
      * @param row the row to delete.
      * @return A {@link CompletableFuture} that always delete result when complete normally.
      */
-    CompletableFuture<DeleteResult> delete(InternalRow row);
+    CompletableFuture<DeleteResult> delete(T row);
+
+    /**
+     * Creates a new UpsertWriter that accepts POJOs of type P and converts them to InternalRow
+     * using the provided converter.
+     *
+     * @param rowSerializer The rowSerializer to use for converting POJOs to InternalRow
+     * @param <P> The POJO type
+     * @return A new UpsertWriter that accepts POJOs
+     */
+    <P> UpsertWriter<P> withRowSerializer(RowSerializer<P> rowSerializer);
 }

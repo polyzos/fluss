@@ -20,6 +20,7 @@ import com.alibaba.fluss.client.metadata.MetadataUpdater;
 import com.alibaba.fluss.client.write.WriterClient;
 import com.alibaba.fluss.metadata.TableInfo;
 import com.alibaba.fluss.metadata.TablePath;
+import com.alibaba.fluss.row.InternalRow;
 import com.alibaba.fluss.types.RowType;
 
 import javax.annotation.Nullable;
@@ -99,8 +100,8 @@ public class TableUpsert implements Upsert {
     }
 
     @Override
-    public UpsertWriter createWriter() {
-        return new UpsertWriterImpl(
+    public UpsertWriter<InternalRow> createWriter() {
+        return new UpsertWriterImpl<>(
                 tablePath, tableInfo, targetColumns, writerClient, metadataUpdater);
     }
 }

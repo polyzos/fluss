@@ -36,14 +36,13 @@ public interface Upsert {
     /**
      * Apply partial update columns and returns a new Upsert instance.
      *
-     * <p>For {@link UpsertWriter#upsert(InternalRow)} operation, only the specified columns will be
-     * updated and other columns will remain unchanged if the row exists or set to null if the row
-     * doesn't exist.
+     * <p>For {@link UpsertWriter#upsert} operation, only the specified columns will be updated and
+     * other columns will remain unchanged if the row exists or set to null if the row doesn't
+     * exist.
      *
-     * <p>For {@link UpsertWriter#delete(InternalRow)} operation, the entire row will not be
-     * removed, but only the specified columns except primary key will be set to null. The entire
-     * row will be removed when all columns except primary key are null after a {@link
-     * UpsertWriter#delete(InternalRow)} operation.
+     * <p>For {@link UpsertWriter#delete} operation, the entire row will not be removed, but only
+     * the specified columns except primary key will be set to null. The entire row will be removed
+     * when all columns except primary key are null after a {@link UpsertWriter#delete} operation.
      *
      * <p>Note: The specified columns must be a contains all columns of primary key, and all columns
      * except primary key should be nullable.
@@ -62,5 +61,5 @@ public interface Upsert {
      * Create a new {@link UpsertWriter} with the optional {@link #partialUpdate(String...)}
      * information to upsert and delete data to a Primary Key Table.
      */
-    UpsertWriter createWriter();
+    UpsertWriter<InternalRow> createWriter();
 }

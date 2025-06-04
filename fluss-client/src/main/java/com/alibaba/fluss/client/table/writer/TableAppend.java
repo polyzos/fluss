@@ -20,6 +20,7 @@ import com.alibaba.fluss.client.metadata.MetadataUpdater;
 import com.alibaba.fluss.client.write.WriterClient;
 import com.alibaba.fluss.metadata.TableInfo;
 import com.alibaba.fluss.metadata.TablePath;
+import com.alibaba.fluss.row.InternalRow;
 
 /** API for configuring and creating {@link AppendWriter}. */
 public class TableAppend implements Append {
@@ -41,7 +42,7 @@ public class TableAppend implements Append {
     }
 
     @Override
-    public AppendWriter createWriter() {
-        return new AppendWriterImpl(tablePath, tableInfo, metadataUpdater, writerClient);
+    public AppendWriter<InternalRow> createWriter() {
+        return new AppendWriterImpl<>(tablePath, tableInfo, metadataUpdater, writerClient);
     }
 }
