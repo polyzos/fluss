@@ -159,19 +159,6 @@ class FlussSinkBuilderTest {
     }
 
     @Test
-    void testUpsertAndAppendModes() throws Exception {
-        // Test upsert mode
-        builder.useUpsert();
-        boolean isUpsert = getFieldValue(builder, "isUpsert");
-        assertThat(isUpsert).isTrue();
-
-        // Test append mode
-        builder.useAppend();
-        isUpsert = getFieldValue(builder, "isUpsert");
-        assertThat(isUpsert).isFalse();
-    }
-
-    @Test
     void testIgnoreDelete() throws Exception {
         // Default should be false
         boolean ignoreDelete = getFieldValue(builder, "ignoreDelete");
@@ -189,10 +176,8 @@ class FlussSinkBuilderTest {
         DataLakeFormat lakeFormat = getFieldValue(builder, "lakeFormat");
         assertThat(lakeFormat).isNull();
 
-        // Test setting format
-        builder.setDataLakeFormat(DataLakeFormat.PAIMON);
         lakeFormat = getFieldValue(builder, "lakeFormat");
-        assertThat(lakeFormat).isEqualTo(DataLakeFormat.PAIMON);
+        assertThat(lakeFormat).isEqualTo(null);
     }
 
     @Test
@@ -206,10 +191,9 @@ class FlussSinkBuilderTest {
         shuffleByBucketId = getFieldValue(builder, "shuffleByBucketId");
         assertThat(shuffleByBucketId).isFalse();
 
-        // Test setting back to true should not change value (implementation detail)
         builder.setShuffleByBucketId(true);
         shuffleByBucketId = getFieldValue(builder, "shuffleByBucketId");
-        assertThat(shuffleByBucketId).isFalse();
+        assertThat(shuffleByBucketId).isTrue();
     }
 
     @Test
@@ -250,22 +234,6 @@ class FlussSinkBuilderTest {
     }
 
     @Test
-    void testPartialUpdateColumnsNotAllowedInAppendMode() {
-        FlussSinkBuilder<Order> builder = new FlussSinkBuilder<>();
-        builder.setBootstrapServers("localhost:9123")
-                .setDatabase("testDb")
-                .setTable("testTable")
-                .setRowType(orderRowType)
-                .setSerializationSchema(new OrderSerializationSchema())
-                .setPartialUpdateColumns(new int[] {0, 1, 2})
-                .useAppend();
-
-        assertThatThrownBy(builder::build)
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Partial updates are not supported in append mode.");
-    }
-
-    @Test
     void testFluentChaining() {
         // Test that all methods can be chained
         FlussSinkBuilder<Order> chainedBuilder =
@@ -276,10 +244,8 @@ class FlussSinkBuilderTest {
                         .setRowType(orderRowType)
                         .setIgnoreDelete(true)
                         .setPartialUpdateColumns(new int[] {0, 1})
-                        .useUpsert()
                         .setOption("key1", "value1")
                         .setOptions(new HashMap<>())
-                        .setDataLakeFormat(DataLakeFormat.PAIMON)
                         .setShuffleByBucketId(false);
 
         // Verify the builder instance is returned

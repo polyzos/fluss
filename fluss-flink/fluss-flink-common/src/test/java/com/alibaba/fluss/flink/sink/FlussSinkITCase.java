@@ -46,7 +46,6 @@ import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.VarCharType;
 import org.apache.flink.types.RowKind;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -58,6 +57,7 @@ import java.util.Objects;
 
 import static com.alibaba.fluss.flink.utils.FlinkConversions.toFlinkRowKind;
 import static com.alibaba.fluss.testutils.DataTestUtils.row;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /** Integration tests for the Fluss sink connector in Flink. */
 public class FlussSinkITCase extends FlinkTestBase {
@@ -78,12 +78,8 @@ public class FlussSinkITCase extends FlinkTestBase {
 
     private static String pkTableName = "orders_test_pk";
 
-    private static TablePath ordersPKTablePath;
-
     @BeforeEach
     public void setup() throws Exception {
-        bootstrapServers = conn.getConfiguration().get(ConfigOptions.BOOTSTRAP_SERVERS).get(0);
-
         pkTableDescriptor =
                 TableDescriptor.builder().schema(pkSchema).distributedBy(1, "orderId").build();
 
@@ -91,9 +87,7 @@ public class FlussSinkITCase extends FlinkTestBase {
 
         createTable(pkTablePath, pkTableDescriptor);
 
-        this.ordersPKTablePath = new TablePath(DEFAULT_DB, pkTableName);
-
-        this.bootstrapServers = conn.getConfiguration().get(ConfigOptions.BOOTSTRAP_SERVERS).get(0);
+        bootstrapServers = conn.getConfiguration().get(ConfigOptions.BOOTSTRAP_SERVERS).get(0);
 
         env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(2);
@@ -156,7 +150,6 @@ public class FlussSinkITCase extends FlinkTestBase {
                         .setBootstrapServers(bootstrapServers)
                         .setDatabase(DEFAULT_DB)
                         .setTable(pkTableName)
-                        .useUpsert()
                         .setSerializationSchema(serializationSchema)
                         .setRowType(rowType)
                         .build();
@@ -197,8 +190,8 @@ public class FlussSinkITCase extends FlinkTestBase {
         inputRows.add(row9);
 
         // Assert result size and elements match
-        Assertions.assertEquals(rows.size(), inputRows.size());
-        Assertions.assertTrue(rows.containsAll(inputRows));
+        assertThat(rows.size()).isEqualTo(inputRows.size());
+        assertThat(rows.containsAll(inputRows)).isTrue();
     }
 
     @Test
@@ -230,7 +223,6 @@ public class FlussSinkITCase extends FlinkTestBase {
                         .setBootstrapServers(bootstrapServers)
                         .setDatabase(DEFAULT_DB)
                         .setTable(pkTableName)
-                        .useUpsert()
                         .setSerializationSchema(new TestOrderSerializationSchema())
                         .setRowType(rowType)
                         .build();
@@ -268,16 +260,16 @@ public class FlussSinkITCase extends FlinkTestBase {
         orders.add(new TestOrder(800, 23, 602, "addr3", RowKind.UPDATE_BEFORE));
         orders.add(new TestOrder(900, 24, 603, "addr4", RowKind.UPDATE_BEFORE));
 
-        Assertions.assertEquals(rows.size(), orders.size());
-        Assertions.assertTrue(rows.containsAll(orders));
+        assertThat(rows.size()).isEqualTo(orders.size());
+        assertThat(rows.containsAll(orders)).isTrue();
     }
 
     private static class TestOrder implements Serializable {
-        private long orderId;
-        private long itemId;
-        private int amount;
-        private String address;
-        private RowKind rowKind;
+        private final long orderId;
+        private final long itemId;
+        private final int amount;
+        private final String address;
+        private final RowKind rowKind;
 
         public TestOrder(long orderId, long itemId, int amount, String address, RowKind rowKind) {
             this.orderId = orderId;
@@ -340,8 +332,8 @@ public class FlussSinkITCase extends FlinkTestBase {
             switch (rowKind) {
                 case INSERT:
                 case UPDATE_AFTER:
-                case UPDATE_BEFORE:
                     return new RowWithOp(row, OperationType.UPSERT);
+                case UPDATE_BEFORE:
                 case DELETE:
                     return new RowWithOp(row, OperationType.DELETE);
                 default:

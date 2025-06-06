@@ -19,6 +19,7 @@ package com.alibaba.fluss.flink.sink;
 import com.alibaba.fluss.client.Connection;
 import com.alibaba.fluss.client.ConnectionFactory;
 import com.alibaba.fluss.client.admin.Admin;
+import com.alibaba.fluss.config.ConfigOptions;
 import com.alibaba.fluss.config.Configuration;
 import com.alibaba.fluss.flink.sink.serializer.FlussSerializationSchema;
 import com.alibaba.fluss.flink.sink.writer.FlinkSinkWriter;
@@ -52,6 +53,7 @@ import static com.alibaba.fluss.utils.Preconditions.checkNotNull;
  * FlinkSink<Order> sink = new FlussSinkBuilder<Order>()
  *          .setBootstrapServers(bootstrapServers)
  *          .setTable(tableName)
+ *          .setDatabase(databaseName)
  *          .setRowType(orderRowType)
  *          .setSerializationSchema(new OrderSerializationSchema())
  *          .build())
@@ -68,7 +70,7 @@ public class FlussSinkBuilder<InputT> {
     private RowType tableRowType;
     private boolean ignoreDelete;
     private int[] partialUpdateColumns;
-    private boolean isUpsert;
+    //    private boolean isUpsert;
     private final Map<String, String> configOptions = new HashMap<>();
     private FlussSerializationSchema<InputT> serializationSchema;
     private boolean shuffleByBucketId = true;
@@ -110,29 +112,9 @@ public class FlussSinkBuilder<InputT> {
         return this;
     }
 
-    /** Set target column indexes. */
-    public FlussSinkBuilder<InputT> setDataLakeFormat(DataLakeFormat lakeFormat) {
-        this.lakeFormat = lakeFormat;
-        return this;
-    }
-
     /** Set shuffle by bucket id. */
     public FlussSinkBuilder<InputT> setShuffleByBucketId(boolean shuffleByBucketId) {
-        if (!shuffleByBucketId) {
-            this.shuffleByBucketId = false;
-        }
-        return this;
-    }
-
-    /** Configure this sink to use upsert semantics. */
-    public FlussSinkBuilder<InputT> useUpsert() {
-        this.isUpsert = true;
-        return this;
-    }
-
-    /** Configure this sink to use append-only semantics. */
-    public FlussSinkBuilder<InputT> useAppend() {
-        this.isUpsert = false;
+        this.shuffleByBucketId = shuffleByBucketId;
         return this;
     }
 
@@ -156,7 +138,7 @@ public class FlussSinkBuilder<InputT> {
     }
 
     /** Build the FlussSink. */
-    public FlinkSink<InputT> build() {
+    public FlussSink<InputT> build() {
         validateConfiguration();
 
         Configuration flussConfig = Configuration.fromMap(configOptions);
@@ -164,7 +146,7 @@ public class FlussSinkBuilder<InputT> {
         FlinkSink.SinkWriterBuilder<? extends FlinkSinkWriter<InputT>, InputT> writerBuilder;
 
         TablePath tablePath = new TablePath(database, tableName);
-        flussConfig.setString("bootstrap.servers", bootstrapServers);
+        flussConfig.setString(ConfigOptions.BOOTSTRAP_SERVERS.key(), bootstrapServers);
 
         TableInfo tableInfo;
         try (Connection connection = ConnectionFactory.createConnection(flussConfig);
@@ -184,6 +166,14 @@ public class FlussSinkBuilder<InputT> {
         int numBucket = tableInfo.getNumBuckets();
         List<String> bucketKeys = tableInfo.getBucketKeys();
         List<String> partitionKeys = tableInfo.getPartitionKeys();
+
+        this.lakeFormat = tableInfo.getTableConfig().getDataLakeFormat().orElse(null);
+
+        boolean isUpsert = tableInfo.hasPrimaryKey();
+
+        checkArgument(
+                isUpsert && partialUpdateColumns == null,
+                "Partial updates are not supported in append mode.");
 
         if (isUpsert) {
             LOG.info("Initializing Fluss upsert sink writer ...");
@@ -227,9 +217,5 @@ public class FlussSinkBuilder<InputT> {
 
         checkNotNull(tableName, "Table name is required but not provided.");
         checkArgument(!tableName.isEmpty(), "Table name cannot be empty.");
-
-        checkArgument(
-                isUpsert && partialUpdateColumns == null,
-                "Partial updates are not supported in append mode.");
     }
 }
