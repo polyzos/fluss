@@ -25,7 +25,7 @@ import com.alibaba.fluss.flink.row.OperationType;
 import com.alibaba.fluss.flink.row.RowWithOp;
 import com.alibaba.fluss.flink.sink.serializer.FlussSerializationSchema;
 import com.alibaba.fluss.flink.sink.serializer.RowDataSerializationSchema;
-import com.alibaba.fluss.flink.source.testutils.FlinkTestBase;
+import com.alibaba.fluss.flink.utils.FlinkTestBase;
 import com.alibaba.fluss.flink.utils.FlussRowToFlinkRowConverter;
 import com.alibaba.fluss.metadata.Schema;
 import com.alibaba.fluss.metadata.TableBucket;
