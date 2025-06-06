@@ -16,6 +16,7 @@
 
 package com.alibaba.fluss.flink.sink;
 
+import com.alibaba.fluss.annotation.PublicEvolving;
 import com.alibaba.fluss.flink.sink.writer.FlinkSinkWriter;
 
 /**
@@ -26,8 +27,11 @@ import com.alibaba.fluss.flink.sink.writer.FlinkSinkWriter;
  * integrating Fluss as a sink in Flink data pipelines.
  *
  * @param <InputT> the type of input elements accepted by the sink
+ * @since 0.7
  */
+@PublicEvolving
 public class FlussSink<InputT> extends FlinkSink<InputT> {
+    private static final long serialVersionUID = 1L;
 
     /**
      * Constructs a FlussSink with the given SinkWriterBuilder.

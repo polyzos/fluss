@@ -39,11 +39,6 @@ import com.alibaba.fluss.types.DataTypes;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.types.logical.BigIntType;
-import org.apache.flink.table.types.logical.IntType;
-import org.apache.flink.table.types.logical.LogicalType;
-import org.apache.flink.table.types.logical.RowType;
-import org.apache.flink.table.types.logical.VarCharType;
 import org.apache.flink.types.RowKind;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -70,25 +65,29 @@ public class FlussSinkITCase extends FlinkTestBase {
                     .primaryKey("orderId")
                     .build();
 
-    private static StreamExecutionEnvironment env;
+    private static final Schema logSchema =
+            Schema.newBuilder()
+                    .column("orderId", DataTypes.BIGINT())
+                    .column("itemId", DataTypes.BIGINT())
+                    .column("amount", DataTypes.INT())
+                    .column("address", DataTypes.STRING())
+                    .build();
 
-    private static TableDescriptor pkTableDescriptor;
+    private static final TableDescriptor pkTableDescriptor =
+            TableDescriptor.builder().schema(pkSchema).distributedBy(1, "orderId").build();
 
-    private static String bootstrapServers;
+    private static final TableDescriptor logTableDescriptor =
+            TableDescriptor.builder().schema(logSchema).build();
 
-    private static String pkTableName = "orders_test_pk";
+    private static final String pkTableName = "orders_test_pk";
+    private static final String logTableName = "orders_test_log";
+
+    private StreamExecutionEnvironment env;
+    private String bootstrapServers;
 
     @BeforeEach
     public void setup() throws Exception {
-        pkTableDescriptor =
-                TableDescriptor.builder().schema(pkSchema).distributedBy(1, "orderId").build();
-
-        TablePath pkTablePath = TablePath.of(DEFAULT_DB, pkTableName);
-
-        createTable(pkTablePath, pkTableDescriptor);
-
         bootstrapServers = conn.getConfiguration().get(ConfigOptions.BOOTSTRAP_SERVERS).get(0);
-
         env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(2);
     }
@@ -100,6 +99,7 @@ public class FlussSinkITCase extends FlinkTestBase {
 
     @Test
     public void testRowDataTablePKSink() throws Exception {
+        createTable(TablePath.of(DEFAULT_DB, pkTableName), pkTableDescriptor);
         FlussRowToFlinkRowConverter converter =
                 new FlussRowToFlinkRowConverter(pkSchema.getRowType());
 
@@ -130,16 +130,6 @@ public class FlussSinkITCase extends FlinkTestBase {
         inputRows.add(row6);
         inputRows.add(row7);
 
-        RowType rowType =
-                RowType.of(
-                        new LogicalType[] {
-                            new BigIntType(false), // id
-                            new BigIntType(), // age
-                            new IntType(),
-                            new VarCharType(true, VarCharType.MAX_LENGTH)
-                        },
-                        new String[] {"orderId", "itemId", "amount", "address"});
-
         RowDataSerializationSchema serializationSchema =
                 new RowDataSerializationSchema(false, true);
 
@@ -151,7 +141,6 @@ public class FlussSinkITCase extends FlinkTestBase {
                         .setDatabase(DEFAULT_DB)
                         .setTable(pkTableName)
                         .setSerializationSchema(serializationSchema)
-                        .setRowType(rowType)
                         .build();
 
         stream.sinkTo(flussSink).name("Fluss Sink");
@@ -168,7 +157,7 @@ public class FlussSinkITCase extends FlinkTestBase {
 
         List<RowData> rows = new ArrayList<>();
 
-        for (int i = 0; i < 5; i++) {
+        while (rows.size() < inputRows.size()) {
             ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
             for (TableBucket bucket : scanRecords.buckets()) {
                 for (ScanRecord record : scanRecords.records(bucket)) {
@@ -191,11 +180,77 @@ public class FlussSinkITCase extends FlinkTestBase {
 
         // Assert result size and elements match
         assertThat(rows.size()).isEqualTo(inputRows.size());
-        assertThat(rows.containsAll(inputRows)).isTrue();
+        assertThat(rows).containsAll(inputRows);
+
+        logScanner.close();
+    }
+
+    @Test
+    public void testRowDataTableLogSink() throws Exception {
+        createTable(TablePath.of(DEFAULT_DB, logTableName), logTableDescriptor);
+        FlussRowToFlinkRowConverter converter =
+                new FlussRowToFlinkRowConverter(logSchema.getRowType());
+
+        RowData row1 = converter.toFlinkRowData(row(600L, 20L, 600, "addr1"));
+        RowData row2 = converter.toFlinkRowData(row(700L, 22L, 601, "addr2"));
+        RowData row3 = converter.toFlinkRowData(row(800L, 23L, 602, "addr3"));
+        RowData row4 = converter.toFlinkRowData(row(900L, 24L, 603, "addr4"));
+        RowData row5 = converter.toFlinkRowData(row(1000L, 25L, 604, "addr5"));
+
+        List<RowData> inputRows = new ArrayList<>();
+        inputRows.add(row1);
+        inputRows.add(row2);
+        inputRows.add(row3);
+        inputRows.add(row4);
+        inputRows.add(row5);
+
+        RowDataSerializationSchema serializationSchema = new RowDataSerializationSchema(true, true);
+
+        DataStream<RowData> stream = env.fromData(inputRows);
+
+        FlinkSink<RowData> flussSink =
+                FlussSink.<RowData>builder()
+                        .setBootstrapServers(bootstrapServers)
+                        .setDatabase(DEFAULT_DB)
+                        .setTable(logTableName)
+                        .setSerializationSchema(serializationSchema)
+                        .build();
+
+        stream.sinkTo(flussSink).name("Fluss Sink");
+
+        env.executeAsync("Test RowData Fluss Sink");
+
+        Table table = conn.getTable(new TablePath(DEFAULT_DB, logTableName));
+        LogScanner logScanner = table.newScan().createLogScanner();
+
+        int numBuckets = table.getTableInfo().getNumBuckets();
+        for (int i = 0; i < numBuckets; i++) {
+            logScanner.subscribeFromBeginning(i);
+        }
+
+        List<RowData> rows = new ArrayList<>();
+
+        while (rows.size() < inputRows.size()) {
+            ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+            for (TableBucket bucket : scanRecords.buckets()) {
+                for (ScanRecord record : scanRecords.records(bucket)) {
+                    RowData row = converter.toFlinkRowData(record.getRow());
+                    row.setRowKind(toFlinkRowKind(record.getChangeType()));
+                    rows.add(row);
+                }
+            }
+        }
+
+        // Assert result size and elements match
+        assertThat(rows.size()).isEqualTo(inputRows.size());
+        assertThat(rows).containsAll(inputRows);
+
+        logScanner.close();
     }
 
     @Test
     public void testOrdersTablePKSink() throws Exception {
+        createTable(TablePath.of(DEFAULT_DB, pkTableName), pkTableDescriptor);
         ArrayList<TestOrder> orders = new ArrayList<>();
         orders.add(new TestOrder(600, 20, 600, "addr1", RowKind.INSERT));
         orders.add(new TestOrder(700, 22, 601, "addr2", RowKind.INSERT));
@@ -208,23 +263,12 @@ public class FlussSinkITCase extends FlinkTestBase {
         // Create a DataStream from the FlussSource
         DataStream<TestOrder> stream = env.fromData(orders);
 
-        RowType rowType =
-                RowType.of(
-                        new LogicalType[] {
-                            new BigIntType(false), // id
-                            new BigIntType(), // age
-                            new IntType(),
-                            new VarCharType(true, VarCharType.MAX_LENGTH)
-                        },
-                        new String[] {"orderId", "itemId", "amount", "address"});
-
         FlinkSink<TestOrder> flussSink =
                 FlussSink.<TestOrder>builder()
                         .setBootstrapServers(bootstrapServers)
                         .setDatabase(DEFAULT_DB)
                         .setTable(pkTableName)
                         .setSerializationSchema(new TestOrderSerializationSchema())
-                        .setRowType(rowType)
                         .build();
 
         stream.sinkTo(flussSink).name("Fluss Sink");
@@ -238,9 +282,11 @@ public class FlussSinkITCase extends FlinkTestBase {
             logScanner.subscribeFromBeginning(i);
         }
 
-        List<TestOrder> rows = new ArrayList<>();
+        orders.add(new TestOrder(800, 23, 602, "addr3", RowKind.UPDATE_BEFORE));
+        orders.add(new TestOrder(900, 24, 603, "addr4", RowKind.UPDATE_BEFORE));
 
-        for (int i = 0; i < 5; i++) {
+        List<TestOrder> rows = new ArrayList<>();
+        while (rows.size() < orders.size()) {
             ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
             for (TableBucket bucket : scanRecords.buckets()) {
                 for (ScanRecord record : scanRecords.records(bucket)) {
@@ -257,14 +303,14 @@ public class FlussSinkITCase extends FlinkTestBase {
             }
         }
 
-        orders.add(new TestOrder(800, 23, 602, "addr3", RowKind.UPDATE_BEFORE));
-        orders.add(new TestOrder(900, 24, 603, "addr4", RowKind.UPDATE_BEFORE));
-
         assertThat(rows.size()).isEqualTo(orders.size());
         assertThat(rows.containsAll(orders)).isTrue();
+
+        logScanner.close();
     }
 
     private static class TestOrder implements Serializable {
+        private static final long serialVersionUID = 1L;
         private final long orderId;
         private final long itemId;
         private final int amount;
@@ -317,6 +363,8 @@ public class FlussSinkITCase extends FlinkTestBase {
 
     private static class TestOrderSerializationSchema
             implements FlussSerializationSchema<TestOrder> {
+        private static final long serialVersionUID = 1L;
+
         @Override
         public void open(InitializationContext context) throws Exception {}
 

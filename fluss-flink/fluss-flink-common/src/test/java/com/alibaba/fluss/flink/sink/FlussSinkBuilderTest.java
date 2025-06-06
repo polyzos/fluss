@@ -18,13 +18,7 @@ package com.alibaba.fluss.flink.sink;
 
 import com.alibaba.fluss.flink.sink.serializer.OrderSerializationSchema;
 import com.alibaba.fluss.flink.source.testutils.Order;
-import com.alibaba.fluss.metadata.DataLakeFormat;
 
-import org.apache.flink.table.types.logical.BigIntType;
-import org.apache.flink.table.types.logical.IntType;
-import org.apache.flink.table.types.logical.LogicalType;
-import org.apache.flink.table.types.logical.RowType;
-import org.apache.flink.table.types.logical.VarCharType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -37,27 +31,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Tests for {@link FlussSinkBuilder} configuration and argument handling. */
 class FlussSinkBuilderTest {
-    private String bootstrapServers = "localhost:9123";
-    private String databaseName = "testDb";
-    private String tableName = "testTable";
+    private final String bootstrapServers = "localhost:9123";
+    private final String databaseName = "testDb";
+    private final String tableName = "testTable";
 
     private FlussSinkBuilder<Order> builder;
-    private RowType orderRowType;
 
     @BeforeEach
     void setUp() {
         builder = new FlussSinkBuilder<>();
-
-        // Define row type for Order class
-        orderRowType =
-                RowType.of(
-                        new LogicalType[] {
-                            new BigIntType(false), // id
-                            new BigIntType(), // age
-                            new IntType(),
-                            new VarCharType(true, VarCharType.MAX_LENGTH)
-                        },
-                        new String[] {"orderId", "itemId", "amount", "address"});
     }
 
     @Test
@@ -68,7 +50,6 @@ class FlussSinkBuilderTest {
                                 new FlussSinkBuilder<Order>()
                                         .setDatabase("testDb")
                                         .setTable("testTable")
-                                        .setRowType(orderRowType)
                                         .build())
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("BootstrapServers is required but not provided.");
@@ -79,7 +60,6 @@ class FlussSinkBuilderTest {
                                 new FlussSinkBuilder<Order>()
                                         .setBootstrapServers(bootstrapServers)
                                         .setTable(tableName)
-                                        .setRowType(orderRowType)
                                         .setSerializationSchema(new OrderSerializationSchema())
                                         .build())
                 .isInstanceOf(RuntimeException.class)
@@ -92,7 +72,6 @@ class FlussSinkBuilderTest {
                                         .setBootstrapServers(bootstrapServers)
                                         .setDatabase("")
                                         .setTable(tableName)
-                                        .setRowType(orderRowType)
                                         .setSerializationSchema(new OrderSerializationSchema())
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class)
@@ -104,7 +83,6 @@ class FlussSinkBuilderTest {
                                 new FlussSinkBuilder<Order>()
                                         .setBootstrapServers(bootstrapServers)
                                         .setDatabase("testDb")
-                                        .setRowType(orderRowType)
                                         .setSerializationSchema(new OrderSerializationSchema())
                                         .build())
                 .isInstanceOf(NullPointerException.class)
@@ -117,7 +95,6 @@ class FlussSinkBuilderTest {
                                         .setBootstrapServers(bootstrapServers)
                                         .setDatabase("testDb")
                                         .setTable("")
-                                        .setRowType(orderRowType)
                                         .setSerializationSchema(new OrderSerializationSchema())
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class)
@@ -127,10 +104,7 @@ class FlussSinkBuilderTest {
     @Test
     void testTablePathSetting() throws Exception {
         // Using setDatabase and setTable
-        builder.setBootstrapServers(bootstrapServers)
-                .setDatabase(databaseName)
-                .setTable(tableName)
-                .setRowType(orderRowType);
+        builder.setBootstrapServers(bootstrapServers).setDatabase(databaseName).setTable(tableName);
 
         String database = getFieldValue(builder, "database");
         String tableName = getFieldValue(builder, "tableName");
@@ -159,28 +133,6 @@ class FlussSinkBuilderTest {
     }
 
     @Test
-    void testIgnoreDelete() throws Exception {
-        // Default should be false
-        boolean ignoreDelete = getFieldValue(builder, "ignoreDelete");
-        assertThat(ignoreDelete).isFalse();
-
-        // Test setting to true
-        builder.setIgnoreDelete(true);
-        ignoreDelete = getFieldValue(builder, "ignoreDelete");
-        assertThat(ignoreDelete).isTrue();
-    }
-
-    @Test
-    void testDataLakeFormat() throws Exception {
-        // Default should be null
-        DataLakeFormat lakeFormat = getFieldValue(builder, "lakeFormat");
-        assertThat(lakeFormat).isNull();
-
-        lakeFormat = getFieldValue(builder, "lakeFormat");
-        assertThat(lakeFormat).isEqualTo(null);
-    }
-
-    @Test
     void testShuffleByBucketId() throws Exception {
         // Default should be true
         boolean shuffleByBucketId = getFieldValue(builder, "shuffleByBucketId");
@@ -194,31 +146,6 @@ class FlussSinkBuilderTest {
         builder.setShuffleByBucketId(true);
         shuffleByBucketId = getFieldValue(builder, "shuffleByBucketId");
         assertThat(shuffleByBucketId).isTrue();
-    }
-
-    @Test
-    void testTargetColumnIndexes() throws Exception {
-        // Default should be null
-        int[] targetColumnIndexes = getFieldValue(builder, "partialUpdateColumns");
-        assertThat(targetColumnIndexes).isNull();
-
-        // Test setting indexes
-        int[] indexes = {0, 2, 3};
-        builder.setPartialUpdateColumns(indexes);
-        targetColumnIndexes = getFieldValue(builder, "partialUpdateColumns");
-        assertThat(targetColumnIndexes).isEqualTo(indexes);
-    }
-
-    @Test
-    void testRowTypeSettings() throws Exception {
-        // Default should be null
-        RowType tableRowType = getFieldValue(builder, "tableRowType");
-        assertThat(tableRowType).isNull();
-
-        // Test setting row type
-        builder.setRowType(orderRowType);
-        tableRowType = getFieldValue(builder, "tableRowType");
-        assertThat(tableRowType).isEqualTo(orderRowType);
     }
 
     @Test
@@ -241,9 +168,6 @@ class FlussSinkBuilderTest {
                         .setBootstrapServers(bootstrapServers)
                         .setDatabase(databaseName)
                         .setTable(tableName)
-                        .setRowType(orderRowType)
-                        .setIgnoreDelete(true)
-                        .setPartialUpdateColumns(new int[] {0, 1})
                         .setOption("key1", "value1")
                         .setOptions(new HashMap<>())
                         .setShuffleByBucketId(false);

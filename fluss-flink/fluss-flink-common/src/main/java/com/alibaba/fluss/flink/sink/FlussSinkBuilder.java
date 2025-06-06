@@ -16,6 +16,7 @@
 
 package com.alibaba.fluss.flink.sink;
 
+import com.alibaba.fluss.annotation.PublicEvolving;
 import com.alibaba.fluss.client.Connection;
 import com.alibaba.fluss.client.ConnectionFactory;
 import com.alibaba.fluss.client.admin.Admin;
@@ -31,13 +32,12 @@ import org.apache.flink.table.types.logical.RowType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nullable;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
+import static com.alibaba.fluss.flink.utils.FlinkConversions.toFlinkRowType;
 import static com.alibaba.fluss.utils.Preconditions.checkArgument;
 import static com.alibaba.fluss.utils.Preconditions.checkNotNull;
 
@@ -60,21 +60,18 @@ import static com.alibaba.fluss.utils.Preconditions.checkNotNull;
  * }</pre>
  *
  * @param <InputT>> The input type of records to be written to Fluss
+ * @since 0.7
  */
+@PublicEvolving
 public class FlussSinkBuilder<InputT> {
     private static final Logger LOG = LoggerFactory.getLogger(FlussSinkBuilder.class);
 
     private String bootstrapServers;
     private String database;
     private String tableName;
-    private RowType tableRowType;
-    private boolean ignoreDelete;
-    private int[] partialUpdateColumns;
-    //    private boolean isUpsert;
     private final Map<String, String> configOptions = new HashMap<>();
     private FlussSerializationSchema<InputT> serializationSchema;
     private boolean shuffleByBucketId = true;
-    private @Nullable DataLakeFormat lakeFormat;
 
     /** Set the bootstrap server for the sink. */
     public FlussSinkBuilder<InputT> setBootstrapServers(String bootstrapServers) {
@@ -91,24 +88,6 @@ public class FlussSinkBuilder<InputT> {
     /** Set the table name for the sink. */
     public FlussSinkBuilder<InputT> setTable(String table) {
         this.tableName = table;
-        return this;
-    }
-
-    /** Set the row type for the sink. */
-    public FlussSinkBuilder<InputT> setRowType(RowType rowType) {
-        this.tableRowType = rowType;
-        return this;
-    }
-
-    /** Set whether to ignore delete operations. */
-    public FlussSinkBuilder<InputT> setIgnoreDelete(boolean ignoreDelete) {
-        this.ignoreDelete = ignoreDelete;
-        return this;
-    }
-
-    /** Set target column indexes. */
-    public FlussSinkBuilder<InputT> setPartialUpdateColumns(int[] partialUpdateColumns) {
-        this.partialUpdateColumns = partialUpdateColumns;
         return this;
     }
 
@@ -166,14 +145,10 @@ public class FlussSinkBuilder<InputT> {
         int numBucket = tableInfo.getNumBuckets();
         List<String> bucketKeys = tableInfo.getBucketKeys();
         List<String> partitionKeys = tableInfo.getPartitionKeys();
-
-        this.lakeFormat = tableInfo.getTableConfig().getDataLakeFormat().orElse(null);
+        RowType tableRowType = toFlinkRowType(tableInfo.getRowType());
+        DataLakeFormat lakeFormat = tableInfo.getTableConfig().getDataLakeFormat().orElse(null);
 
         boolean isUpsert = tableInfo.hasPrimaryKey();
-
-        checkArgument(
-                isUpsert && partialUpdateColumns == null,
-                "Partial updates are not supported in append mode.");
 
         if (isUpsert) {
             LOG.info("Initializing Fluss upsert sink writer ...");
@@ -182,7 +157,7 @@ public class FlussSinkBuilder<InputT> {
                             tablePath,
                             flussConfig,
                             tableRowType,
-                            partialUpdateColumns,
+                            null, // not support partialUpdateColumns yet
                             numBucket,
                             bucketKeys,
                             partitionKeys,
@@ -210,7 +185,6 @@ public class FlussSinkBuilder<InputT> {
     private void validateConfiguration() {
         checkNotNull(bootstrapServers, "BootstrapServers is required but not provided.");
         checkNotNull(serializationSchema, "SerializationSchema is required but not provided.");
-        checkNotNull(tableRowType, "Table row type is required but not provided.");
 
         checkNotNull(database, "Database is required but not provided.");
         checkArgument(!database.isEmpty(), "Database cannot be empty.");
