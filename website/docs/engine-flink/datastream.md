@@ -1,6 +1,6 @@
 ---
 title: "Datastream API"
-sidebar_position: 1
+sidebar_position: 6
 ---
 
 <!--
@@ -27,7 +27,7 @@ Key features of the Fluss Datastream API include:
 * Reading from both primary key tables and log tables
 * Support for projection pushdown to select specific fields
 * Flexible offset initialization strategies
-* Custom deserialization schemas for converting Fluss records to your data types
+* Custom de/serialization schemas for converting between Fluss records and your data types
 * Automatic handling of updates for primary key tables
 
 ## Dependency
@@ -57,6 +57,11 @@ FlussSource<Order> flussSource = FlussSource.<Order>builder()
     .setScanPartitionDiscoveryIntervalMs(1000L)
     .setDeserializationSchema(new OrderDeserializationSchema())
     .build();
+
+DataStreamSource<Order> stream =
+        env.fromSource(flussSource, WatermarkStrategy.noWatermarks(), "Fluss Orders Source");
+
+stream.print();
 ```
 
 ### Configuration Options
@@ -80,11 +85,11 @@ The `OffsetsInitializer` interface provides several factory methods for creating
 * **OffsetsInitializer.earliest():** Initializes offsets to the earliest available offsets of each bucket
 * **OffsetsInitializer.latest():** Initializes offsets to the latest offsets of each bucket
 * **OffsetsInitializer.full():** Performs a full snapshot on the table upon first startup:
-  * For log tables: reads from the earliest log offset (equivalent to earliest())
-  * For primary key tables: reads the latest snapshot which materializes all changes on the table
+  * For **log tables:** reads from the earliest log offset (equivalent to earliest())
+  * For **primary key tables:** reads the latest snapshot which materializes all changes on the table
 * **OffsetsInitializer.timestamp(long timestamp):** Initializes offsets based on a given timestamp
 
-Example:
+**Example:**
 ```java
 // Start reading from the earliest available offsets
 FlussSource<Order> source = FlussSource.<Order>builder()
@@ -144,7 +149,8 @@ public class OrderDeserializationSchema implements FlussDeserializationSchema<Or
 ### Examples
 
 #### Reading from a Primary Key Table
-When reading from a primary key table, the Fluss Datastream API automatically handles updates to the data. For each update, it emits both the before and after versions of the record with the appropriate `RowKind` (INSERT, UPDATE_BEFORE, UPDATE_AFTER, DELETE).
+When reading from a primary key table, the Fluss Datastream API automatically handles updates to the data. 
+For each update, it emits both the before and after versions of the record with the appropriate `RowKind` (`INSERT`, `UPDATE_BEFORE`, `UPDATE_AFTER`, `DELETE`).
 
 ```java
 // Create a FlussSource for a primary key table
@@ -166,6 +172,8 @@ DataStreamSource<RowData> stream = env.fromSource(
 // Process the stream to handle different row kinds
 // For INSERT, UPDATE_BEFORE, UPDATE_AFTER, DELETE events
 ```
+
+**Note:** If you are mapping from `RowData` to your pojos object, you might want to include the row kind operation.
 
 #### Reading from a Log Table
 When reading from a log table, all records are emitted with `RowKind.INSERT` since log tables only support appends.
@@ -214,59 +222,157 @@ In this example, `OrderPartial` is a class that only contains the `orderId` and 
 
 ## Datastream Sink
 
+### Initialization
+The main entry point for the Fluss Datastream Sink API is the `FlussSink` class. You create a `FlussSink` instance using the `FlussSinkBuilder`, which allows for step-by-step configuration of the sink connector.
+
+```java
+FlinkSink<RowData> flussSink =
+        FlussSink.<RowData>builder()
+                .setBootstrapServers("localhost:9092")
+                .setDatabase("mydb")
+                .setTable("orders")
+                .setSerializationSchema(new RowDataSerializationSchema(false, true))
+                .build();
+
+stream.sinkTo(flussSink).name("Fluss Sink");
+```
+
+### Configuration Options
+The `FlussSinkBuilder` provides several methods for configuring the sink connector:
+
+#### Required Parameters
+* **setBootstrapServers(String bootstrapServers):** Sets the bootstrap servers for the Fluss sink connection
+* **setDatabase(String database):** Sets the database name for the Fluss sink
+* **setTable(String table):** Sets the table name for the Fluss sink
+* **setSerializationSchema(FlussSerializationSchema&lt;T&gt; schema):** Sets the serialization schema for converting input records to Fluss records
+
+#### Optional Parameters
+* **setShuffleByBucketId(boolean shuffleByBucketId):** Sets whether to shuffle data by bucket ID (default: true)
+* **setOption(String key, String value):** Sets a single configuration option
+* **setOptions(Map&lt;String, String&gt; options):** Sets multiple configuration options at once
+
+**Note:** `FlussSerializationSchema` needs to propagate downstream the operations that take place. See [RowDataSerializationSchema](https://github.com/alibaba/fluss/blob/main/fluss-flink/fluss-flink-common/src/main/java/com/alibaba/fluss/flink/sink/serializer/RowDataSerializationSchema.java) as an example.
+
+### Examples
+
+#### Writing to a Primary Key Table
+When writing to a primary key table, the Fluss Datastream API automatically handles upserts based on the primary key.
+
+```java
+// Create a FlussSink for a primary key table
+FlussSink<Order> flussSink = new FlussSinkBuilder<Order>()
+    .setBootstrapServers("localhost:9092")
+    .setDatabase("mydb")
+    .setTable("orders_pk")
+    .setSerializationSchema(new OrderSerializationSchema())
+    .build();
+
+// Add the sink to your DataStream
+dataStream.sinkTo(flussSink);
+```
+
+#### Writing to a Log Table
+When writing to a log table, all records are appended.
+
+```java
+// Create a FlussSink for a log table
+FlussSink<Order> flussSink = new FlussSinkBuilder<Order>()
+    .setBootstrapServers("localhost:9092")
+    .setDatabase("mydb")
+    .setTable("orders_log")
+    .setSerializationSchema(new OrderSerializationSchema())
+    .build();
+
+// Add the sink to your DataStream
+dataStream.sinkTo(flussSink);
+```
+
+#### Setting Custom Configuration Options
+You can set custom configuration options for the Fluss sink.
+
+```java
+// Create a FlussSink with custom configuration options
+FlussSink<Order> flussSink = new FlussSinkBuilder<Order>()
+    .setBootstrapServers("localhost:9092")
+    .setDatabase("mydb")
+    .setTable("orders")
+    .setOption("custom.key", "custom.value")
+    .setSerializationSchema(new OrderSerializationSchema())
+    .build();
+
+// Or set multiple options at once
+Map&lt;String, String&gt; options = new HashMap&lt;&gt;();
+options.put("option1", "value1");
+options.put("option2", "value2");
+
+FlussSink<Order> flussSink = new FlussSinkBuilder<Order>()
+    .setBootstrapServers("localhost:9092")
+    .setDatabase("mydb")
+    .setTable("orders")
+    .setOptions(options)
+    .setSerializationSchema(new OrderSerializationSchema())
+    .build();
+```
+
 ### Serialization Schemas
 The `FlussSerializationSchema` interface is used to convert your data objects to Fluss's internal row format for writing to Fluss tables. Fluss provides built-in implementations:
 
 * **RowDataSerializationSchema** - Converts Flink's `RowData` objects to Fluss rows
 * **JsonStringSerializationSchema** - Converts JSON strings to Fluss rows
 
-The serialization schema is used when writing data to Fluss tables using the Fluss sink. When configuring a Fluss sink, you provide a serialization schema that converts your data objects to Fluss's internal row format. The serialization schema is set using the `setSerializer()` method on the sink builder.
+The serialization schema is used when writing data to Fluss tables using the Fluss sink. When configuring a Fluss sink, you provide a serialization schema that converts your data objects to Fluss's internal row format. The serialization schema is set using the `setSerializationSchema()` method on the sink builder.
 
 You can implement your own serialization schema by implementing the `FlussSerializationSchema` interface:
 
 ```java
-public class OrderSerializationSchema implements FlussSerializationSchema<Order> {
-    private RowType rowType;
-
-    @Override
-    public void open(InitializationContext context) throws Exception {
-        this.rowType = context.getRowSchema();
-
-        // Validate schema compatibility with Order class
-        if (rowType.getFieldCount() < 4) {
-            throw new IllegalStateException(
-                    "Schema must have at least 4 fields to serialize Order objects");
-        }
-    }
-
-    @Override
-    public RowWithOp serialize(Order order) throws Exception {
-        // Create a new row with the same number of fields as the schema
-        GenericRow row = new GenericRow(rowType.getFieldCount());
-
-        // Set order fields directly
-        row.setField(0, order.getOrderId());
-        row.setField(1, order.getItemId());
-        row.setField(2, order.getAmount());
-
-        // Convert String to BinaryString for Fluss internal representation
-        String address = order.getAddress();
-        if (address != null) {
-            row.setField(3, BinaryString.fromString(address));
-        } else {
-            row.setField(3, null);
-        }
-
-        // Return the row with an operation type (APPEND, UPSERT, DELETE)
-        return new RowWithOp(row, OperationType.APPEND);
-    }
+private static class Order implements Serializable {
+  private static final long serialVersionUID = 1L;
+  private final long orderId;
+  private final long itemId;
+  private final int amount;
+  private final String address;
+  private final RowKind rowKind; // holds the row operation
+  
+  ...
 }
+
+private static class OrderSerializationSchema
+            implements FlussSerializationSchema<TestOrder> {
+        private static final long serialVersionUID = 1L;
+
+        @Override
+        public void open(InitializationContext context) throws Exception {}
+
+        @Override
+        public RowWithOp serialize(Order value) throws Exception {
+            GenericRow row = new GenericRow(4);
+            row.setField(0, value.orderId);
+            row.setField(1, value.itemId);
+            row.setField(2, value.amount);
+            row.setField(3, BinaryString.fromString(value.address));
+
+            RowKind rowKind = value.rowKind;
+            switch (rowKind) {
+                case INSERT:
+                case UPDATE_AFTER:
+                    return new RowWithOp(row, OperationType.UPSERT);
+                case UPDATE_BEFORE:
+                case DELETE:
+                    return new RowWithOp(row, OperationType.DELETE);
+                default:
+                    throw new IllegalArgumentException("Unsupported row kind: " + rowKind);
+            }
+        }
+    }
 ```
+
+
+By default you can use the [RowDataSerializationSchema](https://github.com/alibaba/fluss/blob/main/fluss-flink/fluss-flink-common/src/main/java/com/alibaba/fluss/flink/sink/serializer/RowDataSerializationSchema.java).
 
 The `RowDataSerializationSchema` provides additional configuration options:
 
 * **isAppendOnly** - Whether the schema operates in append-only mode (only INSERT operations)
-* **ignoreDelete** - Whether to ignore DELETE and UPDATE_BEFORE operations
+* **ignoreDelete** - Whether to ignore `DELETE` and `UPDATE_BEFORE` operations
 
 ```java
 // Create a serialization schema for append-only operations
