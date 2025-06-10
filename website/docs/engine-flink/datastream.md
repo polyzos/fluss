@@ -49,7 +49,7 @@ The main entry point for the Fluss Datastream API is the `FlussSource` class. Yo
 ```java
 // Create a FlussSource using the builder pattern
 FlussSource<Order> flussSource = FlussSource.<Order>builder()
-    .setBootstrapServers("localhost:9092")
+    .setBootstrapServers("localhost:9123")
     .setDatabase("mydb")
     .setTable("orders")
     .setProjectedFields("orderId", "amount")
@@ -155,7 +155,7 @@ For each update, it emits both the before and after versions of the record with 
 ```java
 // Create a FlussSource for a primary key table
 FlussSource<RowData> flussSource = FlussSource.<RowData>builder()
-    .setBootstrapServers("localhost:9092")
+    .setBootstrapServers("localhost:9123")
     .setDatabase("mydb")
     .setTable("orders_pk")
     .setStartingOffsets(OffsetsInitializer.earliest())
@@ -181,7 +181,7 @@ When reading from a log table, all records are emitted with `RowKind.INSERT` sin
 ```java
 // Create a FlussSource for a log table
 FlussSource<RowData> flussSource = FlussSource.<RowData>builder()
-    .setBootstrapServers("localhost:9092")
+    .setBootstrapServers("localhost:9123")
     .setDatabase("mydb")
     .setTable("orders_log")
     .setStartingOffsets(OffsetsInitializer.earliest())
@@ -202,7 +202,7 @@ Projection pushdown allows you to select only the fields you need, which can imp
 ```java
 // Create a FlussSource with projection pushdown
 FlussSource<OrderPartial> flussSource = FlussSource.<OrderPartial>builder()
-    .setBootstrapServers("localhost:9092")
+    .setBootstrapServers("localhost:9123")
     .setDatabase("mydb")
     .setTable("orders")
     .setProjectedFields("orderId", "amount")  // Only select these fields
@@ -228,7 +228,7 @@ The main entry point for the Fluss Datastream Sink API is the `FlussSink` class.
 ```java
 FlinkSink<RowData> flussSink =
         FlussSink.<RowData>builder()
-                .setBootstrapServers("localhost:9092")
+                .setBootstrapServers("localhost:9123")
                 .setDatabase("mydb")
                 .setTable("orders")
                 .setSerializationSchema(new RowDataSerializationSchema(false, true))
@@ -260,12 +260,12 @@ When writing to a primary key table, the Fluss Datastream API automatically hand
 
 ```java
 // Create a FlussSink for a primary key table
-FlussSink<Order> flussSink = new FlussSinkBuilder<Order>()
-    .setBootstrapServers("localhost:9092")
-    .setDatabase("mydb")
-    .setTable("orders_pk")
-    .setSerializationSchema(new OrderSerializationSchema())
-    .build();
+FlussSink<Order> flussSink = FlussSink.<Order>builder()
+                .setBootstrapServers("localhost:9123")
+                .setDatabase("mydb")
+                .setTable("orders_pk")
+                .setSerializationSchema(new OrderSerializationSchema())
+                .build();
 
 // Add the sink to your DataStream
 dataStream.sinkTo(flussSink);
@@ -276,12 +276,12 @@ When writing to a log table, all records are appended.
 
 ```java
 // Create a FlussSink for a log table
-FlussSink<Order> flussSink = new FlussSinkBuilder<Order>()
-    .setBootstrapServers("localhost:9092")
-    .setDatabase("mydb")
-    .setTable("orders_log")
-    .setSerializationSchema(new OrderSerializationSchema())
-    .build();
+FlussSink<Order> flussSink = FlussSink.<Order>builder()
+                .setBootstrapServers("localhost:9123")
+                .setDatabase("mydb")
+                .setTable("orders_log")
+                .setSerializationSchema(new OrderSerializationSchema())
+                .build();
 
 // Add the sink to your DataStream
 dataStream.sinkTo(flussSink);
@@ -292,26 +292,26 @@ You can set custom configuration options for the Fluss sink.
 
 ```java
 // Create a FlussSink with custom configuration options
-FlussSink<Order> flussSink = new FlussSinkBuilder<Order>()
-    .setBootstrapServers("localhost:9092")
-    .setDatabase("mydb")
-    .setTable("orders")
-    .setOption("custom.key", "custom.value")
-    .setSerializationSchema(new OrderSerializationSchema())
-    .build();
+FlussSink<Order> flussSink = FlussSink.<Order>builder()
+                .setBootstrapServers("localhost:9123")
+                .setDatabase("mydb")
+                .setTable("orders")
+                .setOption("custom.key", "custom.value")
+                .setSerializationSchema(new OrderSerializationSchema())
+                .build();
 
 // Or set multiple options at once
 Map&lt;String, String&gt; options = new HashMap&lt;&gt;();
 options.put("option1", "value1");
 options.put("option2", "value2");
 
-FlussSink<Order> flussSink = new FlussSinkBuilder<Order>()
-    .setBootstrapServers("localhost:9092")
-    .setDatabase("mydb")
-    .setTable("orders")
-    .setOptions(options)
-    .setSerializationSchema(new OrderSerializationSchema())
-    .build();
+FlussSink<Order> flussSink = FlussSink.<Order>builder()
+        .setBootstrapServers("localhost:9123")
+        .setDatabase("mydb")
+        .setTable("orders")
+        .setOptions(options)
+        .setSerializationSchema(new OrderSerializationSchema())
+        .build();
 ```
 
 ### Serialization Schemas
@@ -337,7 +337,7 @@ private static class Order implements Serializable {
 }
 
 private static class OrderSerializationSchema
-            implements FlussSerializationSchema<TestOrder> {
+            implements FlussSerializationSchema<Order> {
         private static final long serialVersionUID = 1L;
 
         @Override
