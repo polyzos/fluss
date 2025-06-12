@@ -1,5 +1,5 @@
 ---
-title: "Datastream API"
+title: "DataStream API"
 sidebar_position: 6
 ---
 
@@ -19,30 +19,33 @@ sidebar_position: 6
  limitations under the License.
 -->
 
-# Fluss Datastream
+# DataStream API
 ## Overview
-The Fluss Datastream API provides a Flink DataStream source implementation for reading data from Fluss tables. It allows you to seamlessly integrate Fluss tables with Flink's DataStream API, enabling you to process data from Fluss in your Flink applications.
+The Fluss DataStream Connector for Apache Flink provides a Flink DataStream source implementation for reading data from Fluss tables and a Flink DataStream sink implementation for writing data to Fluss tables. It allows you to seamlessly integrate Fluss tables with Flink's DataStream API, enabling you to process data from Fluss in your Flink applications.
 
-Key features of the Fluss Datastream API include:
+Key features of the Fluss Datastream Connector include:
 * Reading from both primary key tables and log tables
 * Support for projection pushdown to select specific fields
 * Flexible offset initialization strategies
 * Custom de/serialization schemas for converting between Fluss records and your data types
-* Automatic handling of updates for primary key tables
+* Writing to both primary key tables and log tables
+* Support for different operation types (`INSERT`, `UPDATE`, `DELETE`)
+* Configurable sink behavior with custom options
+* Automatic handling of upserts for primary key tables
 
 ## Dependency
 In order to use the Fluss Datastream API, you need to add the following dependency to your `pom.xml` file:
 
 ```xml
-<!-- https://mvnrepository.com/artifact/com.alibaba.fluss/fluss-client -->
+<!-- https://mvnrepository.com/artifact/com.alibaba.fluss/fluss-flink-xxx -->
 <dependency>
     <groupId>com.alibaba.fluss</groupId>
-    <artifactId>fluss-datastream</artifactId>
-    <version>0.7.0</version>
+    <artifactId>fluss-flink-${FLINK_VERSION}$</artifactId>
+    <version>$FLUSS_VERSION$</version>
 </dependency>
 ```
 
-## Datastream Source
+## DataStream Source
 ### Initialization
 The main entry point for the Fluss Datastream API is the `FlussSource` class. You create a `FlussSource` instance using the builder pattern, which allows for step-by-step configuration of the source connector.
 
@@ -220,10 +223,10 @@ DataStreamSource<OrderPartial> stream = env.fromSource(
 
 In this example, `OrderPartial` is a class that only contains the `orderId` and `amount` fields, and `OrderPartialDeserializationSchema` is a deserialization schema that knows how to convert the projected fields to `OrderPartial` objects.
 
-## Datastream Sink
+## DataStream Sink
 
 ### Initialization
-The main entry point for the Fluss Datastream Sink API is the `FlussSink` class. You create a `FlussSink` instance using the `FlussSinkBuilder`, which allows for step-by-step configuration of the sink connector.
+The main entry point for the Fluss DataStream Sink API is the `FlussSink` class. You create a `FlussSink` instance using the `FlussSinkBuilder`, which allows for step-by-step configuration of the sink connector.
 
 ```java
 FlinkSink<RowData> flussSink =
@@ -301,7 +304,7 @@ FlussSink<Order> flussSink = FlussSink.<Order>builder()
                 .build();
 
 // Or set multiple options at once
-Map&lt;String, String&gt; options = new HashMap&lt;&gt;();
+Map<String, String> options = new HashMap<>();
 options.put("option1", "value1");
 options.put("option2", "value2");
 
@@ -332,7 +335,7 @@ private static class Order implements Serializable {
   private final int amount;
   private final String address;
   private final RowKind rowKind; // holds the row operation
-  
+
   ...
 }
 
