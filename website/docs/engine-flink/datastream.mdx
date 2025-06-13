@@ -34,20 +34,51 @@ Key features of the Fluss Datastream Connector include:
 * Automatic handling of upserts for primary key tables
 
 ## Dependency
-In order to use the Fluss Datastream API, you need to add the following dependency to your `pom.xml` file:
+In order to use the Fluss DataStream Connector in Flink DataStream API, you need to add the following dependency to your `pom.xml` file,
+according to the Flink version you are using. The Fluss DataStream Connector is available for Flink versions 1.18, 1.19, and 1.20.
 
-```xml
-<!-- https://mvnrepository.com/artifact/com.alibaba.fluss/fluss-flink-xxx -->
-<dependency>
-    <groupId>com.alibaba.fluss</groupId>
-    <artifactId>fluss-flink-${FLINK_VERSION}$</artifactId>
-    <version>$FLUSS_VERSION$</version>
-</dependency>
-```
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<Tabs>
+    <TabItem value="flink-1.20" label="Flink 1.20" default>
+        ```xml
+        <!-- https://mvnrepository.com/artifact/com.alibaba.fluss/fluss-flink-1.20 -->
+        <dependency>
+            <groupId>com.alibaba.fluss</groupId>
+            <artifactId>fluss-flink-1.20</artifactId>
+            <version>$FLUSS_VERSION$</version>
+        </dependency>
+        ```
+    </TabItem>
+    <TabItem value="flink-1.19" label="Flink 1.19">
+        ```xml
+        <!-- https://mvnrepository.com/artifact/com.alibaba.fluss/fluss-flink-1.19 -->
+        <dependency>
+            <groupId>com.alibaba.fluss</groupId>
+            <artifactId>fluss-flink-1.19</artifactId>
+            <version>$FLUSS_VERSION$</version>
+        </dependency>
+        ```
+    </TabItem>
+    <TabItem value="flink-1.18" label="Flink 1.18">
+        ```xml
+        <!-- https://mvnrepository.com/artifact/com.alibaba.fluss/fluss-flink-1.18 -->
+        <dependency>
+            <groupId>com.alibaba.fluss</groupId>
+            <artifactId>fluss-flink-1.18</artifactId>
+            <version>$FLUSS_VERSION$</version>
+        </dependency>
+        ```
+    </TabItem>
+</Tabs>
+
+
 
 ## DataStream Source
 ### Initialization
-The main entry point for the Fluss Datastream API is the `FlussSource` class. You create a `FlussSource` instance using the builder pattern, which allows for step-by-step configuration of the source connector.
+The main entry point for the Fluss DataStream API is the `FlussSource` class. You create a `FlussSource` instance using the builder pattern, which allows for step-by-step configuration of the source connector.
 
 ```java
 // Create a FlussSource using the builder pattern
@@ -152,7 +183,7 @@ public class OrderDeserializationSchema implements FlussDeserializationSchema<Or
 ### Examples
 
 #### Reading from a Primary Key Table
-When reading from a primary key table, the Fluss Datastream API automatically handles updates to the data. 
+When reading from a primary key table, the Fluss DataStream Connector automatically handles updates to the data.
 For each update, it emits both the before and after versions of the record with the appropriate `RowKind` (`INSERT`, `UPDATE_BEFORE`, `UPDATE_AFTER`, `DELETE`).
 
 ```java
@@ -259,7 +290,7 @@ The `FlussSinkBuilder` provides several methods for configuring the sink connect
 ### Examples
 
 #### Writing to a Primary Key Table
-When writing to a primary key table, the Fluss Datastream API automatically handles upserts based on the primary key.
+When writing to a primary key table, the Fluss DataStream Connector automatically handles upserts based on the primary key.
 
 ```java
 // Create a FlussSink for a primary key table
