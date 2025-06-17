@@ -26,7 +26,7 @@ authors: [jark]
 
 This version has undergone extensive improvements in `stability`, `architecture`, `performance optimization`, and `security`, further enhancing its readiness for **production environments**. Over the past three months, we have completed more than **250 commits**, making this release a significant milestone toward becoming a mature, production-grade streaming storage platform.
 
-[TODO: Insert core improvements diagram] 
+![Improvements Diagram](assets/0.7/overview.png)
 
 ## Stability Enhancements
 In this release, we have dedicated significant effort to enhancing system stability. By building a comprehensive stability testing framework covering end-to-end processes and multi-scenario fault simulations, combined with large-scale stress testing using real business data, and through rigorous production-level stability validation in Alibaba, we have addressed and resolved over 50 critical issues. This has significantly improved the stability of Fluss' core modules and the overall robustness of the system. The major improvements include:
