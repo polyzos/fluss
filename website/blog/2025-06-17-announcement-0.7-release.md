@@ -49,7 +49,7 @@ In Fluss 0.5, we first introduced the Streaming Lakehouse feature, with the powe
 However, the initial implementation had architectural limitations affecting scalability and operability in production. In 0.7, we’ve completely re-architected the Streaming Lakehouse feature to address these challenges.
 
 ## Elastic Stateless Service
-Previously, the lake tiering service was implemented as a Flink job encapsulating Fluss as a Source and Paimon as a Sink, storing sync offsets state in Flink’s State, this making it a stateful service. 
+Previously, the lake tiering service was implemented as a Flink job encapsulating Fluss as a Source and Paimon as a Sink, storing sync offsets state in Flink’s State, thus making it a stateful service. 
 This led to several operational issues:
 * **Single Point of Failure:** The lifecycle of each table is bound to a specific Flink job. Once a job fails, the synchronization of all tables hosted by the job will be blocked. 
 * **Limited Scalability:** Could only scale vertically (increase job resources), not horizontally (start multiple jobs). 
