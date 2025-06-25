@@ -25,18 +25,18 @@ authors: [giannis]
 ![Banner](assets/java_client/banner.png)
 
 ## Introduction
-Fluss is a streaming data storage system built for real-time analytics, serving as a low-latency data layer in modern data architectures.
+Fluss is a streaming data storage system built for real-time analytics, serving as a low-latency data layer in modern data Lakehouses.
 It supports sub-second streaming reads and writes, storing data in a columnar format for efficiency, and offers two flexible table types: **append-only Log Tables** and **updatable Primary Key Tables**. 
 In practice, this means Fluss can ingest high-throughput event streams *(using log tables)* while also maintaining *up-to-date* reference data or state *(using primary key tables)*, a combination ideal for 
-scenarios like IoT, where you might stream sensor readings and look up metadata for those sensors in real-time, without
+scenarios like IoT, where you might stream sensor readings and look up information for those sensors in real-time, without
 the need for external K/V stores.
 <!-- truncate -->
 
 In this tutorial, we'll introduce the **Fluss Java Client** by walking through a simple home IoT system example. 
-We will use `Fluss's Admin client` to create a primary key table for sensor metadata and a log table for sensor readings, then use the client 
+We will use `Fluss's Admin client` to create a primary key table for sensor information and a log table for sensor readings, then use the client 
 to write data to these tables and read/enrich the streaming sensor data. 
 
-By the end, you'll see how a sensor reading can be ingested into a log table and immediately enriched with metadata from a primary key table (essentially performing a real-time lookup join for streaming data enrichment).
+By the end, you'll see how a sensor reading can be ingested into a log table and immediately enriched with information from a primary key table (essentially performing a real-time lookup join for streaming data enrichment).
 
 ## Preflight Check
 The full source code can be found [here](https://github.com/ververica/ververica-fluss-examples).
@@ -45,7 +45,7 @@ The full source code can be found [here](https://github.com/ververica/ververica-
 docker compose up
 ```
 
-Then, establish a connection to the Fluss cluster. 
+The first thing we need to do is establish a connection to the Fluss cluster. 
 The `Connection` is the main entry point for the Fluss client, from which we obtain an `Admin` (for metadata operations) and Table instances (for data operations)
 
 ```java
@@ -58,8 +58,7 @@ Connection connection = ConnectionFactory.createConnection(conf);
 Admin admin = connection.getAdmin();
 ```
 The above code snippet shows the bare minimum requirements for connecting and interacting with a Fluss Cluster.
-
-For our example we will use mock data which you can find below:
+For our example we will the following mock data - to keep things simple - which you can find below:
 ```java
 public static final List<SensorReading> readings = List.of(
         new SensorReading(1, LocalDateTime.of(2025, 6, 23, 9, 15), 22.5, 45.0, 1013.2, 87.5),
@@ -94,7 +93,7 @@ public static final List<SensorInfo> sensorInfos = List.of(
 );
 ```
 
-## Creating a Database and Tables with the Admin Client
+## Operating The Cluster
 Let's create a database for our IoT data, and within it define two tables:
 * **Sensor Readings Table:** A log table that will collect time-series readings from sensors (like temperature and humidity readings). This table is append-only (new records are added continuously, with no updates/deletes) which is ideal for immutable event streams
 * **Sensor Information Table:** A primary key table that stores metadata for each sensor (like sensor ID, location, type). Each `sensorId` will be unique and acts as the primary key. This table can be updated as sensor info changes (e.g., sensor relocated or reconfigured). 
@@ -103,7 +102,8 @@ Using the Admin client, we can programmatically create these tables.
 
 First, we'll ensure the database exists (creating it if not), then define schemas for each table and create them:
 
-### Define schema for the Log table (sensor readings)
+### Schema Definitions
+#### Log table (sensor readings)
 
 ```java
 public static Schema getSensorReadingsSchema() {
@@ -118,7 +118,7 @@ public static Schema getSensorReadingsSchema() {
 }
 ```
 
-### Define schema for the Primary Key table (sensor information)
+#### Primary Key table (sensor information)
 ```java
 public static Schema getSensorInfoSchema() {
     return Schema.newBuilder()
@@ -129,12 +129,12 @@ public static Schema getSensorInfoSchema() {
             .column("installationDate", DataTypes.DATE())
             .column("state", DataTypes.STRING())
             .column("lastUpdated", DataTypes.TIMESTAMP())
-            .primaryKey("sensorId")
+            .primaryKey("sensorId")             <-- Define a Primary Key
             .build();
 }
 ```
 
-### Then let's go ahead and create those tables.
+### Table Creation
 ```java
 public static void setupTables(Admin admin) throws ExecutionException, InterruptedException {
     TableDescriptor readingsDescriptor = TableDescriptor.builder()
@@ -158,19 +158,19 @@ public static void setupTables(Admin admin) throws ExecutionException, Interrupt
     admin.createTable(sensorInfoTablePath, sensorInfoDescriptor, true).get();
 }
 ```
-We specify a distribution hint with `.distributedBy(3, "sensorId")`. 
+We specify a distribution with `.distributedBy(3, "sensorId")`. 
 Fluss tables are partitioned into buckets (similar to partitions in Kafka topics) for scalability. 
 Here we use 3 buckets, meaning data gets distributed across 3 buckets. Multiple buckets allow for higher throughput or to parallelize reads/writes. 
-If using multiple buckets, Fluss would hash on the bucket key (sensorId in our case) to assign records to buckets.
+If using multiple buckets, Fluss would hash on the bucket key (`sensorId` in our case) to assign records to buckets.
 
-For the sensor_readings table, we define a schema without any primary key. In Fluss, a table created without a primary key clause is a Log Table. 
+For the `sensor_readings` table, we define a schema without any primary key. In Fluss, a table created without a primary key clause is a Log Table. 
 A log table only supports appending new records (no updates or deletes), making it perfect for immutable time-series data or logs.
 
-In a log table, specifying a bucket key like `sensorId` ensures all readings from the same sensor end up to the same bucket providing strict ordering guarantees.
+In the log table, specifying a bucket key like `sensorId` ensures all readings from the same sensor end up to the same bucket providing strict ordering guarantees.
 
 With our tables created let's go and write some data.
 
-## Writing Data to the Tables (Upserts and Appends)
+## Table Writes
 With our tables in place, let's insert some data using the Fluss Java API. 
 The client allows us to write or read data from it. 
 We'll demonstrate two patterns:
@@ -180,7 +180,10 @@ We'll demonstrate two patterns:
 Fluss provides specialized writer interfaces for each table type: an **UpsertWriter** for primary key tables and an **AppendWriter** for log tables. 
 Under the hood, the Fluss client currently expects data as **GenericRow** objects (a generic row data format). 
 
-> **Note:** Discuss **InternalRow** And **GenericRow**
+> **Note:** Internally Fluss uses **InternalRow** as an optimized, binary representation of data for better performance and memory efficiency. 
+> **GenericRow** is a generic implementation of InternalRow. This allows developers to interact with data easily while Fluss processes it efficiently using the underlying binary format. 
+
+Since we are creating **Pojos** though this means that we need to convert these into a GenericRow in order to write them into Fluss.
 
 ```java
 public static GenericRow energyReadingToRow(SensorReading reading) {
@@ -193,7 +196,6 @@ public static GenericRow energyReadingToRow(SensorReading reading) {
     row.setField(5, reading.batteryLevel());
     return row;
 }
-
 public static GenericRow sensorInfoToRow(SensorInfo sensorInfo) {
     GenericRow row = new GenericRow(SensorInfo.class.getDeclaredFields().length);
     row.setField(0, sensorInfo.sensorId());
@@ -206,6 +208,9 @@ public static GenericRow sensorInfoToRow(SensorInfo sensorInfo) {
     return row;
 }
 ```
+**Note:** For certain data types like `String` or `LocalDateTime` we need to use certain functions like
+`BinaryString.fromString("string_value")` or `TimestampNtz.fromLocalDateTime(datetime)` otherwise you might
+come across some conversion exceptions.
 
 Let's start by writing data to the `Log Table`. This requires getting an `AppendWriter` as follows:
 
@@ -241,15 +246,15 @@ upsertWriter.flush();
 At this point we have successfully written 10 sensor information records to our table, because 
 updates will be handled on the primary key and merged.
 
-## Fluss Scanner & Lookups
+## Scans & Lookups
 Now comes the real-time data enrichment part of our example. 
 We want to simulate a process where each incoming sensor reading is immediately looked up against the sensor information table to add context (like location and type) to the raw reading.
 This is a common pattern in streaming systems, often achieved with lookup joins. 
 
 With the Fluss Java client, we can do this by combining a **log scanner on the readings table** with **point lookups on the sensor information table**.
 
-To consume data from a Fluss table, we use a *Scanner*. 
-For a log table, Fluss provides a *LogScanner* that allows us to *subscribe to one or more buckets* and poll for new records.
+To consume data from a Fluss table, we use a **Scanner*. 
+For a log table, Fluss provides a **LogScanner** that allows us to **subscribe to one or more buckets** and poll for new records.
 
 ```java
 LogScanner logScanner = readingsTable.newScan()         
@@ -262,7 +267,7 @@ Lookuper sensorInforLookuper = sensorInfoTable
         .createLookuper();
 ```
 
-We set up a scanner on the sensor_readings table, and next we need to subscribe to all its buckets, and then poll for any available records:
+We set up a scanner on the `sensor_readings` table, and next we need to subscribe to all its buckets, and then poll for any available records:
 ```java
 int numBuckets = readingsTable.getTableInfo().getNumBuckets();
 for (int i = 0; i < numBuckets; i++) {     
@@ -271,7 +276,7 @@ for (int i = 0; i < numBuckets; i++) {
 }
 ```
 
-Start polling for records. For each incoming record we will use the **Lookuper** to *lookup** sensor information from the primary key table,
+Start polling for records. For each incoming record we will use the **Lookuper** to `lookup` sensor information from the primary key table,
 and creating a **SensorReadingEnriched** record. 
 ```java
  while (true) {
@@ -324,14 +329,14 @@ and creating a **SensorReadingEnriched** record.
 ```
 Let's summarize what's happening here:
 * We create a LogScanner for the `sensor_readings` table using *table.newScan().createLogScanner()*. 
-* We subscribe to each bucket of the table from the beginning (offset 0). Subscribing "from beginning" means we'll read all existing data from the start; alternatively, one could subscribe from the latest position to only get new incoming data or based on other attributes like time. In our case, since we just inserted data, from-beginning will capture those inserts. 
+* We subscribe to each bucket of the table from the beginning (offset 0). Subscribing `from beginning` means we'll read all existing data from the start; alternatively, one could subscribe from the latest position to only get new incoming data or based on other attributes like time. In our case, since we just inserted data, from-beginning will capture those inserts. 
 * We then call `poll(Duration)` on the scanner to retrieve available records, waiting up to the given timeout (1 second here). This returns a `ScanRecords` batch containing any records that were present. We iterate over each `TableBucket` and then over each `ScanRecord` within that bucket. 
 * For each record, we extract the fields via the InternalRow interface (which provides typed access to each column in the row) and **convert them into a Pojo**. 
 * Next, for each reading, we perform a **lookup** on the **sensor_information** table to get the sensor's info. We construct a key (GenericRow with just the sensor_id) and use **sensorTable.newLookup().createLookuper().lookup(key)**. This performs a point lookup by primary key and returns a `LookupResult future`; we call `.get()` to get the result synchronously. If present, we retrieve the InternalRow of the sensor information and **convert it into a Pojo**. 
 * We then combine the data: logging an enriched message that includes the sensor's information alongside the reading values. 
 
 Fluss's lookup API gives us quick primary-key retrieval from a table, which is exactly what we need to enrich the streaming data. 
-In a real application, this enrichment could be done on the fly in a streaming job (and indeed Fluss is designed to support high-QPS lookup joins in real-time pipelines), but here we're simulating it with client calls for clarity.
+In a real application, this enrichment could be done on the fly in a streaming job (and indeed **Fluss is designed to support high-QPS lookup joins in real-time pipelines**), but here we're simulating it with client calls for clarity.
 
 If you run the above code found [here](https://github.com/ververica/ververica-fluss-examples), you should see an output like the following:
 ```shell
@@ -357,8 +362,8 @@ If you run the above code found [here](https://github.com/ververica/ververica-fl
 16:07:14.229 INFO  [main] com.ververica.scanner.FlussScanner - ---------------------------------------
 ```
 
-## Reads with Column Pruning
-Column pruning lets you fetch only the columns you need, reducing network overhead and improving read performance. With Fluss’s Java client, you can specify a subset of columns in your scan:
+## Column Pruning Scans
+Column pruning lets you fetch only the columns you need, **reducing network overhead and improving read performance**. With Fluss’s Java client, you can specify a subset of columns in your scan:
 ```java
 LogScanner logScanner = readingsTable.newScan()
     .project(List.of("sensorId", "timestamp", "temperature"))
