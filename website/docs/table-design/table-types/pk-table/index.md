@@ -49,7 +49,7 @@ In Fluss primary key table, each row of data has a unique primary key.
 If multiple entries with the same primary key are written to the Fluss primary key table, only the last entry will be
 retained.
 
-For [Partitioned Primary Key Table](../../../data-distribution/partitioning.md), the primary key must contain the
+For [Partitioned Primary Key Table](table-design/data-distribution/partitioning.md), the primary key must contain the
 partition key.
 
 ## Bucket Assigning
