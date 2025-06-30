@@ -41,17 +41,17 @@ The following properties can be set if using the Fluss catalog:
 
 | Option                         | Required | Default   | Description                                                                                                                                                                          |
 |--------------------------------|----------|-----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| type                           | required | (none)    | Catalog type, must to be 'fluss' here.                                                                                                                                               |
+| type                           | required | (none)    | Catalog type, must be 'fluss' here.                                                                                                                                               |
 | bootstrap.servers              | required | (none)    | Comma separated list of Fluss servers.                                                                                                                                               |
 | default-database               | optional | fluss     | The default database to use when switching to this catalog.                                                                                                                          |
 | client.security.protocol       | optional | PLAINTEXT | The security protocol used to communicate with brokers. Currently, only `PLAINTEXT` and `SASL` are supported, the configuration value is case insensitive.                           |
-| `client.security.{protocol}.*` | optional | (none)    | Client-side configuration properties for a specific authentication protocol. E.g., client.security.sasl.jaas.config. More Details in [authentication](../security/authentication.md) | (none)        |
+| `client.security.{protocol}.*` | optional | (none)    | Client-side configuration properties for a specific authentication protocol. E.g., client.security.sasl.jaas.config. More Details in [authentication](../security/authentication.md) |
 
-The following introduced statements assuming the current catalog is switched to the Fluss catalog using `USE CATALOG <catalog_name>` statement.
+The following statements assume that the current catalog has been switched to the Fluss catalog using the `USE CATALOG <catalog_name>` statement.
 
 ## Create Database
 
-By default, FlussCatalog will use the `fluss` database in Flink. Using the following example to create a separate database in order to avoid creating tables under the default `fluss` database:
+By default, FlussCatalog will use the `fluss` database in Flink. You can use the following example to create a separate database to avoid creating tables under the default `fluss` database:
 
 ```sql title="Flink SQL"
 CREATE DATABASE my_db;
@@ -147,7 +147,7 @@ But you can still use the [Add Partition](engine-flink/ddl.md#add-partition) sta
 
 #### Multi-Fields Partitioned Table
 
-Fluss also support [Multi-Fields Partitioning](table-design/data-distribution/partitioning.md#multi-field-partitioned-tables), the following SQL statement creates a Multi-Fields Partitioned Log Table in Fluss:
+Fluss also supports [Multi-Fields Partitioning](table-design/data-distribution/partitioning.md#multi-field-partitioned-tables), the following SQL statement creates a Multi-Fields Partitioned Log Table in Fluss:
 
 ```sql title="Flink SQL"
 CREATE TABLE my_multi_fields_part_log_table (
@@ -240,8 +240,8 @@ This will entirely remove all the data of the table in the Fluss cluster.
 
 ## Add Partition
 
-Fluss support manually add partitions to an exists partitioned table by Fluss Catalog. If the specified partition 
-not exists, Fluss will create the partition. If the specified partition already exists, Fluss will ignore the request 
+Fluss supports manually adding partitions to an existing partitioned table through the Fluss Catalog. If the specified partition 
+does not exist, Fluss will create the partition. If the specified partition already exists, Fluss will ignore the request 
 or throw an exception.
 
 To add partitions, run:
@@ -277,8 +277,8 @@ For more details, refer to the [Flink SHOW PARTITIONS](https://nightlies.apache.
 
 ## Drop Partition
 
-Fluss also support manually drop partitions from an exists partitioned table by Fluss Catalog. If the specified partition 
-not exists, Fluss will ignore the request or throw an exception.
+Fluss also supports manually dropping partitions from an existing partitioned table through the Fluss Catalog. If the specified partition 
+does not exist, Fluss will ignore the request or throw an exception.
 
 
 To drop partitions, run:

@@ -90,7 +90,7 @@ Additionally, compression is applied to each column independently, preserving th
 
 When compression is enabled:
 - For **Log Tables**, data is compressed by the writer on the client side, written in a compressed format, and decompressed by the log scanner on the client side.
-- For **PrimaryKey Table changelogs**, compression is performed server-side since the changelog is generated on the server.
+- For **Primary Key Table changelogs**, compression is performed server-side since the changelog is generated on the server.
 
 Log compression significantly reduces networking and storage costs. Benchmark results demonstrate that using the ZSTD compression with level 3 achieves a compression ratio of approximately **5x** (e.g., reducing 5GB of data to 1GB).
 Furthermore, read/write throughput improves substantially due to reduced networking overhead.
