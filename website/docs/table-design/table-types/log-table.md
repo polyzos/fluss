@@ -62,7 +62,7 @@ Log Tables in Fluss allow real-time data consumption, preserving the order of da
 ## Column Pruning
 
 Column pruning is a technique used to reduce the amount of data that needs to be read from storage by eliminating unnecessary columns from the query.
-Fluss supports column pruning for Log Tables and the changelog of PrimaryKey Tables, which can significantly improve query performance by reducing the amount of data that needs to be read from storage and lowering networking costs.
+Fluss supports column pruning for Log Tables and the changelog of Primary Key Tables, which can significantly improve query performance by reducing the amount of data that needs to be read from storage and lowering networking costs.
 
 What sets Fluss apart is its ability to apply **column pruning during streaming reads**, a capability that is both unique and industry-leading. This ensures that even in real-time streaming scenarios, only the required columns are processed, minimizing resource usage and maximizing efficiency.
 

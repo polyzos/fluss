@@ -77,9 +77,9 @@ DROP DATABASE my_db;
 
 ## Create Table
 
-### PrimaryKey Table
+### Primary Key Table
 
-The following SQL statement will create a [PrimaryKey Table](table-design/table-types/pk-table/index.md) with a primary key consisting of shop_id and user_id.
+The following SQL statement will create a [Primary Key Table](table-design/table-types/pk-table/index.md) with a primary key consisting of shop_id and user_id.
 ```sql title="Flink SQL"
 CREATE TABLE my_pk_table (
   shop_id BIGINT,
@@ -107,14 +107,14 @@ CREATE TABLE my_log_table (
 );
 ```
 
-### Partitioned (PrimaryKey/Log) Table
+### Partitioned (Primary Key/Log) Table
 
 :::note
 1. Currently, Fluss only supports partitioned field with `STRING` type
-2. For the Partitioned PrimaryKey Table, the partitioned field (`dt` in this case) must be a subset of the primary key (`dt, shop_id, user_id` in this case)
+2. For the Partitioned Primary Key Table, the partitioned field (`dt` in this case) must be a subset of the primary key (`dt, shop_id, user_id` in this case)
 :::
 
-The following SQL statement creates a Partitioned PrimaryKey Table in Fluss.
+The following SQL statement creates a Partitioned Primary Key Table in Fluss.
 
 ```sql title="Flink SQL"
 CREATE TABLE my_part_pk_table (
@@ -160,9 +160,9 @@ CREATE TABLE my_multi_fields_part_log_table (
 ) PARTITIONED BY (dt, nation);
 ```
 
-#### Auto partitioned (PrimaryKey/Log) table
+#### Auto Partitioned (Primary Key/Log) Table
 
-Fluss also support creat Auto Partitioned (PrimaryKey/Log) Table. The following SQL statement creates an Auto Partitioned PrimaryKey Table in Fluss.
+Fluss also supports creating Auto Partitioned (Primary Key/Log) Table. The following SQL statement creates an Auto Partitioned Primary Key Table in Fluss.
 
 ```sql title="Flink SQL"
 CREATE TABLE my_auto_part_pk_table (
@@ -195,7 +195,7 @@ CREATE TABLE my_auto_part_log_table (
 );
 ```
 
-For more details about Auto Partitioned (PrimaryKey/Log) Table, refer to [Auto Partitioning](table-design/data-distribution/partitioning.md#auto-partitioning).
+For more details about Auto Partitioned (Primary Key/Log) Table, refer to [Auto Partitioning](table-design/data-distribution/partitioning.md#auto-partitioning).
 
 
 ### Options
@@ -291,5 +291,3 @@ ALTER TABLE my_multi_fields_part_log_table DROP PARTITION (dt = '2025-03-05', na
 ```
 
 For more details, refer to the [Flink ALTER TABLE(DROP)](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/dev/table/sql/alter/#drop) documentation.
-
-
