@@ -1,6 +1,6 @@
 ---
 slug: fluss-java-client
-title: "Apache Fluss Java Client Guide"
+title: "Fluss Java Client: A Deep Dive"
 authors: [giannis]
 ---
 
@@ -39,7 +39,7 @@ to write data to these tables and read/enrich the streaming sensor data.
 By the end, you'll see how a sensor reading can be ingested into a log table and immediately enriched with information from a primary key table (essentially performing a real-time lookup join for streaming data enrichment).
 
 ## Preflight Check
-The full source code can be found [here](https://github.com/ververica/ververica-fluss-examples).
+The full source code can be found [here](https://github.com/ververica/ververica-fluss-examples/tree/main/fluss-java-client).
 
 ```shell
 docker compose up
@@ -371,7 +371,7 @@ LogScanner logScanner = readingsTable.newScan()
 ```
 
 Let's break this down:
-* `.withProjection(...)` tells the client to request only the specified columns (sensorId,timestamp and temperature) from the server. 
+* `.project(...)` instructs the client to request only the specified columns (sensorId,timestamp and temperature) from the server. 
 * Fluss’s columnar storage means non-requested columns (e.g., humidity, etc.) **aren’t transmitted, saving bandwidth and reducing client-side parsing overhead**. 
 * You can combine projection with filters or lookups to further optimize your data access patterns.
 
