@@ -53,7 +53,7 @@ Apache Fluss is now installed in `build-target`. The build command uses Maven Wr
 
 ## Contributing
 
-Apache Fluss is open-source, and we'd love your help to keep it growing! Join the [discussions](https://github.com/alibaba/fluss/discussions),
+Apache Fluss is open-source, and we’d love your help to keep it growing! Join the [discussions](https://github.com/alibaba/fluss/discussions),
 open [issues](https://github.com/alibaba/fluss/issues) if you find a bug or request features, contribute code and documentation,
  or help us improve the project in any way. All contributions are welcome!
 
