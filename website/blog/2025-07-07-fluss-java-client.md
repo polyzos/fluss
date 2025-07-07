@@ -1,6 +1,6 @@
 ---
 slug: fluss-java-client
-title: "Fluss Java Client: A Deep Dive"
+title: "Apache Fluss Java Client: A Deep Dive"
 authors: [giannis]
 ---
 
@@ -25,7 +25,7 @@ authors: [giannis]
 ![Banner](assets/java_client/banner.png)
 
 ## Introduction
-Fluss is a streaming data storage system built for real-time analytics, serving as a low-latency data layer in modern data Lakehouses.
+Apache Fluss is a streaming data storage system built for real-time analytics, serving as a low-latency data layer in modern data Lakehouses.
 It supports sub-second streaming reads and writes, storing data in a columnar format for efficiency, and offers two flexible table types: **append-only Log Tables** and **updatable Primary Key Tables**. 
 In practice, this means Fluss can ingest high-throughput event streams *(using log tables)* while also maintaining *up-to-date* reference data or state *(using primary key tables)*, a combination ideal for 
 scenarios like IoT, where you might stream sensor readings and look up information for those sensors in real-time, without
