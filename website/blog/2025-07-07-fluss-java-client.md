@@ -58,7 +58,7 @@ Connection connection = ConnectionFactory.createConnection(conf);
 Admin admin = connection.getAdmin();
 ```
 The above code snippet shows the bare minimum requirements for connecting and interacting with a Fluss Cluster.
-For our example we will the following mock data - to keep things simple - which you can find below:
+For our example we will use the following mock data - to keep things simple - which you can find below:
 ```java
 public static final List<SensorReading> readings = List.of(
         new SensorReading(1, LocalDateTime.of(2025, 6, 23, 9, 15), 22.5, 45.0, 1013.2, 87.5),
