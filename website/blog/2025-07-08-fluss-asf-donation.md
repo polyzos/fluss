@@ -83,4 +83,4 @@ We sincerely invite developers and users who are interested in Fluss to join our
 * GitHub Repository: https://github.com/apache/fluss/  (give it some ❤️ via ⭐)
 * Official Website: https://fluss.apache.org/
 * Slack: [Apache Fluss ](https://join.slack.com/t/apache-fluss/shared_invite/zt-33wlna581-QAooAiCmnYboJS8D_JUcYw)
-* Mailing List: [dev@fluss.apache.org](dev@fluss.apache.org) (by sending any mail to [dev-subscribe@fluss.apache.org](dev-subscribe@fluss.apache.org) to subscribe)
+* Mailing List: `dev@fluss.apache.org` (by sending any mail to `dev-subscribe@fluss.apache.org` to subscribe)
