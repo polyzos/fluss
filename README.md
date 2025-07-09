@@ -17,9 +17,9 @@
   <a href="https://join.slack.com/t/fluss-hq/shared_invite/zt-33wlna581-QAooAiCmnYboJS8D_JUcYw"><img src="https://img.shields.io/badge/slack-join_chat-brightgreen.svg?logo=slack" alt="Slack"></a>
 </p>
 
-## What is Apache Fluss?
+## What is Apache Fluss (Incubating)?
 
-Apache Fluss is a streaming storage built for real-time analytics which can serve as the real-time data layer for Lakehouse architectures.
+Apache Fluss (Incubating) is a streaming storage built for real-time analytics which can serve as the real-time data layer for Lakehouse architectures.
 
 It bridges the gap between **data streaming** and **data Lakehouse** by enabling low-latency, high-throughput data ingestion and processing while seamlessly integrating with popular compute engines like **Apache Flink**, while Apache Spark, and StarRocks are coming soon.
 
@@ -59,4 +59,4 @@ open [issues](https://github.com/alibaba/fluss/issues) if you find a bug or requ
 
 ## License
 
-Apache Fluss project is licensed under the [Apache License 2.0](https://github.com/alibaba/fluss/blob/main/LICENSE).
+Apache Fluss (Incubating) project is licensed under the [Apache License 2.0](https://github.com/alibaba/fluss/blob/main/LICENSE).
