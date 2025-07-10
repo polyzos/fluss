@@ -23,15 +23,13 @@ authors: [jark]
  limitations under the License.
 -->
 
-On June 5th, the next-generation streaming storage project Fluss, which was open-sourced and donated by Alibaba, successfully passed the [vote](https://lists.apache.org/thread/mnol4wxovpz6klt196d3x239t4mp6z5o) and officially became an incubator project of the Apache Software Foundation (ASF),
-the world's largest open-source foundation. This marks a significant milestone in the development of the Fluss community, symbolizing that the project has entered a new phase that is more open,
-neutral, and standardized. 
-Moving forward, Fluss will leverage the ASF ecosystem to accelerate the building of a global developer community, continuously driving innovation and adoption of next-generation real-time data infrastructure.
+On June 5th, Fluss, the next-generation streaming storage project open-sourced and donated by Alibaba, successfully passed the [vote](https://lists.apache.org/thread/mnol4wxovpz6klt196d3x239t4mp6z5o) and officially became an incubator project of the Apache Software Foundation (ASF). This marks a significant milestone in the development of the Fluss community, symbolizing that the project has entered a new phase that is more open,
+neutral, and standardized. Moving forward, Fluss will leverage the ASF ecosystem to accelerate the building of a global developer community, continuously driving innovation and adoption of next-generation real-time data infrastructure.
 
 ![ASF](assets/fluss_asf/asf.png)
 <!-- truncate -->
 
-The Fluss community has recently completed all the donation procedures, and the Fluss project has been officially transferred to the Apache Software Foundation. 
+The Fluss community has recently completed all donation procedures and successfully transferred the project to the Apache Software Foundation.
 During the keynote speech at Flink Forward Asia 2025, held on July 3rd in Singapore, project creator Jark Wu officially announced the exciting news, 
 sharing the new [repository address](https://github.com/apache/fluss/) and the [official website domain](https://fluss.apache.org/).
 
@@ -54,8 +52,8 @@ In July 2023, the Flink team at Alibaba Cloud launched the Fluss project.
 The name **"Fluss"** is derived from the abbreviation of "**Fl**ink **U**nified **S**treaming **S**torage", signifying its mission to build a unified streaming storage foundation for Apache Flink.
 Coincidentally, "Fluss" means **"river"** in German, symbolizing the continuous flow of data.
 
-After more than a year of internal incubation and refinement, on November 29, 2024, during the keynote speech at Flink Forward Asia 2024 held in Shanghai, Alibaba officially announced the open-sourcing of the Fluss project. 
-Since then, Fluss has embarked on a path of diverse and international development, attracting contributions from more than 60 developers worldwide. 
+After more than a year of internal incubation and refinement, Alibaba officially announced the open-sourcing of the Fluss project on November 29, 2024, during the keynote speech at Flink Forward Asia 2024 in Shanghai.
+Since then, Fluss has embarked on a path of diverse and international development, attracting contributions from more than 60 developers worldwide.
 The community’s activity has been steadily growing, with a major version released approximately every three months.
 
 At the same time, Fluss has achieved large-scale adoption within Alibaba Group. 
