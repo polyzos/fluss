@@ -1,7 +1,7 @@
 ---
-slug: fluss-asf-donation
+slug: fluss-joins-asf
 title: "Fluss Joins the Apache Incubator"
-sidebar_label: "Introducing Fluss"
+sidebar_label: "Fluss Joins the Apache Incubator"
 authors: [jark]
 ---
 
@@ -23,7 +23,7 @@ authors: [jark]
  limitations under the License.
 -->
 
-On June 5th, the next-generation streaming storage project Fluss, which was open-sourced and donated by Alibaba, successfully passed the vote and officially became an incubator project of the Apache Software Foundation (ASF), 
+On June 5th, the next-generation streaming storage project Fluss, which was open-sourced and donated by Alibaba, successfully passed the [vote](https://lists.apache.org/thread/mnol4wxovpz6klt196d3x239t4mp6z5o) and officially became an incubator project of the Apache Software Foundation (ASF),
 the world's largest open-source foundation. This marks a significant milestone in the development of the Fluss community, symbolizing that the project has entered a new phase that is more open,
 neutral, and standardized. 
 Moving forward, Fluss will leverage the ASF ecosystem to accelerate the building of a global developer community, continuously driving innovation and adoption of next-generation real-time data infrastructure.
@@ -37,7 +37,8 @@ sharing the new [repository address](https://github.com/apache/fluss/) and the [
 
 ![FF Announcement](assets/fluss_asf/announcement.png)
 
-### What is Apache Fluss (Incubating)?
+### What is Fluss?
+
 ![Architecture](assets/fluss_asf/architecture.png)
 
 Apache Fluss (incubating) is a next-generation streaming storage designed for real-time analytics scenarios. 
@@ -50,7 +51,7 @@ It offers the following core features:
 
 ### The Two-Year Journey
 In July 2023, the Flink team at Alibaba Cloud launched the Fluss project. 
-The name **"Fluss"** is derived from the abbreviation of "**Fl**ink **U**nified **S**treaming **S**torage", **signifying its mission to build a unified streaming storage foundation for Apache Flink**. 
+The name **"Fluss"** is derived from the abbreviation of "**Fl**ink **U**nified **S**treaming **S**torage", signifying its mission to build a unified streaming storage foundation for Apache Flink.
 Coincidentally, "Fluss" means **"river"** in German, symbolizing the continuous flow of data.
 
 After more than a year of internal incubation and refinement, on November 29, 2024, during the keynote speech at Flink Forward Asia 2024 held in Shanghai, Alibaba officially announced the open-sourcing of the Fluss project. 
@@ -69,7 +70,7 @@ The Apache Software Foundation (ASF) is the cradle of global open-source big dat
 ### Special Thanks
 Special thanks to the Fluss incubation mentors for their valuable support and guidance during the project's journey into the ASF Incubator.
 
-* **@Yu Li (Champion):** An experienced mentor of multiple open-source projects, and successfully guided top-level projects such as Apache Paimon and Apache Celeborn.
+* **@Yu Li (Champion):** PMC member of Flink and HBase projects, experienced mentor of multiple open-source projects, and successfully guided top-level projects such as Apache Paimon and Apache Celeborn.
 * **@Jingsong Lee:** Chair of the Apache Paimon PMC and member of the Apache Flink PMC. 
 * **@Zili Chen:** A seasoned mentor of multiple open-source projects, PMC member of Pulsar, Zookeeper and Curator. He also serves as a member of the Apache Board in 2025. 
 * **@Becket Qin:** An active mentor of multiple open-source projects and PMC member of projects including Apache Flink and Apache Kafka. 
