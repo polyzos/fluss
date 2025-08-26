@@ -1296,9 +1296,10 @@ public class ConfigOptions {
                     .noDefaultValue()
                     .withDescription(
                             "Defines the merge engine for the primary key table. By default, primary key table doesn't have merge engine. "
-                                    + "The supported merge engines are `first_row` and `versioned`. "
+                                    + "The supported merge engines are `first_row`, `versioned`, and `aggregation`. "
                                     + "The `first_row` merge engine will keep the first row of the same primary key. "
-                                    + "The `versioned` merge engine will keep the row with the largest version of the same primary key.");
+                                    + "The `versioned` merge engine will keep the row with the largest version of the same primary key. "
+                                    + "The `aggregation` merge engine will aggregate non-primary-key columns using per-column functions.");
 
     public static final ConfigOption<String> TABLE_MERGE_ENGINE_VERSION_COLUMN =
             // we may need to introduce "del-column" in the future to support delete operation
@@ -1308,6 +1309,15 @@ public class ConfigOptions {
                     .withDescription(
                             "The column name of the version column for the `versioned` merge engine. "
                                     + "If the merge engine is set to `versioned`, the version column must be set.");
+
+    public static final ConfigOption<String> TABLE_MERGE_ENGINE_AGGREGATION_FUNCTIONS =
+            key("table.merge-engine.aggregation.functions")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "A comma-separated list of per-column aggregation functions for the `aggregation` merge engine. "
+                                    + "Format: 'col1:sum,col2:count'. Supported functions: sum, count, last_value, first_value, listagg, min, max, product, avg. "
+                                    + "All non-primary-key columns must be specified when using the aggregation merge engine.");
 
     // ------------------------------------------------------------------------
     //  ConfigOptions for Kv

@@ -70,11 +70,18 @@ public class TableDescriptorValidation {
         // and this cluster know it,
         // and value is valid
         for (String key : tableConf.keySet()) {
+            boolean isPerFieldAgg =
+                    key.startsWith("fields.") && key.endsWith(".aggregation-function");
             if (!TABLE_OPTIONS.containsKey(key)) {
-                throw new InvalidConfigException(
-                        String.format(
-                                "'%s' is not a Fluss table property. Please use '.customProperty(..)' to set custom properties.",
-                                key));
+                if (!isPerFieldAgg) {
+                    throw new InvalidConfigException(
+                            String.format(
+                                    "'%s' is not a Fluss table property. Please use '.customProperty(..)' to set custom properties.",
+                                    key));
+                } else {
+                    // defer validation of per-field aggregation keys to merge-engine checks
+                    continue;
+                }
             }
             ConfigOption<?> option = TABLE_OPTIONS.get(key);
             validateOptionValue(tableConf, option);
@@ -200,6 +207,129 @@ public class TableDescriptorValidation {
                                             + "[INT, BIGINT, TIMESTAMP, TIMESTAMP_LTZ]"
                                             + ", but got %s.",
                                     versionColumn.get(), columnType));
+                }
+            } else if (mergeEngine == MergeEngineType.AGGREGATION) {
+                // Prefer new per-field style configuration
+                java.util.Map<String, String> perField = new java.util.HashMap<>();
+                for (String key : tableConf.keySet()) {
+                    if (key.startsWith("fields.") && key.endsWith(".aggregation-function")) {
+                        String field = key.substring("fields.".length(), key.length() - ".aggregation-function".length());
+                        String val = tableConf.toMap().get(key);
+                        if (val != null && !val.trim().isEmpty()) {
+                            perField.put(field, val.trim());
+                        }
+                    }
+                }
+
+                if (!perField.isEmpty()) {
+                    // Validate provided fields and functions (basic checks). AggregationRowMerger will enforce
+                    // that all non-PK columns are specified and PKs are not configured.
+                    for (java.util.Map.Entry<String, String> e : perField.entrySet()) {
+                        String col = e.getKey();
+                        String fn = e.getValue().toUpperCase();
+                        int idx = schema.getFieldIndex(col);
+                        if (idx < 0) {
+                            throw new InvalidConfigException(
+                                    String.format("Aggregation function specified for unknown column '%s'", col));
+                        }
+                        DataTypeRoot root = schema.getTypeAt(idx).getTypeRoot();
+                        if ("SUM".equals(fn) || "PRODUCT".equals(fn) || "MIN".equals(fn) || "MAX".equals(fn)) {
+                            if (!(root == DataTypeRoot.INTEGER || root == DataTypeRoot.BIGINT
+                                    || root == DataTypeRoot.FLOAT || root == DataTypeRoot.DOUBLE)) {
+                                throw new InvalidConfigException(
+                                        String.format(
+                                                "%s is only supported for numeric column '%s' of types [INT, BIGINT, FLOAT, DOUBLE], but is %s",
+                                                fn, col, schema.getTypeAt(idx)));
+                            }
+                        } else if ("COUNT".equals(fn)) {
+                            if (!(root == DataTypeRoot.INTEGER || root == DataTypeRoot.BIGINT)) {
+                                throw new InvalidConfigException(
+                                        String.format(
+                                                "COUNT is only supported for integer column '%s' of types [INT, BIGINT], but is %s",
+                                                col, schema.getTypeAt(idx)));
+                            }
+                        } else if ("LISTAGG".equals(fn)) {
+                            if (!(root == DataTypeRoot.STRING)) {
+                                throw new InvalidConfigException(
+                                        String.format(
+                                                "LISTAGG is only supported for STRING column '%s', but is %s",
+                                                col, schema.getTypeAt(idx)));
+                            }
+                        } else if ("LAST_VALUE".equals(fn) || "FIRST_VALUE".equals(fn)) {
+                            // any type allowed
+                        } else if ("AVG".equals(fn)) {
+                            if (!(root == DataTypeRoot.FLOAT || root == DataTypeRoot.DOUBLE)) {
+                                throw new InvalidConfigException(
+                                        String.format(
+                                                "AVG is only supported for FLOAT/DOUBLE column '%s', but is %s",
+                                                col, schema.getTypeAt(idx)));
+                            }
+                        } else {
+                            throw new InvalidConfigException("Unsupported aggregation function: " + fn);
+                        }
+                    }
+                } else {
+                    // Fallback to legacy combined string validation
+                    Optional<String> funcsOpt =
+                            tableConf.getOptional(ConfigOptions.TABLE_MERGE_ENGINE_AGGREGATION_FUNCTIONS);
+                    if (!funcsOpt.isPresent() || funcsOpt.get().trim().isEmpty()) {
+                        throw new InvalidConfigException(
+                                String.format(
+                                        "Aggregation merge engine requires per-field properties 'fields.<col>.aggregation-function' to be set for each non-PK column, or legacy '%s' to be provided.",
+                                        ConfigOptions.TABLE_MERGE_ENGINE_AGGREGATION_FUNCTIONS.key()));
+                    }
+                    String funcStr = funcsOpt.get();
+                    String[] entries = funcStr.split(",");
+                    for (String e : entries) {
+                        if (e == null || e.trim().isEmpty()) continue;
+                        String[] kv = e.split(":");
+                        if (kv.length != 2) {
+                            throw new InvalidConfigException(
+                                    "Invalid aggregation function entry: '" + e + "'. Expected format 'col:func'.");
+                        }
+                        String col = kv[0].trim();
+                        String fn = kv[1].trim().toUpperCase();
+                        int idx = schema.getFieldIndex(col);
+                        if (idx < 0) {
+                            throw new InvalidConfigException(
+                                    String.format("Aggregation function specified for unknown column '%s'", col));
+                        }
+                        DataTypeRoot root = schema.getTypeAt(idx).getTypeRoot();
+                        if ("SUM".equals(fn) || "PRODUCT".equals(fn) || "MIN".equals(fn) || "MAX".equals(fn)) {
+                            if (!(root == DataTypeRoot.INTEGER || root == DataTypeRoot.BIGINT
+                                    || root == DataTypeRoot.FLOAT || root == DataTypeRoot.DOUBLE)) {
+                                throw new InvalidConfigException(
+                                        String.format(
+                                                "%s is only supported for numeric column '%s' of types [INT, BIGINT, FLOAT, DOUBLE], but is %s",
+                                                fn, col, schema.getTypeAt(idx)));
+                            }
+                        } else if ("COUNT".equals(fn)) {
+                            if (!(root == DataTypeRoot.INTEGER || root == DataTypeRoot.BIGINT)) {
+                                throw new InvalidConfigException(
+                                        String.format(
+                                                "COUNT is only supported for integer column '%s' of types [INT, BIGINT], but is %s",
+                                                col, schema.getTypeAt(idx)));
+                            }
+                        } else if ("LISTAGG".equals(fn)) {
+                            if (!(root == DataTypeRoot.STRING)) {
+                                throw new InvalidConfigException(
+                                        String.format(
+                                                "LISTAGG is only supported for STRING column '%s', but is %s",
+                                                col, schema.getTypeAt(idx)));
+                            }
+                        } else if ("LAST_VALUE".equals(fn) || "FIRST_VALUE".equals(fn)) {
+                            // any type allowed
+                        } else if ("AVG".equals(fn)) {
+                            if (!(root == DataTypeRoot.FLOAT || root == DataTypeRoot.DOUBLE)) {
+                                throw new InvalidConfigException(
+                                        String.format(
+                                                "AVG is only supported for FLOAT/DOUBLE column '%s', but is %s",
+                                                col, schema.getTypeAt(idx)));
+                            }
+                        } else {
+                            throw new InvalidConfigException("Unsupported aggregation function: " + fn);
+                        }
+                    }
                 }
             }
         }

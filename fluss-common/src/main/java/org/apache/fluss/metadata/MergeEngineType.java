@@ -52,9 +52,14 @@ public enum MergeEngineType {
      *   <li>Null version value is treated as the smallest version (i.e., Long.MIN_VALUE)
      * </ul>
      */
-    VERSIONED;
+    VERSIONED,
 
-    // introduce AGGREGATE merge engine in the future
+    /**
+     * A merge engine that aggregates values of non-primary-key columns using user-provided
+     * per-column aggregation functions (e.g., SUM, COUNT) when merging multiple rows of the same
+     * primary key.
+     */
+    AGGREGATION;
 
     /** Creates a {@link MergeEngineType} from the given string. */
     public static MergeEngineType fromString(String type) {
@@ -63,6 +68,8 @@ public enum MergeEngineType {
                 return FIRST_ROW;
             case "VERSIONED":
                 return VERSIONED;
+            case "AGGREGATION":
+                return AGGREGATION;
             default:
                 throw new IllegalArgumentException("Unsupported merge engine type: " + type);
         }

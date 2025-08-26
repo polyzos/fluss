@@ -26,6 +26,8 @@ import org.apache.fluss.row.BinaryRow;
 
 import javax.annotation.Nullable;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 /** A merging interface defines how to merge a new row with existing row. */
@@ -78,6 +80,26 @@ public interface RowMerger {
                                         ConfigOptions.TABLE_MERGE_ENGINE_VERSION_COLUMN.key()));
                     }
                     return new VersionedRowMerger(schema.getRowType(), versionColumn.get());
+                case AGGREGATION:
+                    // Prefer per-field configuration: fields.<field>.aggregation-function
+                    Map<String, String> perField = tableConf.getFieldAggregationFunctions();
+                    Map<String, AggregationRowMerger.AggFn> aggByName = new HashMap<>();
+                    if (!perField.isEmpty()) {
+                        for (Map.Entry<String, String> e : perField.entrySet()) {
+                            aggByName.put(e.getKey(), AggregationRowMerger.AggFn.fromString(e.getValue()));
+                        }
+                    } else {
+                        // Fallback to legacy combined option
+                        Optional<String> aggFuncsOpt = tableConf.getMergeEngineAggregationFunctions();
+                        if (!aggFuncsOpt.isPresent() || aggFuncsOpt.get().trim().isEmpty()) {
+                            throw new IllegalArgumentException(
+                                    String.format(
+                                            "Either per-field aggregation options 'fields.<col>.aggregation-function' must be set, or legacy '%s' must be provided for aggregation merge engine.",
+                                            ConfigOptions.TABLE_MERGE_ENGINE_AGGREGATION_FUNCTIONS.key()));
+                        }
+                        aggByName = parseAggFunctions(aggFuncsOpt.get());
+                    }
+                    return new AggregationRowMerger(schema, kvFormat, aggByName);
                 default:
                     throw new IllegalArgumentException(
                             "Unsupported merge engine type: " + mergeEngineType.get());
@@ -85,5 +107,36 @@ public interface RowMerger {
         } else {
             return new DefaultRowMerger(schema, kvFormat);
         }
+    }
+
+    /** Parse aggregation functions string with format: "col1:sum,col2:count" (case-insensitive). */
+    static Map<String, AggregationRowMerger.AggFn> parseAggFunctions(String funcs) {
+        Map<String, AggregationRowMerger.AggFn> map = new HashMap<>();
+        String[] parts = funcs.split(",");
+        for (String p : parts) {
+            if (p == null || p.trim().isEmpty()) {
+                continue;
+            }
+            String[] kv = p.split(":");
+            if (kv.length != 2) {
+                throw new IllegalArgumentException(
+                        "Invalid aggregation function entry: '"
+                                + p
+                                + "'. Expected format 'col:func'.");
+            }
+            String col = kv[0].trim();
+            String fn = kv[1].trim();
+            if (col.isEmpty() || fn.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Invalid aggregation function entry: '"
+                                + p
+                                + "'. Column or function is empty.");
+            }
+            map.put(col, AggregationRowMerger.AggFn.fromString(fn));
+        }
+        if (map.isEmpty()) {
+            throw new IllegalArgumentException("No valid aggregation functions specified.");
+        }
+        return map;
     }
 }

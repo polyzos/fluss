@@ -106,6 +106,30 @@ public class TableConfig {
         return config.getOptional(ConfigOptions.TABLE_MERGE_ENGINE_VERSION_COLUMN);
     }
 
+    /** Gets the optional aggregation functions string for the aggregation merge engine. */
+    public Optional<String> getMergeEngineAggregationFunctions() {
+        return config.getOptional(ConfigOptions.TABLE_MERGE_ENGINE_AGGREGATION_FUNCTIONS);
+    }
+
+    /**
+     * Collects per-field aggregation function settings using keys in the form
+     * 'fields.<field-name>.aggregation-function'. Returns a map from field name to function string.
+     */
+    public java.util.Map<String, String> getFieldAggregationFunctions() {
+        java.util.Map<String, String> map = new java.util.HashMap<>();
+        for (java.util.Map.Entry<String, String> e : config.toMap().entrySet()) {
+            String key = e.getKey();
+            if (key.startsWith("fields.") && key.endsWith(".aggregation-function")) {
+                String middle = key.substring("fields.".length(), key.length() - ".aggregation-function".length());
+                String val = e.getValue();
+                if (val != null) {
+                    map.put(middle, val);
+                }
+            }
+        }
+        return map;
+    }
+
     /** Gets the Arrow compression type and compression level of the table. */
     public ArrowCompressionInfo getArrowCompressionInfo() {
         return ArrowCompressionInfo.fromConf(config);
