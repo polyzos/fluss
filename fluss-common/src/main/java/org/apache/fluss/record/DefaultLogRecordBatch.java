@@ -248,6 +248,7 @@ public class DefaultLogRecordBatch implements LogRecordBatch {
                         context.getBufferAllocator(),
                         timestamp);
             case INDEXED:
+            case COMPACTED:
                 return rowRecordIterator(rowType, timestamp);
             default:
                 throw new IllegalArgumentException("Unsupported log format: " + logFormat);

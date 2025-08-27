@@ -85,7 +85,7 @@ public class LogRecordReadContext implements LogRecordBatch.ReadContext, AutoClo
                 return createArrowReadContext(
                         projectedRowType, schemaId, selectedFields, projectionPushDowned);
             }
-        } else if (logFormat == LogFormat.INDEXED) {
+        } else if (logFormat == LogFormat.INDEXED || logFormat == LogFormat.COMPACTED) {
             int[] selectedFields = projection.getProjection();
             return createIndexedReadContext(rowType, schemaId, selectedFields);
         } else {

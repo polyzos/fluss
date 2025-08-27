@@ -645,6 +645,64 @@ class FlussTableITCase extends ClientToServerITCaseBase {
         verifyAppendOrPut(false, "ARROW", kvFormat);
     }
 
+    @Test
+    void testPutAndPollWithCompactedLog() throws Exception {
+        // Primary key table with COMPACTED kv format and COMPACTED log format
+        Schema schema =
+                Schema.newBuilder()
+                        .column("a", DataTypes.INT())
+                        .column("b", DataTypes.INT())
+                        .column("c", DataTypes.STRING())
+                        .column("d", DataTypes.BIGINT())
+                        .primaryKey("a")
+                        .build();
+        TableDescriptor tableDescriptor =
+                TableDescriptor.builder()
+                        .schema(schema)
+                        .logFormat(LogFormat.COMPACTED)
+                        .kvFormat(KvFormat.COMPACTED)
+                        .build();
+        TablePath tablePath = TablePath.of("test_db_1", "test_pk_compacted_log");
+        createTable(tablePath, tableDescriptor, false);
+
+        int expectedSize = 30;
+        try (Table table = conn.getTable(tablePath)) {
+            UpsertWriter upsertWriter = table.newUpsert().createWriter();
+            for (int i = 0; i < expectedSize; i++) {
+                String value = i % 2 == 0 ? "hello, friend" + i : null;
+                GenericRow row = row(i, 100, value, i * 10L);
+                upsertWriter.upsert(row);
+                if (i % 10 == 0) {
+                    upsertWriter.flush();
+                }
+            }
+        }
+
+        try (Table table = conn.getTable(tablePath); LogScanner logScanner = createLogScanner(table)) {
+            subscribeFromBeginning(logScanner, table);
+            int count = 0;
+            while (count < expectedSize) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
+                    // For inserts only (no updates/deletes), expect INSERT
+                    assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.INSERT);
+                    assertThat(scanRecord.getRow().getFieldCount()).isEqualTo(4);
+                    assertThat(scanRecord.getRow().getInt(0)).isEqualTo(count);
+                    assertThat(scanRecord.getRow().getInt(1)).isEqualTo(100);
+                    if (count % 2 == 0) {
+                        assertThat(scanRecord.getRow().getString(2).toString())
+                                .isEqualTo("hello, friend" + count);
+                    } else {
+                        assertThat(scanRecord.getRow().isNullAt(2)).isTrue();
+                    }
+                    assertThat(scanRecord.getRow().getLong(3)).isEqualTo(count * 10L);
+                    count++;
+                }
+            }
+            assertThat(count).isEqualTo(expectedSize);
+        }
+    }
+
     void verifyAppendOrPut(boolean append, String logFormat, @Nullable String kvFormat)
             throws Exception {
         Schema schema =

@@ -397,13 +397,12 @@ public final class KvTablet {
         switch (logFormat) {
             case INDEXED:
                 if (kvFormat == KvFormat.COMPACTED) {
-                    // convert from compacted row to indexed row is time cost, and gain
-                    // less benefits, currently we won't support compacted as kv format and
-                    // indexed as cdc log format.
-                    // so in here we throw exception directly
                     throw new IllegalArgumentException(
                             "Primary Key Table with COMPACTED kv format doesn't support INDEXED cdc log format.");
                 }
+                return new IndexWalBuilder(schemaId, memorySegmentPool);
+            case COMPACTED:
+                // Use row-oriented WAL builder; shares implementation with INDEXED for now.
                 return new IndexWalBuilder(schemaId, memorySegmentPool);
             case ARROW:
                 return new ArrowWalBuilder(

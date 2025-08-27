@@ -41,11 +41,18 @@ public enum LogFormat {
      *
      * @see MemoryLogRecordsIndexedBuilder
      */
-    INDEXED;
+    INDEXED,
 
     /**
-     * Creates a {@link LogFormat} from the given string. The string must be either 'arrow' or
-     * 'indexed'.
+     * Compacted row-oriented log format for primary-key changelogs. Initially shares the same
+     * storage layout as {@link #INDEXED} on disk and over-the-wire, but is semantically designated
+     * for KV tables and may evolve independently.
+     */
+    COMPACTED;
+
+    /**
+     * Creates a {@link LogFormat} from the given string. Supported values: 'arrow', 'indexed',
+     * 'compacted'.
      */
     public static LogFormat fromString(String format) {
         switch (format.toUpperCase()) {
@@ -53,6 +60,8 @@ public enum LogFormat {
                 return ARROW;
             case "INDEXED":
                 return INDEXED;
+            case "COMPACTED":
+                return COMPACTED;
             default:
                 throw new IllegalArgumentException("Unsupported log format: " + format);
         }
