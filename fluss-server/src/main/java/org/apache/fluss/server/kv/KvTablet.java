@@ -417,6 +417,13 @@ public final class KvTablet {
                                 rowType,
                                 arrowCompressionInfo),
                         memorySegmentPool);
+            case COMPACTED:
+                if (kvFormat != KvFormat.COMPACTED) {
+                    throw new IllegalArgumentException(
+                            "COMPACTED log format is only supported when kv format is COMPACTED.");
+                }
+                return new org.apache.fluss.server.kv.wal.CompactedWalBuilder(
+                        schemaId, memorySegmentPool);
             default:
                 throw new IllegalArgumentException("Unsupported log format: " + logFormat);
         }

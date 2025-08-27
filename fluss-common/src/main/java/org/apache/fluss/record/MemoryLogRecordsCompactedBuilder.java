@@ -1,0 +1,217 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.fluss.record;
+
+import org.apache.fluss.annotation.VisibleForTesting;
+import org.apache.fluss.memory.AbstractPagedOutputView;
+import org.apache.fluss.memory.MemorySegment;
+import org.apache.fluss.memory.MemorySegmentOutputView;
+import org.apache.fluss.record.bytesview.BytesView;
+import org.apache.fluss.record.bytesview.MultiBytesView;
+import org.apache.fluss.row.compacted.CompactedRow;
+import org.apache.fluss.utils.crc.Crc32C;
+
+import java.io.IOException;
+
+import static org.apache.fluss.record.DefaultLogRecordBatch.BASE_OFFSET_LENGTH;
+import static org.apache.fluss.record.DefaultLogRecordBatch.CRC_OFFSET;
+import static org.apache.fluss.record.DefaultLogRecordBatch.LAST_OFFSET_DELTA_OFFSET;
+import static org.apache.fluss.record.DefaultLogRecordBatch.LENGTH_LENGTH;
+import static org.apache.fluss.record.DefaultLogRecordBatch.RECORD_BATCH_HEADER_SIZE;
+import static org.apache.fluss.record.DefaultLogRecordBatch.SCHEMA_ID_OFFSET;
+import static org.apache.fluss.record.LogRecordBatch.CURRENT_LOG_MAGIC_VALUE;
+import static org.apache.fluss.record.LogRecordBatch.NO_BATCH_SEQUENCE;
+import static org.apache.fluss.record.LogRecordBatch.NO_WRITER_ID;
+import static org.apache.fluss.utils.Preconditions.checkArgument;
+
+/** Builder for MemoryLogRecords with COMPACTED log format. */
+public class MemoryLogRecordsCompactedBuilder implements AutoCloseable {
+    private static final int BUILDER_DEFAULT_OFFSET = 0;
+
+    private final long baseLogOffset;
+    private final int schemaId;
+    private final int writeLimit;
+    private final byte magic;
+    private final AbstractPagedOutputView pagedOutputView;
+    private final MemorySegment firstSegment;
+    private final boolean appendOnly;
+
+    private BytesView builtBuffer = null;
+    private long writerId;
+    private int batchSequence;
+    private int currentRecordNumber;
+    private int sizeInBytes;
+    private volatile boolean isClosed;
+    private boolean aborted = false;
+
+    private MemoryLogRecordsCompactedBuilder(
+            long baseLogOffset,
+            int schemaId,
+            int writeLimit,
+            byte magic,
+            AbstractPagedOutputView pagedOutputView,
+            boolean appendOnly) {
+        this.appendOnly = appendOnly;
+        checkArgument(
+                schemaId <= Short.MAX_VALUE,
+                "schemaId shouldn't be greater than the max value of short: " + Short.MAX_VALUE);
+        this.baseLogOffset = baseLogOffset;
+        this.schemaId = schemaId;
+        this.writeLimit = writeLimit;
+        this.magic = magic;
+        this.pagedOutputView = pagedOutputView;
+        this.firstSegment = pagedOutputView.getCurrentSegment();
+        this.writerId = NO_WRITER_ID;
+        this.batchSequence = NO_BATCH_SEQUENCE;
+        this.currentRecordNumber = 0;
+        this.isClosed = false;
+
+        this.pagedOutputView.setPosition(RECORD_BATCH_HEADER_SIZE);
+        this.sizeInBytes = RECORD_BATCH_HEADER_SIZE;
+    }
+
+    public static MemoryLogRecordsCompactedBuilder builder(
+            int schemaId, int writeLimit, AbstractPagedOutputView outputView, boolean appendOnly) {
+        return new MemoryLogRecordsCompactedBuilder(
+                BUILDER_DEFAULT_OFFSET,
+                schemaId,
+                writeLimit,
+                CURRENT_LOG_MAGIC_VALUE,
+                outputView,
+                appendOnly);
+    }
+
+    @VisibleForTesting
+    public static MemoryLogRecordsCompactedBuilder builder(
+            long baseLogOffset,
+            int schemaId,
+            int writeLimit,
+            byte magic,
+            AbstractPagedOutputView outputView)
+            throws IOException {
+        return new MemoryLogRecordsCompactedBuilder(
+                baseLogOffset, schemaId, writeLimit, magic, outputView, false);
+    }
+
+    public boolean hasRoomFor(CompactedRow row) {
+        return sizeInBytes + CompactedLogRecord.sizeOf(row) <= writeLimit;
+    }
+
+    public void append(ChangeType changeType, CompactedRow row) throws Exception {
+        appendRecord(changeType, row);
+    }
+
+    private void appendRecord(ChangeType changeType, CompactedRow row) throws IOException {
+        if (aborted) {
+            throw new IllegalStateException(
+                    "Tried to append a record, but MemoryLogRecordsCompactedBuilder has already been aborted");
+        }
+        if (isClosed) {
+            throw new IllegalStateException(
+                    "Tried to append a record, but MemoryLogRecordsCompactedBuilder is closed for record appends");
+        }
+        if (appendOnly && changeType != ChangeType.APPEND_ONLY) {
+            throw new IllegalArgumentException(
+                    "Only append-only change type is allowed for append-only compacted log builder, but got "
+                            + changeType);
+        }
+        int recordByteSizes = CompactedLogRecord.writeTo(pagedOutputView, changeType, row);
+        currentRecordNumber++;
+        sizeInBytes += recordByteSizes;
+    }
+
+    public BytesView build() throws IOException {
+        if (aborted) {
+            throw new IllegalStateException("Attempting to build an aborted record batch");
+        }
+        if (builtBuffer != null) {
+            return builtBuffer;
+        }
+        writeBatchHeader();
+        builtBuffer =
+                MultiBytesView.builder()
+                        .addMemorySegmentByteViewList(pagedOutputView.getWrittenSegments())
+                        .build();
+        return builtBuffer;
+    }
+
+    public void setWriterState(long writerId, int batchBaseSequence) {
+        this.writerId = writerId;
+        this.batchSequence = batchBaseSequence;
+    }
+
+    public void resetWriterState(long writerId, int batchSequence) {
+        this.builtBuffer = null;
+        this.writerId = writerId;
+        this.batchSequence = batchSequence;
+    }
+
+    public long writerId() {
+        return writerId;
+    }
+
+    public int batchSequence() {
+        return batchSequence;
+    }
+
+    public boolean isClosed() {
+        return isClosed;
+    }
+
+    public void abort() {
+        aborted = true;
+    }
+
+    @Override
+    public void close() throws IOException {
+        if (aborted) {
+            throw new IllegalStateException(
+                    "Cannot close MemoryLogRecordsCompactedBuilder as it has already been aborted");
+        }
+        isClosed = true;
+    }
+
+    public int getSizeInBytes() {
+        return sizeInBytes;
+    }
+
+    private void writeBatchHeader() throws IOException {
+        MemorySegmentOutputView outputView = new MemorySegmentOutputView(firstSegment);
+        outputView.setPosition(0);
+        outputView.writeLong(baseLogOffset);
+        outputView.writeInt(sizeInBytes - BASE_OFFSET_LENGTH - LENGTH_LENGTH);
+        outputView.writeByte(magic);
+        outputView.writeLong(0); // commit ts will be filled server-side
+        outputView.writeUnsignedInt(0); // crc placeholder
+        outputView.writeShort((short) schemaId);
+        outputView.writeBoolean(appendOnly);
+        outputView.setPosition(LAST_OFFSET_DELTA_OFFSET);
+        if (currentRecordNumber > 0) {
+            outputView.writeInt(currentRecordNumber - 1);
+        } else {
+            outputView.writeInt(0);
+        }
+        outputView.writeLong(writerId);
+        outputView.writeInt(batchSequence);
+        outputView.writeInt(currentRecordNumber);
+
+        long crc = Crc32C.compute(pagedOutputView.getWrittenSegments(), SCHEMA_ID_OFFSET);
+        outputView.setPosition(CRC_OFFSET);
+        outputView.writeUnsignedInt(crc);
+    }
+}
