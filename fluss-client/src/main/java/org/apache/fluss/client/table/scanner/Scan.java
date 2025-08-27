@@ -80,4 +80,22 @@ public interface Scan {
      * #limit(int)} and only support for Primary Key Tables.
      */
     BatchScanner createBatchScanner(TableBucket tableBucket, long snapshotId);
+
+    /**
+     * Creates a {@link BatchScanner} to read the entire current data of the primary key table
+     * across all buckets.
+     *
+     * <p>Protection: the maximum number of rows scanned is restricted by
+     * {@code client.whole-pk-table.max-rows}. If the limit is exceeded, the scan stops and throws an
+     * exception to notify users that the table is too large for a whole-table scan.
+     */
+    BatchScanner createFullPkTableScanner();
+
+    /**
+     * Deprecated: use {@link #createFullPkTableScanner()} instead.
+     */
+    @Deprecated
+    default BatchScanner createWholePkTableBatchScanner() {
+        return createFullPkTableScanner();
+    }
 }

@@ -1127,6 +1127,18 @@ public class ConfigOptions {
                                     + "If not provided, the password will be read from the JAAS configuration string specified by `client.security.sasl.jaas.config`.");
 
     // ------------------------------------------------------------------------
+    // Whole primary-key table scan protections
+    // ------------------------------------------------------------------------
+
+    public static final ConfigOption<Integer> CLIENT_WHOLE_PK_TABLE_MAX_ROWS =
+            key("client.whole-pk-table.max-rows")
+                    .intType()
+                    .defaultValue(1000000)
+                    .withDescription(
+                            "Maximum number of rows a client is allowed to scan when performing a whole primary-key table scan. "
+                                    + "This protection prevents accidental heavy reads. If exceeded, the scan throws an exception and stops.");
+
+    // ------------------------------------------------------------------------
     //  ConfigOptions for Fluss Table
     // ------------------------------------------------------------------------
     public static final ConfigOption<Integer> TABLE_REPLICATION_FACTOR =

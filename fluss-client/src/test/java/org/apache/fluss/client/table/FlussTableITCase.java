@@ -387,6 +387,95 @@ class FlussTableITCase extends ClientToServerITCaseBase {
     }
 
     @Test
+    void testWholePkTableScan() throws Exception {
+        // create PK table with 1 bucket for determinism
+        TableDescriptor descriptor =
+                TableDescriptor.builder().schema(DATA1_SCHEMA_PK).distributedBy(1).build();
+        createTable(DATA1_TABLE_PATH_PK, descriptor, true);
+        int insertSize = 10;
+        try (Connection conn = ConnectionFactory.createConnection(clientConf)) {
+            Table table = conn.getTable(DATA1_TABLE_PATH_PK);
+            UpsertWriter upsertWriter = table.newUpsert().createWriter();
+            List<Object[]> expectedRows = new ArrayList<>();
+            for (int i = 0; i < insertSize; i++) {
+                String v = StringUtils.repeat("a", i);
+                upsertWriter.upsert(row(i, v));
+                expectedRows.add(new Object[] {i, v});
+            }
+            upsertWriter.flush();
+
+            List<InternalRow> actualRows =
+                    collectRows(table.newScan().createFullPkTableScanner());
+            assertThat(actualRows.size()).isEqualTo(insertSize);
+            for (int i = 0; i < insertSize; i++) {
+                assertRowValueEquals(DATA1_SCHEMA.getRowType(), actualRows.get(i), expectedRows.get(i));
+            }
+        }
+    }
+
+    @Test
+    void testWholePkTableScanLimitProtection() throws Exception {
+        // create table
+        TableDescriptor descriptor =
+                TableDescriptor.builder().schema(DATA1_SCHEMA_PK).distributedBy(1).build();
+        createTable(DATA1_TABLE_PATH_PK, descriptor, true);
+        int insertSize = 10;
+
+        // set a small max-rows to trigger protection
+        Configuration conf = new Configuration(clientConf);
+        conf.set(ConfigOptions.CLIENT_WHOLE_PK_TABLE_MAX_ROWS, 5);
+        try (Connection conn = ConnectionFactory.createConnection(conf)) {
+            Table table = conn.getTable(DATA1_TABLE_PATH_PK);
+            UpsertWriter upsertWriter = table.newUpsert().createWriter();
+            for (int i = 0; i < insertSize; i++) {
+                String v = StringUtils.repeat("a", i);
+                upsertWriter.upsert(row(i, v));
+            }
+            upsertWriter.flush();
+
+            assertThatThrownBy(
+                            () -> collectRows(table.newScan().createFullPkTableScanner()))
+                    .hasMessageContaining("exceeds the configured max rows");
+        }
+    }
+
+    @Test
+    void testWholePkTableScanEmpty() throws Exception {
+        // create table but don't insert data
+        TableDescriptor descriptor =
+                TableDescriptor.builder().schema(DATA1_SCHEMA_PK).distributedBy(1).build();
+        createTable(DATA1_TABLE_PATH_PK, descriptor, true);
+        try (Connection conn = ConnectionFactory.createConnection(clientConf)) {
+            Table table = conn.getTable(DATA1_TABLE_PATH_PK);
+            List<InternalRow> actualRows =
+                    collectRows(table.newScan().createFullPkTableScanner());
+            assertThat(actualRows).isEmpty();
+        }
+    }
+
+    @Test
+    void testDeprecatedWholePkTableScannerMethod() throws Exception {
+        // create PK table with 1 bucket for determinism
+        TableDescriptor descriptor =
+                TableDescriptor.builder().schema(DATA1_SCHEMA_PK).distributedBy(1).build();
+        createTable(DATA1_TABLE_PATH_PK, descriptor, true);
+        int insertSize = 3;
+        try (Connection conn = ConnectionFactory.createConnection(clientConf)) {
+            Table table = conn.getTable(DATA1_TABLE_PATH_PK);
+            UpsertWriter upsertWriter = table.newUpsert().createWriter();
+            for (int i = 0; i < insertSize; i++) {
+                upsertWriter.upsert(row(i, "v" + i));
+            }
+            upsertWriter.flush();
+
+            // Use deprecated method to ensure backward compatibility
+            List<InternalRow> actualRows =
+                    collectRows(table.newScan().createWholePkTableBatchScanner());
+            assertThat(actualRows.size()).isEqualTo(insertSize);
+        }
+    }
+
+    @Test
     void testLimitScanPrimaryTable() throws Exception {
         TableDescriptor descriptor =
                 TableDescriptor.builder().schema(DATA1_SCHEMA_PK).distributedBy(1).build();

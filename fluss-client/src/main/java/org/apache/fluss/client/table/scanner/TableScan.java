@@ -22,6 +22,7 @@ import org.apache.fluss.client.admin.Admin;
 import org.apache.fluss.client.metadata.KvSnapshotMetadata;
 import org.apache.fluss.client.table.scanner.batch.BatchScanner;
 import org.apache.fluss.client.table.scanner.batch.KvSnapshotBatchScanner;
+import org.apache.fluss.client.table.scanner.batch.FullPkTableScanner;
 import org.apache.fluss.client.table.scanner.batch.LimitBatchScanner;
 import org.apache.fluss.client.table.scanner.log.LogScanner;
 import org.apache.fluss.client.table.scanner.log.LogScannerImpl;
@@ -134,5 +135,11 @@ public class TableScan implements Scan {
                 scannerTmpDir,
                 tableInfo.getTableConfig().getKvFormat(),
                 conn.getOrCreateRemoteFileDownloader());
+    }
+
+    @Override
+    public BatchScanner createFullPkTableScanner() {
+        return new FullPkTableScanner(
+                conn, tableInfo, conn.getAdmin(), conn.getOrCreateRemoteFileDownloader());
     }
 }
