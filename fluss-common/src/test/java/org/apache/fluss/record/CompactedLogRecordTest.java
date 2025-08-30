@@ -44,7 +44,8 @@ class CompactedLogRecordTest extends LogTestBase {
         // field 1: string "abc"
         writer.writeString(BinaryString.fromString("abc"));
         byte[] bytes = writer.toBytes();
-        CompactedRow row = CompactedRow.from(fieldTypes, bytes, new CompactedRowDeserializer(fieldTypes));
+        CompactedRow row =
+                CompactedRow.from(fieldTypes, bytes, new CompactedRowDeserializer(fieldTypes));
 
         // write
         CompactedLogRecord.writeTo(outputView, ChangeType.APPEND_ONLY, row);

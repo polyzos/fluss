@@ -298,7 +298,8 @@ public class DefaultLogRecordBatch implements LogRecordBatch {
         };
     }
 
-    private CloseableIterator<LogRecord> compactedRowRecordIterator(RowType rowType, long timestamp) {
+    private CloseableIterator<LogRecord> compactedRowRecordIterator(
+            RowType rowType, long timestamp) {
         DataType[] fieldTypes = rowType.getChildren().toArray(new DataType[0]);
         return new LogRecordIterator() {
             int position = DefaultLogRecordBatch.this.position + RECORD_BATCH_HEADER_SIZE;

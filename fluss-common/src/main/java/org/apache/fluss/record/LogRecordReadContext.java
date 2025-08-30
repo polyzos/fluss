@@ -159,10 +159,9 @@ public class LogRecordReadContext implements LogRecordBatch.ReadContext, AutoClo
         return createIndexedReadContext(rowType, schemaId, selectedFields, schemaGetter);
     }
 
-    /**
-     * Creates a LogRecordReadContext for COMPACTED log format.
-     */
-    public static LogRecordReadContext createCompactedRowReadContext(RowType rowType, int schemaId) {
+    /** Creates a LogRecordReadContext for COMPACTED log format. */
+    public static LogRecordReadContext createCompactedRowReadContext(
+            RowType rowType, int schemaId) {
         int[] selectedFields = IntStream.range(0, rowType.getFieldCount()).toArray();
         return createCompactedRowReadContext(rowType, schemaId, selectedFields);
     }
