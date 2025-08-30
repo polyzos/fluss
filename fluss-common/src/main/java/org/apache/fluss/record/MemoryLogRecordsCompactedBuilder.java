@@ -20,11 +20,10 @@ package org.apache.fluss.record;
 import org.apache.fluss.metadata.LogFormat;
 
 /**
- * Default builder for {@link MemoryLogRecords} of log records in {@link LogFormat#COMPACTED} format.
+ * Default builder for {@link MemoryLogRecords} of log records in {@link LogFormat#COMPACTED}
+ * format.
  */
 public class MemoryLogRecordsCompactedBuilder implements AutoCloseable {
     @Override
-    public void close() throws Exception {
-
-    }
+    public void close() throws Exception {}
 }
