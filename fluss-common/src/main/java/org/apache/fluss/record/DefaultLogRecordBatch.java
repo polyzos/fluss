@@ -226,6 +226,9 @@ public class DefaultLogRecordBatch implements LogRecordBatch {
                         timestamp);
             case INDEXED:
                 return rowRecordIterator(rowType, timestamp);
+            case COMPACTED:
+                // can we reuse rowRecordIterator here?
+//                return compactedRowRecordIterator();
             default:
                 throw new IllegalArgumentException("Unsupported log format: " + logFormat);
         }
