@@ -38,17 +38,17 @@ import static org.apache.fluss.record.DefaultLogRecordBatch.LENGTH_LENGTH;
  * identical to IndexedLogRecord but the row payload uses the CompactedRow binary format:
  *
  * <ul>
- *   <li>Length => int32 (total number of bytes following this length field)</li>
- *   <li>Attributes => int8 (low 4 bits encode {@link ChangeType})</li>
- *   <li>Value => {@link CompactedRow} (bytes in compacted row format)</li>
+ *   <li>Length => int32 (total number of bytes following this length field)
+ *   <li>Attributes => int8 (low 4 bits encode {@link ChangeType})
+ *   <li>Value => {@link CompactedRow} (bytes in compacted row format)
  * </ul>
  *
- * <p>Differences vs {@link IndexedLogRecord}:
- * - Uses CompactedRow encoding which is space-optimized (VLQ for ints/longs, per-row null bitset) and
- *   trades CPU for smaller storage; random access to fields is not supported without decoding.
- * - Deserialization is lazy: we wrap the underlying bytes in a CompactedRow with a
- *   {@link CompactedRowDeserializer} and only decode to object values when a field is accessed.
- * - The record header (Length + Attributes) layout and attribute semantics are the same.
+ * <p>Differences vs {@link IndexedLogRecord}: - Uses CompactedRow encoding which is space-optimized
+ * (VLQ for ints/longs, per-row null bitset) and trades CPU for smaller storage; random access to
+ * fields is not supported without decoding. - Deserialization is lazy: we wrap the underlying bytes
+ * in a CompactedRow with a {@link CompactedRowDeserializer} and only decode to object values when a
+ * field is accessed. - The record header (Length + Attributes) layout and attribute semantics are
+ * the same.
  *
  * <p>The offset computes the difference relative to the base offset of the batch containing this
  * record.
@@ -124,7 +124,11 @@ public class CompactedLogRecord implements LogRecord {
     public InternalRow getRow() {
         int rowOffset = LENGTH_LENGTH + ATTRIBUTES_LENGTH;
         return deserializeCompactedRow(
-                sizeInBytes - rowOffset, segment, offset + rowOffset, fieldTypes, LogFormat.COMPACTED);
+                sizeInBytes - rowOffset,
+                segment,
+                offset + rowOffset,
+                fieldTypes,
+                LogFormat.COMPACTED);
     }
 
     /** Write the record to output and return total bytes written including length field. */
@@ -174,7 +178,8 @@ public class CompactedLogRecord implements LogRecord {
             compactedRow.pointTo(segment, position, length);
             return compactedRow;
         } else {
-            throw new IllegalArgumentException("No such compacted row deserializer for: " + logFormat);
+            throw new IllegalArgumentException(
+                    "No such compacted row deserializer for: " + logFormat);
         }
     }
 }
