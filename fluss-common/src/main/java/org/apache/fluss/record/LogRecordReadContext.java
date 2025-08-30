@@ -89,7 +89,8 @@ public class LogRecordReadContext implements LogRecordBatch.ReadContext, AutoClo
             int[] selectedFields = projection.getProjection();
             return createIndexedReadContext(rowType, schemaId, selectedFields);
         } else if (logFormat == LogFormat.COMPACTED) {
-            // TODO:
+            int[] selectedFields = projection.getProjection();
+            return createCompactedRowReadContext(rowType, schemaId, selectedFields);
         } else {
             throw new IllegalArgumentException("Unsupported log format: " + logFormat);
         }
@@ -137,6 +138,14 @@ public class LogRecordReadContext implements LogRecordBatch.ReadContext, AutoClo
     }
 
     /**
+     * Creates a LogRecordReadContext for COMPACTED log format.
+     */
+    public static LogRecordReadContext createCompactedRowReadContext(RowType rowType, int schemaId) {
+        int[] selectedFields = IntStream.range(0, rowType.getFieldCount()).toArray();
+        return createCompactedRowReadContext(rowType, schemaId, selectedFields);
+    }
+
+    /**
      * Creates a LogRecordReadContext for INDEXED log format.
      *
      * @param rowType the schema of the read data
@@ -149,6 +158,21 @@ public class LogRecordReadContext implements LogRecordBatch.ReadContext, AutoClo
         // for INDEXED log format, the projection is NEVER push downed to the server side
         return new LogRecordReadContext(
                 LogFormat.INDEXED, rowType, schemaId, null, null, fieldGetters, false);
+    }
+
+    /**
+     * Creates a LogRecordReadContext for COMPACTED log format.
+     *
+     * @param rowType the schema of the read data
+     * @param schemaId the schemaId of the table
+     * @param selectedFields the final selected fields of the read data
+     */
+    public static LogRecordReadContext createCompactedRowReadContext(
+            RowType rowType, int schemaId, int[] selectedFields) {
+        FieldGetter[] fieldGetters = buildProjectedFieldGetters(rowType, selectedFields);
+        // for COMPACTED log format, the projection is NEVER push downed to the server side
+        return new LogRecordReadContext(
+                LogFormat.COMPACTED, rowType, schemaId, null, null, fieldGetters, false);
     }
 
     private LogRecordReadContext(
