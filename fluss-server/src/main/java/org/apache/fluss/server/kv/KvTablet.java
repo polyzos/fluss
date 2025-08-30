@@ -405,6 +405,7 @@ public final class KvTablet {
                             "Primary Key Table with COMPACTED kv format doesn't support INDEXED cdc log format.");
                 }
                 return new IndexWalBuilder(schemaId, memorySegmentPool);
+            case COMPACTED:
             case ARROW:
                 return new ArrowWalBuilder(
                         schemaId,

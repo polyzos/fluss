@@ -88,6 +88,8 @@ public class LogRecordReadContext implements LogRecordBatch.ReadContext, AutoClo
         } else if (logFormat == LogFormat.INDEXED) {
             int[] selectedFields = projection.getProjection();
             return createIndexedReadContext(rowType, schemaId, selectedFields);
+        } else if (logFormat == LogFormat.COMPACTED) {
+            // TODO:
         } else {
             throw new IllegalArgumentException("Unsupported log format: " + logFormat);
         }
