@@ -51,6 +51,7 @@ import org.apache.fluss.server.kv.snapshot.KvFileHandleAndLocalPath;
 import org.apache.fluss.server.kv.snapshot.KvSnapshotDataUploader;
 import org.apache.fluss.server.kv.snapshot.RocksIncrementalSnapshot;
 import org.apache.fluss.server.kv.wal.ArrowWalBuilder;
+import org.apache.fluss.server.kv.wal.CompactedWalBuilder;
 import org.apache.fluss.server.kv.wal.IndexWalBuilder;
 import org.apache.fluss.server.kv.wal.WalBuilder;
 import org.apache.fluss.server.log.LogAppendInfo;
@@ -406,6 +407,7 @@ public final class KvTablet {
                 }
                 return new IndexWalBuilder(schemaId, memorySegmentPool);
             case COMPACTED:
+                return new CompactedWalBuilder(schemaId, rowType, memorySegmentPool);
             case ARROW:
                 return new ArrowWalBuilder(
                         schemaId,
