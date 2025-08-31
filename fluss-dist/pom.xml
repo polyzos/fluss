@@ -295,6 +295,21 @@
                         </configuration>
                     </execution>
                     <execution>
+<<<<<<< HEAD
+=======
+                        <id>tgz</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                        <configuration>
+                            <descriptors>
+                                <descriptor>src/main/assemblies/tgz.xml</descriptor>
+                            </descriptors>
+                        </configuration>
+                    </execution>
+                    <execution>
+>>>>>>> pr-544
                         <id>tgz</id>
                         <phase>package</phase>
                         <goals>

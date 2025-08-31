@@ -16,6 +16,11 @@
  */
 
 package org.apache.fluss.utils.crc;
+<<<<<<< HEAD
+=======
+
+import org.apache.fluss.record.bytesview.MemorySegmentBytesView;
+>>>>>>> pr-544
 
 import org.apache.fluss.record.bytesview.MemorySegmentBytesView;
 

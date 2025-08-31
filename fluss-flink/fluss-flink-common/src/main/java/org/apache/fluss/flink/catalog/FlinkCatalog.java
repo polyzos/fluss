@@ -17,6 +17,7 @@
 
 package org.apache.fluss.flink.catalog;
 
+<<<<<<< HEAD
 import org.apache.fluss.client.Connection;
 import org.apache.fluss.client.ConnectionFactory;
 import org.apache.fluss.client.admin.Admin;
@@ -37,6 +38,26 @@ import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.utils.ExceptionUtils;
 import org.apache.fluss.utils.IOUtils;
+=======
+import com.alibaba.fluss.client.Connection;
+import com.alibaba.fluss.client.ConnectionFactory;
+import com.alibaba.fluss.client.admin.Admin;
+import com.alibaba.fluss.config.ConfigOptions;
+import com.alibaba.fluss.config.Configuration;
+import com.alibaba.fluss.exception.FlussRuntimeException;
+import com.alibaba.fluss.flink.lakehouse.LakeCatalog;
+import com.alibaba.fluss.flink.utils.DataLakeUtils;
+import com.alibaba.fluss.flink.utils.FlinkConversions;
+import com.alibaba.fluss.metadata.DatabaseDescriptor;
+import com.alibaba.fluss.metadata.PartitionInfo;
+import com.alibaba.fluss.metadata.PartitionSpec;
+import com.alibaba.fluss.metadata.TableDescriptor;
+import com.alibaba.fluss.metadata.TableInfo;
+import com.alibaba.fluss.metadata.TablePath;
+import com.alibaba.fluss.utils.CatalogExceptionUtils;
+import com.alibaba.fluss.utils.ExceptionUtils;
+import com.alibaba.fluss.utils.IOUtils;
+>>>>>>> pr-544
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.table.catalog.AbstractCatalog;
@@ -80,6 +101,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+<<<<<<< HEAD
+=======
+import static com.alibaba.fluss.config.ConfigOptions.BOOTSTRAP_SERVERS;
+import static com.alibaba.fluss.flink.utils.FlinkConversions.toFlussDatabase;
+import static com.alibaba.fluss.utils.CatalogExceptionUtils.isPartitionAlreadyExists;
+import static com.alibaba.fluss.utils.CatalogExceptionUtils.isPartitionInvalid;
+import static com.alibaba.fluss.utils.CatalogExceptionUtils.isPartitionNotExist;
+import static com.alibaba.fluss.utils.CatalogExceptionUtils.isTableNotExist;
+import static com.alibaba.fluss.utils.CatalogExceptionUtils.isTableNotPartitioned;
+>>>>>>> pr-544
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.fluss.config.ConfigOptions.BOOTSTRAP_SERVERS;
 import static org.apache.fluss.flink.utils.CatalogExceptionUtils.isPartitionAlreadyExists;

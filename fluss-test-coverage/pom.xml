@@ -160,6 +160,10 @@
                                             <directory>${project.basedir}/../</directory>
                                             <includes>
                                                 <include>fluss-flink/**/target/classes/**</include>
+<<<<<<< HEAD
+=======
+                                                <include>fluss-lake/**/target/classes/**</include>
+>>>>>>> pr-544
                                             </includes>
                                             <excludes>
                                                 <exclude>fluss-test-coverage/**</exclude>
@@ -287,6 +291,7 @@
                                         </limit>
                                     </limits>
                                     <excludes>
+<<<<<<< HEAD
                                         <exclude>org.apache.fluss.protogen.*</exclude>
                                         <exclude>org.apache.fluss.memory.*</exclude>
                                         <exclude>org.apache.fluss.utils.*</exclude>
@@ -309,6 +314,26 @@
                                         </exclude>
                                         <exclude>
                                             org.apache.fluss.server.tablet.TabletServerGateway
+=======
+                                        <exclude>com.alibaba.fluss.protogen.*</exclude>
+                                        <exclude>com.alibaba.fluss.memory.*</exclude>
+                                        <exclude>com.alibaba.fluss.utils.*</exclude>
+                                        <exclude>com.alibaba.fluss.exception.*</exclude>
+                                        <exclude>com.alibaba.fluss.row.arrow.*</exclude>
+                                        <exclude>
+                                            com.alibaba.fluss.row.columnar.BytesColumnVector.Bytes
+                                        </exclude>
+                                        <exclude>com.alibaba.fluss.row.encode.RowEncoder</exclude>
+                                        <exclude>com.alibaba.fluss.table.*</exclude>
+                                        <exclude>com.alibaba.fluss.record.*</exclude>
+                                        <exclude>com.alibaba.fluss.kv.*</exclude>
+                                        <exclude>com.alibaba.fluss.io.*</exclude>
+                                        <exclude>com.alibaba.fluss.bucketing.BucketingFunction</exclude>
+                                        <exclude>com.alibaba.fluss.server.ServerBase</exclude>
+                                        <exclude>com.alibaba.fluss.server.utils.ShutdownHookUtil
+                                        </exclude>
+                                        <exclude>com.alibaba.fluss.fs.FSData*StreamWrapper
+>>>>>>> pr-544
                                         </exclude>
                                         <exclude>org.apache.fluss.client.*</exclude>
                                         <exclude>org.apache.fluss.server.*</exclude>
@@ -323,6 +348,7 @@
                                         <exclude>
                                             org.apache.fluss.security.auth.sasl.plain.PlainSaslServer.PlainSaslServerFactory
                                         </exclude>
+<<<<<<< HEAD
                                         <exclude>org.apache.fluss.security.auth.ServerAuthenticator</exclude>
                                         <!-- start exclude for flink-connector -->
                                         <exclude>org.apache.fluss.flink.utils.*</exclude>
@@ -336,6 +362,25 @@
                                         </exclude>
                                         <exclude>
                                             org.apache.fluss.flink.source.split.LogSplitState
+=======
+                                        <exclude>com.alibaba.fluss.client.*</exclude>
+                                        <exclude>com.alibaba.fluss.server.*</exclude>
+                                        <exclude>com.alibaba.fluss.replica.*</exclude>
+                                        <exclude>com.alibaba.fluss.api.*</exclude>
+                                        <exclude>com.alibaba.fluss.rpc.*</exclude>
+                                        <exclude>com.alibaba.fluss.metadata.*</exclude>
+                                        <exclude>com.alibaba.fluss.cluster.*</exclude>
+                                        <exclude>com.alibaba.fluss.Bucket</exclude>
+                                        <exclude>com.alibaba.fluss.remote.*</exclude>
+                                        <exclude>com.alibaba.fluss.compression.*</exclude>
+                                        <exclude>com.alibaba.fluss.security.auth.sasl.plain.PlainSaslServer.PlainSaslServerFactory</exclude>
+                                        <!-- start exclude for flink-connector -->
+                                        <exclude>com.alibaba.fluss.flink.utils.*</exclude>
+                                        <exclude>com.alibaba.fluss.flink.source.*
+                                        </exclude>
+                                        <exclude>
+                                            com.alibaba.fluss.flink.source.FlinkTableSource.*
+>>>>>>> pr-544
                                         </exclude>
                                         <exclude>
                                             org.apache.fluss.flink.source.state.SourceEnumeratorState
@@ -351,16 +396,36 @@
                                         </exclude>
                                         <exclude>org.apache.fluss.flink.sink.*</exclude>
                                         <exclude>
+<<<<<<< HEAD
                                             org.apache.fluss.flink.metrics.*
+=======
+                                            com.alibaba.fluss.flink.source.emitter.FlinkRecordEmitter
+                                        </exclude>
+                                        <exclude>
+                                            com.alibaba.fluss.flink.source.reader.FlinkSourceReader
+                                        </exclude>
+                                        <exclude>com.alibaba.fluss.flink.sink.*</exclude>
+                                        <exclude>
+                                            com.alibaba.fluss.flink.metrics.*
+>>>>>>> pr-544
                                         </exclude>
                                         <!-- end exclude for flink-connector -->
                                         <exclude>org.apache.fluss.fs.hdfs.HadoopFsPlugin
                                         </exclude>
+<<<<<<< HEAD
                                         <exclude>org.apache.fluss.fs.hdfs.HadoopSecurityTokenReceiver</exclude>
                                         <exclude>org.apache.fluss.fs.oss.*</exclude>
                                         <exclude>org.apache.fluss.fs.s3.*</exclude>
                                         <exclude>org.apache.fluss.fs.obs.*</exclude>
                                         <exclude>com.amazonaws.services.s3.model.transform.XmlResponsesSaxParser*
+=======
+                                        <exclude>com.alibaba.fluss.fs.hdfs.HadoopSecurityTokenReceiver</exclude>
+                                        <exclude>com.alibaba.fluss.fs.oss.*</exclude>
+                                        <exclude>com.alibaba.fluss.fs.s3.*</exclude>
+                                        <exclude>com.alibaba.fluss.fs.obs.*</exclude>
+                                        <exclude>com.amazonaws.services.s3.model.transform.XmlResponsesSaxParser*</exclude>
+                                        <exclude>com.alibaba.fluss.rocksdb.RocksIteratorWrapper
+>>>>>>> pr-544
                                         </exclude>
                                         <exclude>org.apache.fluss.rocksdb.RocksIteratorWrapper
                                         </exclude>
@@ -368,6 +433,7 @@
                                         <!-- start exclude for metric -->
                                         <exclude>org.apache.fluss.metrics.*</exclude>
                                         <!-- end exclude for metric -->
+<<<<<<< HEAD
                                         <exclude>org.apache.fluss.flink.lake.*</exclude>
                                         <exclude>org.apache.fluss.kafka.*</exclude>
                                         <!-- exclude for fluss-ci-tools -->
@@ -415,6 +481,41 @@
                                             org.apache.fluss.flink.tiering.LakeTieringJobBuilder
                                         </exclude>
                                         <exclude>org.apache.fluss.flink.tiering.FlussLakeTieringEntrypoint</exclude>
+=======
+                                        <exclude>com.alibaba.fluss.flink.lake.*</exclude>
+                                        <exclude>com.alibaba.fluss.kafka.*</exclude>
+                                        <!-- exclude for fluss-ci-tools -->
+                                        <exclude>com.alibaba.fluss.tools.ci.*</exclude>
+                                        <!-- end exclude for predicate -->
+                                        <exclude>com.alibaba.fluss.predicate.*</exclude>
+                                        <!-- end exclude for lake source -->
+                                        <exclude>com.alibaba.fluss.lake.source.*</exclude>
+                                        <!-- exclude for dummy class -->
+                                        <exclude>com.alibaba.fluss.dist.DummyClass</exclude>
+                                        <exclude>com.alibaba.fluss.flink.DummyClass120</exclude>
+                                        <exclude>com.alibaba.fluss.flink.DummyClass119</exclude>
+                                        <exclude>com.alibaba.fluss.lake.batch.ArrowRecordBatch</exclude>
+                                        <exclude>com.alibaba.fluss.lake.committer.CommittedLakeSnapshot</exclude>
+                                        <exclude>com.alibaba.fluss.lake.paimon.FlussDataTypeToPaimonDataType</exclude>
+                                        <!-- start exclude for lake lance -->
+                                        <exclude>com.alibaba.fluss.lake.lance.*</exclude>
+                                        <!-- temporarily exclude iceberg -->
+                                        <exclude>com.alibaba.fluss.lake.iceberg.*</exclude>
+                                        <!-- start exclude for flink tiering service -->
+                                        <exclude>com.alibaba.fluss.flink.tiering.source.TieringSourceOptions</exclude>
+                                        <exclude>com.alibaba.fluss.flink.tiering.source.TieringSource.Builder</exclude>
+                                        <exclude>com.alibaba.fluss.flink.tiering.source.TieringSource</exclude>
+                                        <exclude>com.alibaba.fluss.flink.tiering.source.enumerator.TieringSourceEnumerator</exclude>
+                                        <exclude>com.alibaba.fluss.flink.tiering.source.enumerator.TieringSourceEnumerator.HeartBeatHelper</exclude>
+                                        <exclude>com.alibaba.fluss.flink.tiering.source.TieringWriterInitContext</exclude>
+                                        <exclude>com.alibaba.fluss.flink.tiering.source.TieringSourceReader</exclude>
+                                        <exclude>com.alibaba.fluss.flink.tiering.source.TableBucketWriteResultEmitter</exclude>
+                                        <exclude>com.alibaba.fluss.flink.tiering.source.TableBucketWriteResultTypeInfo*</exclude>
+                                        <exclude>com.alibaba.fluss.flink.tiering.committer.TieringCommitOperatorFactory</exclude>
+                                        <exclude>com.alibaba.fluss.flink.tiering.committer.CommittableMessageTypeInfo*</exclude>
+                                        <exclude>com.alibaba.fluss.flink.tiering.committer.LakeTieringCommitOperatorFactory</exclude>
+                                        <exclude>com.alibaba.fluss.flink.tiering.FlussLakeTieringEntrypoint</exclude>
+>>>>>>> pr-544
                                         <!-- end exclude for flink tiering service -->
                                     </excludes>
                                 </rule>

@@ -19,6 +19,11 @@ package org.apache.fluss.utils;
 
 import org.apache.fluss.memory.MemorySegment;
 import org.apache.fluss.memory.MemoryUtils;
+<<<<<<< HEAD
+=======
+
+import static org.apache.fluss.utils.UnsafeUtils.BYTE_ARRAY_BASE_OFFSET;
+>>>>>>> pr-544
 
 import static org.apache.fluss.utils.UnsafeUtils.BYTE_ARRAY_BASE_OFFSET;
 

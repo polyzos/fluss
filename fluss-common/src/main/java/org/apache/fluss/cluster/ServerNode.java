@@ -16,6 +16,13 @@
  */
 
 package org.apache.fluss.cluster;
+<<<<<<< HEAD
+=======
+
+import org.apache.fluss.annotation.PublicEvolving;
+
+import javax.annotation.Nullable;
+>>>>>>> pr-544
 
 import org.apache.fluss.annotation.PublicEvolving;
 

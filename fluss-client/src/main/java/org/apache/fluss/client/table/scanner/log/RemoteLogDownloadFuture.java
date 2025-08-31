@@ -15,7 +15,15 @@
  * limitations under the License.
  */
 
+<<<<<<< HEAD
 package org.apache.fluss.client.table.scanner.log;
+=======
+<<<<<<<< HEAD:fluss-client/src/main/java/org/apache/fluss/client/table/scanner/log/RemoteLogDownloadFuture.java
+package org.apache.fluss.client.table.scanner.log;
+========
+package com.alibaba.fluss.client.table.scanner.log;
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-client/src/main/java/com/alibaba/fluss/client/table/scanner/log/RemoteLogDownloadFuture.java
+>>>>>>> pr-544
 
 import org.apache.fluss.exception.FlussRuntimeException;
 import org.apache.fluss.record.FileLogRecords;

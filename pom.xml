@@ -76,7 +76,11 @@
         <module>fluss-jmh</module>
         <module>fluss-lake</module>
         <module>fluss-kafka</module>
+<<<<<<< HEAD
         <module>tools/ci/fluss-ci-tools</module>
+=======
+        <module>fluss-spark</module>
+>>>>>>> pr-544
     </modules>
 
     <properties>
@@ -1018,6 +1022,14 @@
 
                             <removeUnusedImports/>
                         </java>
+                        <scala>
+                            <toggleOffOn />
+
+                            <scalafmt>
+                                <version>${spotless.scalafmt.version}</version>
+                                <file>${maven.multiModuleProjectDirectory}/.scalafmt.conf</file>
+                            </scalafmt>
+                        </scala>
                     </configuration>
                     <executions>
                         <execution>

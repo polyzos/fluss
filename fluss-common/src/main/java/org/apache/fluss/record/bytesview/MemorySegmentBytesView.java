@@ -20,6 +20,11 @@ package org.apache.fluss.record.bytesview;
 import org.apache.fluss.memory.MemorySegment;
 import org.apache.fluss.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.fluss.shaded.netty4.io.netty.buffer.Unpooled;
+<<<<<<< HEAD
+=======
+
+import java.nio.ByteBuffer;
+>>>>>>> pr-544
 
 import java.nio.ByteBuffer;
 

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+<<<<<<< HEAD
 package org.apache.fluss.client.table.scanner.log;
 
 import org.apache.fluss.annotation.Internal;
@@ -30,6 +31,41 @@ import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.rpc.messages.FetchLogRequest;
 import org.apache.fluss.rpc.protocol.ApiError;
 import org.apache.fluss.utils.CloseableIterator;
+=======
+<<<<<<<< HEAD:fluss-client/src/main/java/org/apache/fluss/client/table/scanner/log/CompletedFetch.java
+package org.apache.fluss.client.table.scanner.log;
+
+import org.apache.fluss.annotation.Internal;
+import org.apache.fluss.client.table.scanner.ScanRecord;
+import org.apache.fluss.exception.CorruptRecordException;
+import org.apache.fluss.exception.FetchException;
+import org.apache.fluss.metadata.TableBucket;
+import org.apache.fluss.record.LogRecord;
+import org.apache.fluss.record.LogRecordBatch;
+import org.apache.fluss.record.LogRecordReadContext;
+import org.apache.fluss.row.GenericRow;
+import org.apache.fluss.row.InternalRow;
+import org.apache.fluss.rpc.messages.FetchLogRequest;
+import org.apache.fluss.rpc.protocol.ApiError;
+import org.apache.fluss.utils.CloseableIterator;
+========
+package com.alibaba.fluss.client.table.scanner.log;
+
+import com.alibaba.fluss.annotation.Internal;
+import com.alibaba.fluss.client.table.scanner.ScanRecord;
+import com.alibaba.fluss.exception.CorruptRecordException;
+import com.alibaba.fluss.exception.FetchException;
+import com.alibaba.fluss.metadata.TableBucket;
+import com.alibaba.fluss.record.LogRecord;
+import com.alibaba.fluss.record.LogRecordBatch;
+import com.alibaba.fluss.record.LogRecordReadContext;
+import com.alibaba.fluss.row.GenericRow;
+import com.alibaba.fluss.row.InternalRow;
+import com.alibaba.fluss.rpc.messages.FetchLogRequest;
+import com.alibaba.fluss.rpc.protocol.ApiError;
+import com.alibaba.fluss.utils.CloseableIterator;
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-client/src/main/java/com/alibaba/fluss/client/table/scanner/log/CompletedFetch.java
+>>>>>>> pr-544
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,8 +137,12 @@ abstract class CompletedFetch {
         for (int i = 0; i < selectedFieldGetters.length; i++) {
             newRow.setField(i, selectedFieldGetters[i].getFieldOrNull(internalRow));
         }
+<<<<<<<< HEAD:fluss-client/src/main/java/org/apache/fluss/client/table/scanner/log/CompletedFetch.java
         return new ScanRecord(
                 record.logOffset(), record.timestamp(), record.getChangeType(), newRow);
+========
+        return new ScanRecord(record.logOffset(), record.timestamp(), record.getRowKind(), newRow);
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-client/src/main/java/com/alibaba/fluss/client/table/scanner/log/CompletedFetch.java
     }
 
     boolean isConsumed() {

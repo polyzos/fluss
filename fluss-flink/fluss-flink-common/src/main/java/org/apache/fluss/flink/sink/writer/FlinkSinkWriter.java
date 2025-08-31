@@ -15,6 +15,30 @@
  * limitations under the License.
  */
 
+<<<<<<< HEAD
+package org.apache.fluss.flink.sink.writer;
+
+import org.apache.fluss.annotation.VisibleForTesting;
+import org.apache.fluss.client.Connection;
+import org.apache.fluss.client.ConnectionFactory;
+import org.apache.fluss.client.table.Table;
+import org.apache.fluss.client.table.writer.TableWriter;
+import org.apache.fluss.config.Configuration;
+import org.apache.fluss.exception.FlussRuntimeException;
+import org.apache.fluss.flink.metrics.FlinkMetricRegistry;
+import org.apache.fluss.flink.row.OperationType;
+import org.apache.fluss.flink.row.RowWithOp;
+import org.apache.fluss.flink.sink.serializer.FlussSerializationSchema;
+import org.apache.fluss.flink.sink.serializer.SerializerInitContextImpl;
+import org.apache.fluss.flink.utils.FlinkConversions;
+import org.apache.fluss.metadata.TableInfo;
+import org.apache.fluss.metadata.TablePath;
+import org.apache.fluss.metrics.Gauge;
+import org.apache.fluss.metrics.Metric;
+import org.apache.fluss.metrics.MetricNames;
+import org.apache.fluss.row.InternalRow;
+=======
+<<<<<<<< HEAD:fluss-flink/fluss-flink-common/src/main/java/org/apache/fluss/flink/sink/writer/FlinkSinkWriter.java
 package org.apache.fluss.flink.sink.writer;
 
 import org.apache.fluss.annotation.VisibleForTesting;
@@ -38,6 +62,25 @@ import org.apache.fluss.metrics.MetricNames;
 import org.apache.fluss.row.InternalRow;
 
 import org.apache.flink.api.common.operators.MailboxExecutor;
+========
+package com.alibaba.fluss.connector.flink.sink.writer;
+
+import com.alibaba.fluss.client.Connection;
+import com.alibaba.fluss.client.ConnectionFactory;
+import com.alibaba.fluss.client.table.Table;
+import com.alibaba.fluss.config.Configuration;
+import com.alibaba.fluss.connector.flink.metrics.FlinkMetricRegistry;
+import com.alibaba.fluss.connector.flink.row.FlinkAsFlussRow;
+import com.alibaba.fluss.connector.flink.utils.FlinkConversions;
+import com.alibaba.fluss.metadata.TableInfo;
+import com.alibaba.fluss.metadata.TablePath;
+import com.alibaba.fluss.metrics.Gauge;
+import com.alibaba.fluss.metrics.Metric;
+import com.alibaba.fluss.metrics.MetricNames;
+import com.alibaba.fluss.row.InternalRow;
+>>>>>>> pr-544
+
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-connectors/fluss-connector-flink/src/main/java/com/alibaba/fluss/connector/flink/sink/writer/FlinkSinkWriter.java
 import org.apache.flink.api.connector.sink2.SinkWriter;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.groups.SinkWriterMetricGroup;
@@ -53,7 +96,15 @@ import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 
 /** Base class for Flink {@link SinkWriter} implementations in Fluss. */
+<<<<<<< HEAD
 public abstract class FlinkSinkWriter<InputT> implements SinkWriter<InputT> {
+=======
+<<<<<<<< HEAD:fluss-flink/fluss-flink-common/src/main/java/org/apache/fluss/flink/sink/writer/FlinkSinkWriter.java
+public abstract class FlinkSinkWriter<InputT> implements SinkWriter<InputT> {
+========
+public abstract class FlinkSinkWriter implements SinkWriter<RowData> {
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-connectors/fluss-connector-flink/src/main/java/com/alibaba/fluss/connector/flink/sink/writer/FlinkSinkWriter.java
+>>>>>>> pr-544
 
     protected static final Logger LOG = LoggerFactory.getLogger(FlinkSinkWriter.class);
 
@@ -61,8 +112,17 @@ public abstract class FlinkSinkWriter<InputT> implements SinkWriter<InputT> {
     private final Configuration flussConfig;
     protected final RowType tableRowType;
     protected final @Nullable int[] targetColumnIndexes;
+<<<<<<< HEAD
     private final MailboxExecutor mailboxExecutor;
     private final FlussSerializationSchema<InputT> serializationSchema;
+=======
+<<<<<<<< HEAD:fluss-flink/fluss-flink-common/src/main/java/org/apache/fluss/flink/sink/writer/FlinkSinkWriter.java
+    private final MailboxExecutor mailboxExecutor;
+    private final FlussSerializationSchema<InputT> serializationSchema;
+========
+    private final boolean ignoreDelete;
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-connectors/fluss-connector-flink/src/main/java/com/alibaba/fluss/connector/flink/sink/writer/FlinkSinkWriter.java
+>>>>>>> pr-544
 
     private transient Connection connection;
     protected transient Table table;
@@ -78,9 +138,20 @@ public abstract class FlinkSinkWriter<InputT> implements SinkWriter<InputT> {
             TablePath tablePath,
             Configuration flussConfig,
             RowType tableRowType,
+<<<<<<< HEAD
             MailboxExecutor mailboxExecutor,
             FlussSerializationSchema<InputT> serializationSchema) {
         this(tablePath, flussConfig, tableRowType, null, mailboxExecutor, serializationSchema);
+=======
+<<<<<<<< HEAD:fluss-flink/fluss-flink-common/src/main/java/org/apache/fluss/flink/sink/writer/FlinkSinkWriter.java
+            MailboxExecutor mailboxExecutor,
+            FlussSerializationSchema<InputT> serializationSchema) {
+        this(tablePath, flussConfig, tableRowType, null, mailboxExecutor, serializationSchema);
+========
+            boolean ignoreDelete) {
+        this(tablePath, flussConfig, tableRowType, null, ignoreDelete);
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-connectors/fluss-connector-flink/src/main/java/com/alibaba/fluss/connector/flink/sink/writer/FlinkSinkWriter.java
+>>>>>>> pr-544
     }
 
     public FlinkSinkWriter(
@@ -88,14 +159,32 @@ public abstract class FlinkSinkWriter<InputT> implements SinkWriter<InputT> {
             Configuration flussConfig,
             RowType tableRowType,
             @Nullable int[] targetColumns,
+<<<<<<< HEAD
             MailboxExecutor mailboxExecutor,
             FlussSerializationSchema<InputT> serializationSchema) {
+=======
+<<<<<<<< HEAD:fluss-flink/fluss-flink-common/src/main/java/org/apache/fluss/flink/sink/writer/FlinkSinkWriter.java
+            MailboxExecutor mailboxExecutor,
+            FlussSerializationSchema<InputT> serializationSchema) {
+========
+            boolean ignoreDelete) {
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-connectors/fluss-connector-flink/src/main/java/com/alibaba/fluss/connector/flink/sink/writer/FlinkSinkWriter.java
+>>>>>>> pr-544
         this.tablePath = tablePath;
         this.flussConfig = flussConfig;
         this.targetColumnIndexes = targetColumns;
         this.tableRowType = tableRowType;
+<<<<<<< HEAD
         this.mailboxExecutor = mailboxExecutor;
         this.serializationSchema = serializationSchema;
+=======
+<<<<<<<< HEAD:fluss-flink/fluss-flink-common/src/main/java/org/apache/fluss/flink/sink/writer/FlinkSinkWriter.java
+        this.mailboxExecutor = mailboxExecutor;
+        this.serializationSchema = serializationSchema;
+========
+        this.ignoreDelete = ignoreDelete;
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-connectors/fluss-connector-flink/src/main/java/com/alibaba/fluss/connector/flink/sink/writer/FlinkSinkWriter.java
+>>>>>>> pr-544
     }
 
     public void initialize(SinkWriterMetricGroup metricGroup) {
@@ -111,6 +200,10 @@ public abstract class FlinkSinkWriter<InputT> implements SinkWriter<InputT> {
         connection = ConnectionFactory.createConnection(flussConfig, flinkMetricRegistry);
         table = connection.getTable(tablePath);
         sanityCheck(table.getTableInfo());
+<<<<<<< HEAD
+=======
+<<<<<<<< HEAD:fluss-flink/fluss-flink-common/src/main/java/org/apache/fluss/flink/sink/writer/FlinkSinkWriter.java
+>>>>>>> pr-544
 
         try {
             this.serializationSchema.open(
@@ -119,6 +212,12 @@ public abstract class FlinkSinkWriter<InputT> implements SinkWriter<InputT> {
             throw new FlussRuntimeException(e);
         }
 
+<<<<<<< HEAD
+=======
+========
+        sinkRow = new FlinkAsFlussRow();
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-connectors/fluss-connector-flink/src/main/java/com/alibaba/fluss/connector/flink/sink/writer/FlinkSinkWriter.java
+>>>>>>> pr-544
         initMetrics();
     }
 
@@ -129,9 +228,31 @@ public abstract class FlinkSinkWriter<InputT> implements SinkWriter<InputT> {
     }
 
     @Override
+<<<<<<< HEAD
+    public void write(InputT inputValue, Context context) throws IOException, InterruptedException {
+=======
+<<<<<<<< HEAD:fluss-flink/fluss-flink-common/src/main/java/org/apache/fluss/flink/sink/writer/FlinkSinkWriter.java
     public void write(InputT inputValue, Context context) throws IOException, InterruptedException {
         checkAsyncException();
+========
+    public void write(RowData value, Context context) throws IOException, InterruptedException {
+>>>>>>> pr-544
+        checkAsyncException();
 
+<<<<<<< HEAD
+=======
+        InternalRow internalRow = sinkRow.replace(value);
+        CompletableFuture<?> writeFuture = writeRow(value.getRowKind(), internalRow);
+        writeFuture.exceptionally(
+                exception -> {
+                    if (this.asyncWriterException == null) {
+                        this.asyncWriterException = exception;
+                    }
+                    return null;
+                });
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-connectors/fluss-connector-flink/src/main/java/com/alibaba/fluss/connector/flink/sink/writer/FlinkSinkWriter.java
+
+>>>>>>> pr-544
         try {
             RowWithOp rowWithOp = serializationSchema.serialize(inputValue);
             OperationType opType = rowWithOp.getOperationType();
@@ -163,7 +284,15 @@ public abstract class FlinkSinkWriter<InputT> implements SinkWriter<InputT> {
     @Override
     public abstract void flush(boolean endOfInput) throws IOException, InterruptedException;
 
+<<<<<<< HEAD
     abstract CompletableFuture<?> writeRow(OperationType opType, InternalRow internalRow);
+=======
+<<<<<<<< HEAD:fluss-flink/fluss-flink-common/src/main/java/org/apache/fluss/flink/sink/writer/FlinkSinkWriter.java
+    abstract CompletableFuture<?> writeRow(OperationType opType, InternalRow internalRow);
+========
+    abstract CompletableFuture<?> writeRow(RowKind rowKind, InternalRow internalRow);
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-connectors/fluss-connector-flink/src/main/java/com/alibaba/fluss/connector/flink/sink/writer/FlinkSinkWriter.java
+>>>>>>> pr-544
 
     @Override
     public void close() throws Exception {

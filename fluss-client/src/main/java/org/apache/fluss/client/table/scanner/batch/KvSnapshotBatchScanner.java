@@ -1,13 +1,25 @@
 /*
+<<<<<<< HEAD
+=======
+<<<<<<<< HEAD:fluss-client/src/main/java/org/apache/fluss/client/table/scanner/batch/KvSnapshotBatchScanner.java
+>>>>>>> pr-544
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
+<<<<<<< HEAD
+=======
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+========
+ *  Copyright (c) 2025 Alibaba Group Holding Ltd.
+>>>>>>> pr-544
  *
  *    http://www.apache.org/licenses/LICENSE-2.0
  *
+<<<<<<< HEAD
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -29,6 +41,49 @@ import org.apache.fluss.utils.CloseableIterator;
 import org.apache.fluss.utils.CloseableRegistry;
 import org.apache.fluss.utils.FileUtils;
 import org.apache.fluss.utils.IOUtils;
+=======
+ *      http://www.apache.org/licenses/LICENSE-2.0
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-client/src/main/java/com/alibaba/fluss/client/table/scanner/batch/KvSnapshotBatchScanner.java
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
+
+<<<<<<<< HEAD:fluss-client/src/main/java/org/apache/fluss/client/table/scanner/batch/KvSnapshotBatchScanner.java
+package org.apache.fluss.client.table.scanner.batch;
+
+import org.apache.fluss.annotation.Internal;
+import org.apache.fluss.client.table.scanner.RemoteFileDownloader;
+import org.apache.fluss.exception.FlussRuntimeException;
+import org.apache.fluss.fs.FsPathAndFileName;
+import org.apache.fluss.metadata.KvFormat;
+import org.apache.fluss.metadata.TableBucket;
+import org.apache.fluss.row.InternalRow;
+import org.apache.fluss.types.RowType;
+import org.apache.fluss.utils.CloseableIterator;
+import org.apache.fluss.utils.CloseableRegistry;
+import org.apache.fluss.utils.FileUtils;
+import org.apache.fluss.utils.IOUtils;
+========
+package com.alibaba.fluss.client.table.scanner.batch;
+
+import com.alibaba.fluss.annotation.Internal;
+import com.alibaba.fluss.client.table.scanner.RemoteFileDownloader;
+import com.alibaba.fluss.exception.FlussRuntimeException;
+import com.alibaba.fluss.fs.FsPathAndFileName;
+import com.alibaba.fluss.metadata.KvFormat;
+import com.alibaba.fluss.metadata.TableBucket;
+import com.alibaba.fluss.row.InternalRow;
+import com.alibaba.fluss.types.RowType;
+import com.alibaba.fluss.utils.CloseableIterator;
+import com.alibaba.fluss.utils.CloseableRegistry;
+import com.alibaba.fluss.utils.FileUtils;
+import com.alibaba.fluss.utils.IOUtils;
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-client/src/main/java/com/alibaba/fluss/client/table/scanner/batch/KvSnapshotBatchScanner.java
+>>>>>>> pr-544
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -196,7 +251,14 @@ public class KvSnapshotBatchScanner implements BatchScanner {
                                         LOG.info(
                                                 "Start to download kv snapshot files to local directory for bucket {}.",
                                                 tableBucket);
+<<<<<<< HEAD
                                         long startTime = System.currentTimeMillis();
+=======
+<<<<<<<< HEAD:fluss-client/src/main/java/org/apache/fluss/client/table/scanner/batch/KvSnapshotBatchScanner.java
+                                        long startTime = System.currentTimeMillis();
+========
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-client/src/main/java/com/alibaba/fluss/client/table/scanner/batch/KvSnapshotBatchScanner.java
+>>>>>>> pr-544
                                         remoteFileDownloader.transferAllToDirectory(
                                                 fsPathAndFileNames,
                                                 snapshotLocalDirectory,

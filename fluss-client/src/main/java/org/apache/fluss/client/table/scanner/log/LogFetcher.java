@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+<<<<<<< HEAD
 package org.apache.fluss.client.table.scanner.log;
 
 import org.apache.fluss.annotation.Internal;
@@ -50,6 +51,81 @@ import org.apache.fluss.rpc.messages.PbFetchLogRespForTable;
 import org.apache.fluss.rpc.protocol.Errors;
 import org.apache.fluss.utils.IOUtils;
 import org.apache.fluss.utils.Projection;
+=======
+<<<<<<<< HEAD:fluss-client/src/main/java/org/apache/fluss/client/table/scanner/log/LogFetcher.java
+package org.apache.fluss.client.table.scanner.log;
+
+import org.apache.fluss.annotation.Internal;
+import org.apache.fluss.annotation.VisibleForTesting;
+import org.apache.fluss.client.metadata.MetadataUpdater;
+import org.apache.fluss.client.metrics.ScannerMetricGroup;
+import org.apache.fluss.client.table.scanner.RemoteFileDownloader;
+import org.apache.fluss.client.table.scanner.ScanRecord;
+import org.apache.fluss.cluster.BucketLocation;
+import org.apache.fluss.config.ConfigOptions;
+import org.apache.fluss.config.Configuration;
+import org.apache.fluss.exception.InvalidMetadataException;
+import org.apache.fluss.exception.LeaderNotAvailableException;
+import org.apache.fluss.fs.FsPath;
+import org.apache.fluss.metadata.PhysicalTablePath;
+import org.apache.fluss.metadata.TableBucket;
+import org.apache.fluss.metadata.TableInfo;
+import org.apache.fluss.metadata.TablePartition;
+import org.apache.fluss.metadata.TablePath;
+import org.apache.fluss.record.LogRecordReadContext;
+import org.apache.fluss.record.LogRecords;
+import org.apache.fluss.record.MemoryLogRecords;
+import org.apache.fluss.remote.RemoteLogFetchInfo;
+import org.apache.fluss.remote.RemoteLogSegment;
+import org.apache.fluss.rpc.entity.FetchLogResultForBucket;
+import org.apache.fluss.rpc.gateway.TabletServerGateway;
+import org.apache.fluss.rpc.messages.FetchLogRequest;
+import org.apache.fluss.rpc.messages.FetchLogResponse;
+import org.apache.fluss.rpc.messages.PbFetchLogReqForBucket;
+import org.apache.fluss.rpc.messages.PbFetchLogReqForTable;
+import org.apache.fluss.rpc.messages.PbFetchLogRespForBucket;
+import org.apache.fluss.rpc.messages.PbFetchLogRespForTable;
+import org.apache.fluss.rpc.protocol.Errors;
+import org.apache.fluss.utils.IOUtils;
+import org.apache.fluss.utils.Projection;
+========
+package com.alibaba.fluss.client.table.scanner.log;
+
+import com.alibaba.fluss.annotation.Internal;
+import com.alibaba.fluss.annotation.VisibleForTesting;
+import com.alibaba.fluss.client.metadata.MetadataUpdater;
+import com.alibaba.fluss.client.metrics.ScannerMetricGroup;
+import com.alibaba.fluss.client.table.scanner.RemoteFileDownloader;
+import com.alibaba.fluss.client.table.scanner.ScanRecord;
+import com.alibaba.fluss.cluster.BucketLocation;
+import com.alibaba.fluss.config.ConfigOptions;
+import com.alibaba.fluss.config.Configuration;
+import com.alibaba.fluss.exception.InvalidMetadataException;
+import com.alibaba.fluss.fs.FsPath;
+import com.alibaba.fluss.metadata.PhysicalTablePath;
+import com.alibaba.fluss.metadata.TableBucket;
+import com.alibaba.fluss.metadata.TableInfo;
+import com.alibaba.fluss.metadata.TablePartition;
+import com.alibaba.fluss.metadata.TablePath;
+import com.alibaba.fluss.record.LogRecordReadContext;
+import com.alibaba.fluss.record.LogRecords;
+import com.alibaba.fluss.record.MemoryLogRecords;
+import com.alibaba.fluss.remote.RemoteLogFetchInfo;
+import com.alibaba.fluss.remote.RemoteLogSegment;
+import com.alibaba.fluss.rpc.GatewayClientProxy;
+import com.alibaba.fluss.rpc.RpcClient;
+import com.alibaba.fluss.rpc.entity.FetchLogResultForBucket;
+import com.alibaba.fluss.rpc.gateway.TabletServerGateway;
+import com.alibaba.fluss.rpc.messages.FetchLogRequest;
+import com.alibaba.fluss.rpc.messages.FetchLogResponse;
+import com.alibaba.fluss.rpc.messages.PbFetchLogReqForBucket;
+import com.alibaba.fluss.rpc.messages.PbFetchLogReqForTable;
+import com.alibaba.fluss.rpc.messages.PbFetchLogRespForBucket;
+import com.alibaba.fluss.rpc.messages.PbFetchLogRespForTable;
+import com.alibaba.fluss.utils.IOUtils;
+import com.alibaba.fluss.utils.Projection;
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-client/src/main/java/com/alibaba/fluss/client/table/scanner/log/LogFetcher.java
+>>>>>>> pr-544
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,6 +164,13 @@ public class LogFetcher implements Closeable {
     //  bytes from remote file.
     private final LogRecordReadContext remoteReadContext;
     @Nullable private final Projection projection;
+<<<<<<< HEAD
+=======
+<<<<<<<< HEAD:fluss-client/src/main/java/org/apache/fluss/client/table/scanner/log/LogFetcher.java
+========
+    private final RpcClient rpcClient;
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-client/src/main/java/com/alibaba/fluss/client/table/scanner/log/LogFetcher.java
+>>>>>>> pr-544
     private final int maxFetchBytes;
     private final int maxBucketFetchBytes;
     private final int minFetchBytes;
@@ -284,11 +367,27 @@ public class LogFetcher implements Closeable {
         }
     }
 
+<<<<<<<< HEAD:fluss-client/src/main/java/org/apache/fluss/client/table/scanner/log/LogFetcher.java
     /** Implements the core logic for a successful fetch log response. */
     private synchronized void handleFetchLogResponse(
             int destination, long requestStartTime, FetchLogResponse fetchLogResponse) {
         try {
             if (isClosed) {
+========
+                // if is invalid metadata exception, we need to clear table bucket meta
+                // to enable another round of log fetch to request new medata
+                if (e instanceof InvalidMetadataException) {
+                    Set<PhysicalTablePath> physicalTablePaths =
+                            metadataUpdater.getPhysicalTablePathByIds(
+                                    tableOrPartitionsInFetchRequest.tableIds,
+                                    tableOrPartitionsInFetchRequest.tablePartitions);
+                    LOG.warn(
+                            "Received invalid metadata error in fetch log request. "
+                                    + "Going to request metadata update.",
+                            e);
+                    metadataUpdater.invalidPhysicalTableBucketMeta(physicalTablePaths);
+                }
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-client/src/main/java/com/alibaba/fluss/client/table/scanner/log/LogFetcher.java
                 return;
             }
 
@@ -324,8 +423,17 @@ public class LogFetcher implements Closeable {
                                     fetchResultForBucket.getHighWatermark());
                         } else {
                             LogRecords logRecords = fetchResultForBucket.recordsOrEmpty();
+<<<<<<< HEAD
                             if (!MemoryLogRecords.EMPTY.equals(logRecords)
                                     || fetchResultForBucket.getErrorCode() != Errors.NONE.code()) {
+=======
+<<<<<<<< HEAD:fluss-client/src/main/java/org/apache/fluss/client/table/scanner/log/LogFetcher.java
+                            if (!MemoryLogRecords.EMPTY.equals(logRecords)
+                                    || fetchResultForBucket.getErrorCode() != Errors.NONE.code()) {
+========
+                            if (!MemoryLogRecords.EMPTY.equals(logRecords)) {
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-client/src/main/java/com/alibaba/fluss/client/table/scanner/log/LogFetcher.java
+>>>>>>> pr-544
                                 // In oder to not signal notEmptyCondition, add completed fetch to
                                 // buffer until log records is not empty.
                                 DefaultCompletedFetch completedFetch =

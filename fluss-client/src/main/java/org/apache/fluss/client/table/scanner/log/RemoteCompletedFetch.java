@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+<<<<<<< HEAD
 package org.apache.fluss.client.table.scanner.log;
 
 import org.apache.fluss.annotation.Internal;
@@ -22,6 +23,25 @@ import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.record.FileLogRecords;
 import org.apache.fluss.record.LogRecordReadContext;
 import org.apache.fluss.rpc.protocol.ApiError;
+=======
+<<<<<<<< HEAD:fluss-client/src/main/java/org/apache/fluss/client/table/scanner/log/RemoteCompletedFetch.java
+package org.apache.fluss.client.table.scanner.log;
+
+import org.apache.fluss.annotation.Internal;
+import org.apache.fluss.metadata.TableBucket;
+import org.apache.fluss.record.FileLogRecords;
+import org.apache.fluss.record.LogRecordReadContext;
+import org.apache.fluss.rpc.protocol.ApiError;
+========
+package com.alibaba.fluss.client.table.scanner.log;
+
+import com.alibaba.fluss.annotation.Internal;
+import com.alibaba.fluss.metadata.TableBucket;
+import com.alibaba.fluss.record.FileLogRecords;
+import com.alibaba.fluss.record.LogRecordReadContext;
+import com.alibaba.fluss.rpc.protocol.ApiError;
+>>>>>>>> be8528e4 ([connector] Support spark catalog and introduce some basic classes to support spark read and write):fluss-client/src/main/java/com/alibaba/fluss/client/table/scanner/log/RemoteCompletedFetch.java
+>>>>>>> pr-544
 
 import java.io.IOException;
 
