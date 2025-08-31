@@ -53,7 +53,7 @@ In Fluss, a Primary Key Table consists of several tightly integrated components:
 * **Snapshot Manager and Uploader:** periodically capture RocksDB state and upload it to remote object storage like S3 or HDFS. 
 * **Coordinator:** tracks metadata such as which snapshot belongs to which offset.
 
-* Together, these components give Fluss the power of a log and a cache without the pain of reconciling them.
+Together, these components give Fluss the power of a log and a cache without the pain of reconciling them.
 
 ### ✍️ The Write Path
 The write path is where Fluss’s guarantees come from. The ordering is strict: append to the log first, flush to RocksDB second, and acknowledge the client last. This removes the classic inconsistency where the log shows a change but the cache doesn’t.
@@ -123,7 +123,7 @@ Users of Apache Flink and Kafka Streams have long wanted to “just query the st
 In practice, this adds operational work and consistency/availability trade-offs; under heavy concurrent reads/writes some teams have even hit RocksDB-level contention issues.
 
 
-Fluss PK Tables deliver the same end-goal; direct, **low-latency lookups of live state,** but without those caveats: each write is **durable in the log** and **applied consistently to RocksDB**, and **deterministic snapshots, along with log replay** provide reliable recovery, so you can **safely query** state even after failures. (This is the `“queryable state”` experience people wanted, made production-ready.)
+Fluss PK Tables deliver the same end-goal; direct, **low-latency lookups of live state,** but without those caveats: each write is **durable in the log** and **applied consistently to RocksDB**, and **deterministic snapshots, along with log replay** provide reliable recovery, so you can **safely query** state even after failures.
 
 ### 📊 Real-Time Dashboards - Without Extra Serving Layers
 
