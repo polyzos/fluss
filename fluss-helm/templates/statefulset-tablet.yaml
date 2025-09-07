@@ -98,7 +98,7 @@ spec:
               {{- if .Values.tablet.jaas.enabled }} export JVM_OPTS="$JVM_OPTS -Djava.security.auth.login.config=/opt/fluss/conf/jaas.conf"; {{- end }}
               {{- if .Values.tablet.jvmOpts }} export JVM_OPTS="$JVM_OPTS {{ .Values.tablet.jvmOpts }}"; {{- end }}
               if ! echo "$FLUSS_PROPERTIES" | grep -q '^[[:space:]]*bind.listeners:'; then export FLUSS_PROPERTIES=$(printf "%s\n%s\n" "$FLUSS_PROPERTIES" "bind.listeners: INTERNAL://0.0.0.0:0,CLIENT://0.0.0.0:9123"); fi;
-              if [ -x /docker-entrypoint.sh ]; then
+               if [ -x /docker-entrypoint.sh ]; then
                 exec /docker-entrypoint.sh tabletServer;
               elif [ -x /opt/fluss/bin/tablet-server.sh ]; then
                 echo "Fallback to /opt/fluss/bin/tablet-server.sh with inline config preparation";
@@ -128,12 +128,6 @@ spec:
           env:
             - name: FLUSS_PROPERTIES
               value: |-
-                env.stdout-err.redirect-to-file: "false"
-                {{- if (index .Values.tablet.config "bind.listeners") }}
-                bind.listeners: {{ index .Values.tablet.config "bind.listeners" }}
-                {{- else }}
-                bind.listeners: INTERNAL://0.0.0.0:0,CLIENT://0.0.0.0:9123
-                {{- end }}
                 {{- .Values.overrideProperties.tablet | nindent 16 }}
           ports:
             - name: client

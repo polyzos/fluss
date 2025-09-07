@@ -98,6 +98,7 @@ tablet:
     bind.listeners: "INTERNAL://0.0.0.0:0,CLIENT://0.0.0.0:9123"
     advertised.listeners: "CLIENT://${POD_FQDN}:${TABLET_SERVICE_PORT}"
     tablet-server.id: "${TABLET_SERVER_ID}"
+    env.stdout-err.redirect-to-file: "false"
     # A rack label can be injected from node label via downward API if desired
     # tablet-server.rack: "${NODE_RACK}"
   jaas:
