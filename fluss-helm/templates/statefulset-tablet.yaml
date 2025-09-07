@@ -97,7 +97,34 @@ spec:
               {{- if .Values.tablet.hostTemplate }} export HOST={{ .Values.tablet.hostTemplate }}; {{- end }}
               {{- if .Values.tablet.jaas.enabled }} export JVM_OPTS="$JVM_OPTS -Djava.security.auth.login.config=/opt/fluss/conf/jaas.conf"; {{- end }}
               {{- if .Values.tablet.jvmOpts }} export JVM_OPTS="$JVM_OPTS {{ .Values.tablet.jvmOpts }}"; {{- end }}
-              if ! echo "$FLUSS_PROPERTIES" | grep -q '^[[:space:]]*bind.listeners:'; then export FLUSS_PROPERTIES=$(printf "%s\n%s\n" "$FLUSS_PROPERTIES" "bind.listeners: INTERNAL://0.0.0.0:0,CLIENT://0.0.0.0:9123"); fi;
+              if ! echo "$FLUSS_PROPERTIES" | grep -q '^[[:space:]]*bind.listeners:'; then export FLUSS_PROPERTIES="$(printf "%s\n%s\n" "$FLUSS_PROPERTIES" "bind.listeners: INTERNAL://0.0.0.0:0,CLIENT://0.0.0.0:9123")"; fi;
+              {{- $ea := .Values.tablet.externalAccess -}}
+              {{- $es := .Values.tablet.externalService -}}
+              {{- if or $ea.enabled $es.enabled }}
+              # Override advertised.listeners for outside access (port-forwarding, NodePort, or LB)
+              {{- if $ea.enabled }}
+              export EXTERNAL_CLIENT_PORT_BASE='{{ $ea.portBase }}';
+              {{- else }}
+              export EXTERNAL_CLIENT_PORT_BASE='{{ $es.portBase | default 30090 }}';
+              {{- end }}
+              export EXTERNAL_CLIENT_PORT=$((EXTERNAL_CLIENT_PORT_BASE + TABLET_SERVER_ID));
+              {{- if and $ea.enabled (eq $ea.hostSource "value") }}
+              export EXTERNAL_CLIENT_HOST='{{ $ea.host }}'
+              {{- else }}
+              # Default to node IP (works for NodePort; for LB set externalAccess.hostSource=value + host)
+              export EXTERNAL_CLIENT_HOST="${NODE_IP}"
+              {{- end }}
+              # Remove advertised.listeners if present in rendered file, we will append ours
+              sed -i '/^[[:space:]]*advertised.listeners:/d' /opt/fluss/conf/server.yaml || true
+              if [ -n "$FLUSS_PROPERTIES" ]; then
+                export FLUSS_PROPERTIES="$(printf "%s\nadvertised.listeners: CLIENT://%s:%s\n" "$FLUSS_PROPERTIES" "$EXTERNAL_CLIENT_HOST" "$EXTERNAL_CLIENT_PORT")";
+              else
+                export FLUSS_PROPERTIES="$(printf "advertised.listeners: CLIENT://%s:%s\n" "$EXTERNAL_CLIENT_HOST" "$EXTERNAL_CLIENT_PORT")";
+              fi
+              {{- end }}
+              {{- if .Values.tablet.debug.dumpAdvertised }}
+              echo "[DEBUG] (tablet) Pre-exec server.yaml advertised.listeners:" && grep -E '^[[:space:]]*advertised.listeners:' /opt/fluss/conf/server.yaml || true
+              {{- end }}
                if [ -x /docker-entrypoint.sh ]; then
                 exec /docker-entrypoint.sh tabletServer;
               elif [ -x /opt/fluss/bin/tablet-server.sh ]; then
@@ -126,6 +153,10 @@ spec:
                 sleep 60;
               fi;
           env:
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
             - name: FLUSS_PROPERTIES
               value: |-
                 {{- .Values.overrideProperties.tablet | nindent 16 }}
@@ -152,6 +183,11 @@ spec:
             {{- end }}
             - name: data
               mountPath: {{ (index .Values.tablet.config "data.dir") | default "/var/lib/fluss/data" }}
+            {{- if .Values.datalake.enabled }}
+            # Mount shared Paimon warehouse when datalake is enabled
+            - name: paimon-warehouse
+              mountPath: {{ (index .Values.tablet.config "datalake.paimon.warehouse") | default "/var/lib/paimon" }}
+            {{- end }}
             {{- range .Values.tablet.extraVolumeMounts }}
             - {{- toYaml . | nindent 14 }}
             {{- end }}
@@ -179,6 +215,16 @@ spec:
         - name: jaas
           secret:
             secretName: {{ .Values.tablet.jaas.existingSecret }}
+        {{- end }}
+        {{- if .Values.datalake.enabled }}
+        - name: paimon-warehouse
+          {{- if or (.Values.datalake.warehousePersistence.existingClaim) (.Values.datalake.warehousePersistence.enabled) }}
+          persistentVolumeClaim:
+            claimName: {{ if .Values.datalake.warehousePersistence.existingClaim }}{{ .Values.datalake.warehousePersistence.existingClaim }}{{ else }}{{ include "fluss.fullname" . }}-paimon-warehouse{{ end }}
+          {{- else }}
+          # Dev-only: fallback to EmptyDir (not shared across pods)
+          emptyDir: {}
+          {{- end }}
         {{- end }}
         {{- range .Values.tablet.extraVolumes }}
         - {{- toYaml . | nindent 10 }}

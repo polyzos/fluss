@@ -7,6 +7,19 @@ Coordinator Service:
   Name: {{ include "fluss.coordinator.serviceName" . }}
   Port: {{ .Values.coordinator.service.port }}
 
+{{- if .Values.coordinator.externalService.enabled }}
+External Coordinator Service:
+  - Mode: {{ .Values.coordinator.externalService.type | default "NodePort" }}
+  - Name: {{ include "fluss.fullname" . }}-coordinator-external
+  {{- if eq (default "NodePort" .Values.coordinator.externalService.type) "NodePort" }}
+  - Connect from outside K8s using your node IP (e.g., Minikube):
+      Host: $(minikube ip)
+      Port: {{ .Values.coordinator.externalService.nodePort | default 30912 }}
+  {{- else }}
+  - LoadBalancer: check 'kubectl get svc {{ include "fluss.fullname" . }}-coordinator-external' for external IP/hostname.
+  {{- end }}
+{{- end }}
+
 Tablet Headless Service:
   Name: {{ include "fluss.tablet.headlessServiceName" . }}
   Port: {{ .Values.tablet.service.port }}
@@ -25,6 +38,52 @@ Client connection (inside cluster):
 Advertised listeners:
   - Coordinator advertised.listeners: {{ index .Values.coordinator.config "advertised.listeners" | default "(inherits bind.listeners)" }}
   - Tablet advertised.listeners: {{ index .Values.tablet.config "advertised.listeners" | default "(inherits bind.listeners)" }}
+
+{{- if .Values.tablet.externalService.enabled }}
+Tablet external Services:
+  - Mode: {{ .Values.tablet.externalService.type | default "NodePort" }}
+  - One Service per tablet pod is created: {{ include "fluss.fullname" . }}-tablet-<ordinal>
+  - Base port: {{ .Values.tablet.externalService.portBase | default 30090 }} (tablet i -> base + i)
+  - Services created:
+  {{- $replicas := int .Values.tablet.replicas }}
+  {{- $fullname := include "fluss.fullname" . }}
+  {{- $base := default 30090 .Values.tablet.externalService.portBase }}
+  {{- range $i, $_ := until $replicas }}
+    - {{ $fullname }}-tablet-{{ $i }} (port: {{ add $base $i }})
+  {{- end }}
+  {{- if eq (default "NodePort" .Values.tablet.externalService.type) "NodePort" }}
+  - Connect from outside K8s using your node IP (e.g., Minikube):
+      Host: $(minikube ip)
+      Ports: base + ordinal (e.g., 30090, 30091, 30092)
+  {{- else }}
+  - LoadBalancer: check 'kubectl get svc' for external IPs/hostnames.
+  {{- end }}
+{{- end }}
+
+{{- if .Values.tablet.externalAccess.enabled }}
+Tablet advertised endpoints override:
+  - Host source: {{ .Values.tablet.externalAccess.hostSource | default "value" }}
+  - Host value: {{ .Values.tablet.externalAccess.host | default "(nodeIP when hostSource=nodeIP)" }}
+  - Port base: {{ .Values.tablet.externalAccess.portBase | default 19000 }} (tablet i -> base + i)
+{{- end }}
+
+Datalake (Paimon) Warehouse:
+{{- if .Values.datalake.enabled }}
+  - Status: enabled
+  - Warehouse path: {{ index .Values.coordinator.config "datalake.paimon.warehouse" | default "/var/lib/paimon" }}
+  {{- if .Values.datalake.warehousePersistence.existingClaim }}
+  - PVC: {{ .Values.datalake.warehousePersistence.existingClaim }} (ReadWriteMany expected)
+  {{- else if .Values.datalake.warehousePersistence.enabled }}
+  - PVC: {{ include "fluss.fullname" . }}-paimon-warehouse (auto-created, RWX)
+  {{- else }}
+  - Volume: EmptyDir (dev-only). Warning: not shared between pods; coordinator and tablets will NOT see the same tables.
+  {{- end }}
+{{- else }}
+  - Status: disabled. To use tables with table.datalake.enabled=true, enable a shared warehouse:
+      --set datalake.enabled=true \
+      --set datalake.warehousePersistence.enabled=true \
+      --set datalake.warehousePersistence.storageClass=<rwx-class>
+{{- end }}
 
 Security (SASL):
   If enabled, ensure clients configure matching JAAS credentials and security.protocol.

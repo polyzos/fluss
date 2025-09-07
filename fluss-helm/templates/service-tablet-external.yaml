@@ -1,0 +1,31 @@
+{{- if and .Values.tablet.enabled .Values.tablet.externalService.enabled }}
+{{- $replicas := int .Values.tablet.replicas }}
+{{- $fullname := include "fluss.fullname" . -}}
+{{- $type := .Values.tablet.externalService.type | default "NodePort" -}}
+{{- $portBase := int (.Values.tablet.externalService.portBase | default 30090) -}}
+{{- range $i, $_ := until $replicas }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-tablet-{{ $i }}
+  labels:
+    {{- include "fluss.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: tablet
+  {{- with $.Values.tablet.externalService.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $type }}
+  selector:
+    statefulset.kubernetes.io/pod-name: {{ $fullname }}-tablet-{{ $i }}
+  ports:
+    - name: client
+      port: {{ $.Values.tablet.service.port }}
+      targetPort: {{ $.Values.tablet.service.port }}
+      {{- if eq $type "NodePort" }}
+      nodePort: {{ add $portBase $i }}
+      {{- end }}
+{{- end }}
+{{- end }}

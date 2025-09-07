@@ -1,0 +1,27 @@
+# Minimal values file to enable datalake (Paimon) on Minikube
+# Uses Minikube's default StorageClass (usually "standard") which is ReadWriteOnce
+# In a single-node Minikube cluster, all pods run on the same node so a single RWO PVC
+# can be mounted by multiple pods concurrently.
+
+datalake:
+  enabled: true
+  warehousePersistence:
+    enabled: true
+    storageClass: standard
+    size: 20Gi
+    accessMode: ReadWriteOnce
+    mountPath: "/var/lib/paimon"
+
+# Tablets: enable external access override for outside-cluster clients and
+# set data PVC storageClass to the Minikube default for consistency.
+tablet:
+  externalAccess:
+    enabled: true
+    host: "localhost"
+    portBase: 19000
+  persistence:
+    storageClass: standard
+
+# The chart will mount the shared warehouse PVC at /var/lib/paimon for both
+# coordinator and tablets when datalake.enabled=true. For outside-cluster clients,
+# port-forward each tablet pod to 19000+<ordinal> (see examples/instruction.md).

@@ -1,0 +1,25 @@
+{{- if and .Values.coordinator.enabled .Values.coordinator.externalService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fluss.fullname" . }}-coordinator-external
+  labels:
+    {{- include "fluss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: coordinator
+  {{- with .Values.coordinator.externalService.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.coordinator.externalService.type | default "NodePort" }}
+  selector:
+    {{- include "fluss.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: coordinator
+  ports:
+    - name: client
+      port: {{ .Values.coordinator.service.port }}
+      targetPort: {{ .Values.coordinator.service.port }}
+      {{- if eq (default "NodePort" .Values.coordinator.externalService.type) "NodePort" }}
+      nodePort: {{ .Values.coordinator.externalService.nodePort | default 30912 }}
+      {{- end }}
+{{- end }}

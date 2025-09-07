@@ -61,7 +61,10 @@ spec:
               {{- if .Values.coordinator.hostTemplate }} export HOST={{ .Values.coordinator.hostTemplate }}; {{- end }}
               {{- if .Values.coordinator.jaas.enabled }} export JVM_OPTS="$JVM_OPTS -Djava.security.auth.login.config=/opt/fluss/conf/jaas.conf"; {{- end }}
               {{- if .Values.coordinator.jvmOpts }} export JVM_OPTS="$JVM_OPTS {{ .Values.coordinator.jvmOpts }}"; {{- end }}
-              if ! echo "$FLUSS_PROPERTIES" | grep -q '^[[:space:]]*bind.listeners:'; then export FLUSS_PROPERTIES=$(printf "%s\n%s\n" "$FLUSS_PROPERTIES" "bind.listeners: INTERNAL://0.0.0.0:0,CLIENT://0.0.0.0:9123"); fi;
+              if ! echo "$FLUSS_PROPERTIES" | grep -q '^[[:space:]]*bind.listeners:'; then export FLUSS_PROPERTIES="$(printf "%s\n%s\n" "$FLUSS_PROPERTIES" "bind.listeners: INTERNAL://0.0.0.0:0,CLIENT://0.0.0.0:9123")"; fi;
+              {{- if .Values.coordinator.debug.dumpAdvertised }}
+              echo "[DEBUG] (coordinator) FLUSS_PROPERTIES advertised.listeners:"; printf "%s\n" "$FLUSS_PROPERTIES" | grep -E '^[[:space:]]*advertised.listeners:' || true
+              {{- end }}
               if [ -x /docker-entrypoint.sh ]; then
                 exec /docker-entrypoint.sh coordinatorServer;
               elif [ -x /opt/fluss/bin/coordinator-server.sh ]; then
@@ -115,9 +118,11 @@ spec:
             - name: data
               mountPath: {{ (index .Values.coordinator.config "data.dir") | default "/var/lib/fluss/data" }}
             {{- end }}
-            # Mount Paimon warehouse to ensure writable path for non-root user
+            {{- if .Values.datalake.enabled }}
+            # Mount shared Paimon warehouse when datalake is enabled
             - name: paimon-warehouse
               mountPath: {{ (index .Values.coordinator.config "datalake.paimon.warehouse") | default "/var/lib/paimon" }}
+            {{- end }}
             {{- range .Values.coordinator.extraVolumeMounts }}
             - {{- toYaml . | nindent 14 }}
             {{- end }}
@@ -144,9 +149,16 @@ spec:
           secret:
             secretName: {{ .Values.coordinator.jaas.existingSecret }}
         {{- end }}
-        # EmptyDir for Paimon warehouse to ensure writable location
+        {{- if .Values.datalake.enabled }}
         - name: paimon-warehouse
+          {{- if or (.Values.datalake.warehousePersistence.existingClaim) (.Values.datalake.warehousePersistence.enabled) }}
+          persistentVolumeClaim:
+            claimName: {{ if .Values.datalake.warehousePersistence.existingClaim }}{{ .Values.datalake.warehousePersistence.existingClaim }}{{ else }}{{ include "fluss.fullname" . }}-paimon-warehouse{{ end }}
+          {{- else }}
+          # Dev-only: fallback to EmptyDir (not shared across pods)
           emptyDir: {}
+          {{- end }}
+        {{- end }}
         {{- range .Values.coordinator.extraVolumes }}
         - {{- toYaml . | nindent 10 }}
         {{- end }}

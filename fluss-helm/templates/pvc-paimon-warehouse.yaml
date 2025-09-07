@@ -1,0 +1,17 @@
+{{- if and .Values.datalake.enabled .Values.datalake.warehousePersistence.enabled (not .Values.datalake.warehousePersistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "fluss.fullname" . }}-paimon-warehouse
+  labels:
+    {{- include "fluss.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.datalake.warehousePersistence.accessMode | default "ReadWriteMany" }}
+  resources:
+    requests:
+      storage: {{ .Values.datalake.warehousePersistence.size }}
+  {{- if .Values.datalake.warehousePersistence.storageClass }}
+  storageClassName: {{ .Values.datalake.warehousePersistence.storageClass }}
+  {{- end }}
+{{- end }}

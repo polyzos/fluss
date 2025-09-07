@@ -1,0 +1,32 @@
+# Minikube values enabling datalake and exposing tablets via NodePort (no per-pod port-forward)
+# Connect from your laptop to the Coordinator via port-forward (optional) and to tablets via $(minikube ip):30090+i
+
+# Shared Paimon warehouse on Minikube default StorageClass (RWO)
+datalake:
+  enabled: true
+  warehousePersistence:
+    enabled: true
+    storageClass: standard
+    size: 20Gi
+    accessMode: ReadWriteOnce
+    mountPath: "/var/lib/paimon"
+
+# Expose each tablet with a NodePort Service on portBase + ordinal
+tablet:
+  externalService:
+    enabled: true
+    type: NodePort
+    portBase: 30090
+  externalAccess:
+    enabled: true
+    hostSource: nodeIP   # Advertise the node IP so outside clients can reach NodePorts
+    portBase: 30090
+  persistence:
+    storageClass: standard
+
+# Expose the coordinator with a NodePort so no port-forward is needed
+coordinator:
+  externalService:
+    enabled: true
+    type: NodePort
+    nodePort: 30912

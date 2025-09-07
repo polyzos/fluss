@@ -201,3 +201,141 @@ These point to in-cluster DNS names. For access from outside the cluster, consid
 - Connection failures: check advertised.listeners configuration and DNS resolution for Service and Pod FQDNs.
 - SASL issues: confirm JAAS files are mounted, JVM option is set, and security.protocol.map maps the listener to SASL.
 
+
+
+## Datalake (Paimon) Warehouse (optional)
+Fluss can tier table data into a datalake (e.g., Apache Paimon). This feature is activated per-table via the Fluss table option 'table.datalake.enabled' = 'true'. To support it in Kubernetes you must ensure all Fluss pods (coordinator and tablets) see the same warehouse storage.
+
+This chart provides an opt-in gating and two approaches to share the warehouse:
+
+- Shared POSIX volume (RWX PersistentVolume): simplest for on-prem or when you have an RWX StorageClass (e.g., NFS/EFS/Azure Files/Filestore).
+- Object store or HDFS (e.g., s3a://, gs://, abfs://, hdfs://): avoids managing a shared PVC but requires proper filesystem connectors and credentials.
+
+The chart only mounts/provisions the warehouse when datalake.enabled=true (enabled by default). To turn it off, set datalake.enabled=false. When disabled, nothing is created or mounted for the warehouse.
+
+### Option A: Shared RWX PersistentVolume
+Requirements: a StorageClass that supports ReadWriteMany.
+
+Values to set:
+- datalake.enabled=true
+- datalake.warehousePersistence.enabled=true (or provide datalake.warehousePersistence.existingClaim)
+- datalake.warehousePersistence.storageClass: your RWX class
+- datalake.warehousePersistence.size: capacity requested (e.g., 100Gi)
+- coordinator.config.datalake.paimon.warehouse and tablet.config.datalake.paimon.warehouse should point to the same in-pod path (default /var/lib/paimon). The chart mounts the shared PVC at that path when datalake.enabled=true.
+
+Example install creating a new RWX PVC:
+
+helm upgrade --install fluss ./fluss-helm \
+  --set datalake.enabled=true \
+  --set datalake.warehousePersistence.enabled=true \
+  --set datalake.warehousePersistence.storageClass=nfs-rwx \
+  --set datalake.warehousePersistence.size=100Gi \
+  --set coordinator.config.datalake.paimon.warehouse=/var/lib/paimon \
+  --set tablet.config.datalake.paimon.warehouse=/var/lib/paimon
+
+If you already have an RWX claim (e.g., efs-warehouse):
+
+helm upgrade --install fluss ./fluss-helm \
+  --set datalake.enabled=true \
+  --set datalake.warehousePersistence.existingClaim=efs-warehouse
+
+Notes:
+- The chart creates a PVC named <release>-fluss-paimon-warehouse when warehousePersistence.enabled=true and no existingClaim is set.
+- Pods run with fsGroup 9999 by default; ensure your storage class honors fsGroup for permissions, or mount with appropriate permissions.
+- Falling back to EmptyDir (when datalake.enabled=true but warehousePersistence is not enabled and no existingClaim provided) is for dev-only and does not share data across pods.
+
+### Option B: Object store or HDFS
+Point the warehouse to an external filesystem URI that all pods can reach. For example, S3 via s3a://:
+
+helm upgrade --install fluss ./fluss-helm \
+  --set datalake.enabled=true \
+  --set coordinator.config.datalake.paimon.warehouse=s3a://my-bucket/paimon \
+  --set tablet.config.datalake.paimon.warehouse=s3a://my-bucket/paimon \
+  --set coordinator.extraEnv[0].name=AWS_ACCESS_KEY_ID \
+  --set coordinator.extraEnv[0].value=XXXX \
+  --set coordinator.extraEnv[1].name=AWS_SECRET_ACCESS_KEY \
+  --set coordinator.extraEnv[1].value=YYYY \
+  --set tablet.extraEnv[0].name=AWS_ACCESS_KEY_ID \
+  --set tablet.extraEnv[0].value=XXXX \
+  --set tablet.extraEnv[1].name=AWS_SECRET_ACCESS_KEY \
+  --set tablet.extraEnv[1].value=YYYY
+
+Important:
+- You must ensure the Fluss image contains the appropriate Hadoop filesystem connectors (e.g., hadoop-aws and AWS SDK for s3a, GCS connector for gs://, etc.).
+- Alternatively, mount connector jars via extraVolumes/extraVolumeMounts and add to the classpath via env or JVM options.
+
+### Access from outside the cluster
+When clients run outside Kubernetes, tablets’ in-cluster DNS names are not resolvable. This chart offers an optional helper to override tablet advertised.listeners for local testing or NodePort setups:
+
+values.yaml:
+
+tablet:
+  externalAccess:
+    enabled: true
+    host: "localhost"
+    portBase: 19000
+
+Usage with port-forward:
+- Port-forward each tablet pod to a unique local port (portBase + ordinal) mapping to the tablet container port (default 9123):
+
+for i in 0..N-1:
+  kubectl port-forward pod/<release>-fluss-tablet-$i $((19000+i)):9123
+
+- With externalAccess enabled, tablets advertise CLIENT://localhost:19000+i so your local client can connect.
+
+Alternatively, expose tablets via NodePort/LoadBalancer and set tablet.config.advertised.listeners accordingly.
+
+
+## Minikube datalake quickstart (one-liner)
+To deploy a cluster with datalake (Paimon) enabled on Minikube using its default StorageClass:
+
+helm install fluss ./fluss-helm -f fluss-helm/examples/values-minikube.yaml
+
+Notes:
+- The example sets accessMode=ReadWriteOnce and storageClass=standard which works in single-node Minikube.
+- For clients outside the cluster, consider also enabling tablet.externalAccess and port-forward per tablet as shown in fluss-helm/examples/README.md.
+- Remember to set 'table.datalake.enabled'='true' on the tables you create.
+
+
+
+## Exposing tablets via NodePort/LoadBalancer (no per-pod port-forward)
+Many clients run outside Kubernetes and cannot resolve Pod FQDNs. To avoid maintaining multiple port-forward sessions, you can expose each tablet via an external Service and make tablets advertise those external endpoints automatically.
+
+Values:
+
+tablet:
+  externalService:
+    enabled: true
+    type: NodePort   # or LoadBalancer
+    portBase: 30090  # tablet i -> portBase + i
+  externalAccess:
+    enabled: true
+    hostSource: nodeIP  # or 'value' to use a fixed host
+    portBase: 30090
+
+What it does:
+- Creates one Service per tablet pod:
+  - <release>-fluss-tablet-0, -1, -2, ...
+  - NodePort: exposes ports 30090, 30091, 30092, ... (or cloud LoadBalancer if type=LoadBalancer)
+- Overrides tablet advertised.listeners to CLIENT://<node-ip>:30090+i when hostSource=nodeIP.
+
+Minikube example (NodePort):
+
+helm install fluss ./fluss-helm -f fluss-helm/examples/values-minikube-nodeport.yaml
+
+Connect your client to tablets via:
+- Host: $(minikube ip)
+- Ports: 30090 (tablet-0), 30091 (tablet-1), 30092 (tablet-2), ...
+
+Coordinator access:
+- In-cluster: fluss-fluss-coordinator.<ns>.svc:9123
+- From laptop: you can port-forward just the coordinator if desired:
+  kubectl port-forward svc/fluss-fluss-coordinator 9123:9123
+
+Cloud example (LoadBalancer):
+- Set externalService.type=LoadBalancer and omit nodePort settings. Tablets will still advertise according to hostSource:
+  - hostSource=nodeIP is typically not appropriate for LoadBalancers. Use hostSource=value and set externalAccess.host to your LB hostname or an external DNS name.
+
+Notes:
+- Ensure externalAccess.portBase matches externalService.portBase so advertised ports align with Service ports.
+- On multi-node clusters, if hostSource=nodeIP, the endpoint will be the node hosting each tablet pod. Consider a stable DNS (or a TCP proxy) if nodes change frequently.

@@ -5,6 +5,15 @@ image:
   pullPolicy: IfNotPresent
   pullSecrets: []
 
+datalake:
+  enabled: true
+  warehousePersistence:
+    enabled: true
+    storageClass: standard
+    size: 20Gi
+    accessMode: ReadWriteOnce
+    mountPath: "/var/lib/paimon"
+
 # Coordinator server configuration
 coordinator:
   enabled: true
@@ -13,6 +22,15 @@ coordinator:
     type: ClusterIP
     port: 9123
     annotations: {}
+  # Optional external Service for coordinator (NodePort or LoadBalancer)
+  externalService:
+    enabled: false
+    type: NodePort
+    nodePort: 30912
+    annotations: {}
+  # Debug options
+  debug:
+    dumpAdvertised: false
   resources: {}
   nodeSelector: {}
   tolerations: []
@@ -67,6 +85,19 @@ tablet:
   service:
     headlessAnnotations: {}
     port: 9123
+  # Optional external Service per tablet (NodePort or LoadBalancer)
+  externalService:
+    enabled: false
+    type: NodePort  # NodePort|LoadBalancer
+    portBase: 30090 # external port for tablet i is portBase + i
+    annotations: {}
+  # Optional external advertised listeners override for outside clients
+  externalAccess:
+    enabled: false
+    # hostSource: value|nodeIP. When nodeIP, tablets advertise their Node IP.
+    hostSource: value
+    host: "localhost"
+    portBase: 19000
   resources: {}
   nodeSelector: {}
   tolerations: []
@@ -88,6 +119,9 @@ tablet:
   extraVolumeMounts: []
   extraVolumes: []
   hostTemplate: "${POD_FQDN}"
+  # Debug options
+  debug:
+    dumpAdvertised: false
   persistence:
     enabled: true
     size: 100Gi
@@ -104,6 +138,9 @@ tablet:
     env.stdout-err.redirect-to-file: "false"
     # A rack label can be injected from node label via downward API if desired
     # tablet-server.rack: "${NODE_RACK}"
+    datalake.format: paimon
+    datalake.paimon.metastore: filesystem
+    datalake.paimon.warehouse: "/var/lib/paimon"
   jaas:
     enabled: false
     existingSecret: ""
