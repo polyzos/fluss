@@ -52,6 +52,9 @@ coordinator:
     # Optional: configure SASL mechanisms on server
     security.sasl.enabled.mechanisms: "plain"
   # Optional: mount JAAS file secret and set JVM system property via jvmOpts
+    datalake.format: paimon
+    datalake.paimon.metastore: filesystem
+    datalake.paimon.warehouse: "/var/lib/paimon"
   jaas:
     enabled: false
     existingSecret: ""

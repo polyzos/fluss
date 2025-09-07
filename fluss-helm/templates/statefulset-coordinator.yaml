@@ -115,6 +115,9 @@ spec:
             - name: data
               mountPath: {{ (index .Values.coordinator.config "data.dir") | default "/var/lib/fluss/data" }}
             {{- end }}
+            # Mount Paimon warehouse to ensure writable path for non-root user
+            - name: paimon-warehouse
+              mountPath: {{ (index .Values.coordinator.config "datalake.paimon.warehouse") | default "/var/lib/paimon" }}
             {{- range .Values.coordinator.extraVolumeMounts }}
             - {{- toYaml . | nindent 14 }}
             {{- end }}
@@ -141,6 +144,9 @@ spec:
           secret:
             secretName: {{ .Values.coordinator.jaas.existingSecret }}
         {{- end }}
+        # EmptyDir for Paimon warehouse to ensure writable location
+        - name: paimon-warehouse
+          emptyDir: {}
         {{- range .Values.coordinator.extraVolumes }}
         - {{- toYaml . | nindent 10 }}
         {{- end }}
