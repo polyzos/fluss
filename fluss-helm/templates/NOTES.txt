@@ -1,0 +1,40 @@
+Thank you for installing Fluss!
+
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+Coordinator Service:
+  Name: {{ include "fluss.coordinator.serviceName" . }}
+  Port: {{ .Values.coordinator.service.port }}
+
+Tablet Headless Service:
+  Name: {{ include "fluss.tablet.headlessServiceName" . }}
+  Port: {{ .Values.tablet.service.port }}
+
+{{- if .Values.zookeeper.enabled }}
+ZooKeeper Service:
+  Name: {{ include "fluss.zookeeper.serviceName" . }}
+  Port: {{ .Values.zookeeper.service.port }}
+{{- end }}
+
+Client connection (inside cluster):
+  Use the coordinator's CLIENT listener advertised at:
+  {{- $svc := printf "%s.%s.svc" (include "fluss.coordinator.serviceName" .) .Release.Namespace }}
+  - {{ $svc }}:{{ .Values.coordinator.service.port }}
+
+Advertised listeners:
+  - Coordinator advertised.listeners: {{ index .Values.coordinator.config "advertised.listeners" | default "(inherits bind.listeners)" }}
+  - Tablet advertised.listeners: {{ index .Values.tablet.config "advertised.listeners" | default "(inherits bind.listeners)" }}
+
+Security (SASL):
+  If enabled, ensure clients configure matching JAAS credentials and security.protocol.
+
+Image pull issues (Minikube):
+  If pods are stuck in ImagePullBackOff, build the image locally and install with:
+  - eval $(minikube docker-env)
+  - docker build -t fluss:0.7 docker
+  - helm upgrade --install fluss ./fluss-helm --set image.repository=fluss --set image.tag=0.7 --set image.pullPolicy=Never
+
+To get pod FQDNs for tablets:
+  kubectl get pod -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=tablet -o custom-columns=NAME:.metadata.name,FQDN:.metadata.name --no-headers | awk '{print $1".""{{ include "fluss.tablet.headlessServiceName" . }}"".""{{ .Release.Namespace }}"".svc"}'
+

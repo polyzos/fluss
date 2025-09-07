@@ -1,0 +1,166 @@
+# Global image settings
+image:
+  repository: fluss/fluss
+  tag: "0.7.0"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# Coordinator server configuration
+coordinator:
+  enabled: true
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 9123
+    annotations: {}
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext:
+    runAsUser: 9999
+    runAsGroup: 9999
+    fsGroup: 9999
+  containerSecurityContext:
+    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  jvmOpts: ""
+  extraEnv: []
+  extraEnvFrom: []
+  extraVolumeMounts: []
+  extraVolumes: []
+  # HOST used by startup script to set --host
+  hostTemplate: "${COORDINATOR_SERVICE_FQDN}"
+  persistence:
+    enabled: false
+    size: 10Gi
+    storageClass: ""
+    existingClaim: ""
+  config:
+    zookeeper.address: "zk:2181"
+    data.dir: "/var/lib/fluss/data"
+    remote.data.dir: "/var/lib/fluss/remote"
+    internal.listener.name: "INTERNAL"
+    # Example: "INTERNAL:PLAINTEXT,CLIENT:SASL"
+    security.protocol.map: "INTERNAL:PLAINTEXT,CLIENT:PLAINTEXT"
+    # bind/adverts can use envsubst variables
+    bind.listeners: "INTERNAL://0.0.0.0:0,CLIENT://0.0.0.0:9123"
+    # Optional: configure SASL mechanisms on server
+    security.sasl.enabled.mechanisms: "plain"
+  # Optional: mount JAAS file secret and set JVM system property via jvmOpts
+  jaas:
+    enabled: false
+    existingSecret: ""
+    key: "jaas.conf"
+
+# Tablet servers configuration
+tablet:
+  enabled: true
+  replicas: 3
+  service:
+    headlessAnnotations: {}
+    port: 9123
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext:
+    runAsUser: 9999
+    runAsGroup: 9999
+    fsGroup: 9999
+  containerSecurityContext:
+    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  jvmOpts: ""
+  extraEnv: []
+  extraEnvFrom: []
+  extraVolumeMounts: []
+  extraVolumes: []
+  hostTemplate: "${POD_FQDN}"
+  persistence:
+    enabled: true
+    size: 100Gi
+    storageClass: ""
+  config:
+    zookeeper.address: "zk:2181"
+    data.dir: "/var/lib/fluss/data"
+    remote.data.dir: "/var/lib/fluss/remote"
+    internal.listener.name: "INTERNAL"
+    security.protocol.map: "INTERNAL:PLAINTEXT,CLIENT:PLAINTEXT"
+    bind.listeners: "INTERNAL://0.0.0.0:0,CLIENT://0.0.0.0:9123"
+    advertised.listeners: "CLIENT://${POD_FQDN}:${TABLET_SERVICE_PORT}"
+    tablet-server.id: "${TABLET_SERVER_ID}"
+    # A rack label can be injected from node label via downward API if desired
+    # tablet-server.rack: "${NODE_RACK}"
+  jaas:
+    enabled: false
+    existingSecret: ""
+    key: "jaas.conf"
+
+# Common settings
+rbac:
+  create: true
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+networkPolicy:
+  enabled: false
+  allowedNamespaces: []
+  additionalIngressRules: []
+
+podDisruptionBudget:
+  coordinator:
+    enabled: false
+    minAvailable: 1
+  tablet:
+    enabled: false
+    maxUnavailable: 1
+
+# Extra properties appended to server.yaml via FLUSS_PROPERTIES
+overrideProperties:
+  coordinator: |
+    # key: value
+  tablet: |
+    # key: value
+
+# Zookeeper (embedded for convenience, disable if using external ZK)
+zookeeper:
+  enabled: true
+  replicas: 1
+  image:
+    repository: bitnami/zookeeper
+    tag: "3.9.1"
+    pullPolicy: IfNotPresent
+  service:
+    name: ""
+    port: 2181
+    annotations: {}
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext:
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+  containerSecurityContext:
+    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  persistence:
+    enabled: false
+    size: 5Gi
+    storageClass: ""

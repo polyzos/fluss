@@ -1,0 +1,160 @@
+{{- if .Values.coordinator.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "fluss.fullname" . }}-coordinator
+  labels:
+    {{- include "fluss.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "fluss.coordinator.serviceName" . }}
+  replicas: {{ .Values.coordinator.replicas }}
+  selector:
+    matchLabels:
+      {{- include "fluss.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: coordinator
+  template:
+    metadata:
+      labels:
+        {{- include "fluss.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: coordinator
+      {{- with .Values.coordinator.podLabels }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.coordinator.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ default (include "fluss.fullname" .) .Values.serviceAccount.name }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.coordinator.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: wait-for-zookeeper
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh","-c"]
+          args:
+            - >-
+              ZK_ADDR='{{ index .Values.coordinator.config "zookeeper.address" }}';
+              ZK_HOST=${ZK_ADDR%:*}; ZK_PORT=${ZK_ADDR##*:};
+              echo "Waiting for ZooKeeper at ${ZK_HOST}:${ZK_PORT}...";
+              until nc -z -w 5 ${ZK_HOST} ${ZK_PORT}; do echo waiting...; sleep 2; done;
+      containers:
+        - name: coordinator
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.coordinator.containerSecurityContext | nindent 12 }}
+          command: ["/bin/sh","-c"]
+          args:
+            - >-
+              set -ex;
+              export POD_NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace);
+              export COORDINATOR_SERVICE_NAME={{ include "fluss.coordinator.serviceName" . }};
+              export COORDINATOR_SERVICE_PORT={{ .Values.coordinator.service.port }};
+              export NAMESPACE=${POD_NAMESPACE};
+              export COORDINATOR_SERVICE_FQDN=${COORDINATOR_SERVICE_NAME}.${NAMESPACE}.svc;
+              {{- if .Values.coordinator.hostTemplate }} export HOST={{ .Values.coordinator.hostTemplate }}; {{- end }}
+              {{- if .Values.coordinator.jaas.enabled }} export JVM_OPTS="$JVM_OPTS -Djava.security.auth.login.config=/opt/fluss/conf/jaas.conf"; {{- end }}
+              {{- if .Values.coordinator.jvmOpts }} export JVM_OPTS="$JVM_OPTS {{ .Values.coordinator.jvmOpts }}"; {{- end }}
+              if ! echo "$FLUSS_PROPERTIES" | grep -q '^[[:space:]]*bind.listeners:'; then export FLUSS_PROPERTIES=$(printf "%s\n%s\n" "$FLUSS_PROPERTIES" "bind.listeners: INTERNAL://0.0.0.0:0,CLIENT://0.0.0.0:9123"); fi;
+              if [ -x /docker-entrypoint.sh ]; then
+                exec /docker-entrypoint.sh coordinatorServer;
+              elif [ -x /opt/fluss/bin/coordinator-server.sh ]; then
+                echo "Fallback to /opt/fluss/bin/coordinator-server.sh";
+                exec /opt/fluss/bin/coordinator-server.sh start-foreground;
+              else
+                echo "ERROR: No Fluss entrypoint or coordinator-server.sh found";
+                ls -l /;
+                ls -l /opt || true;
+                ls -l /opt/fluss || true;
+                sleep 60;
+              fi;
+          env:
+            - name: FLUSS_PROPERTIES
+              value: |-
+                env.stdout-err.redirect-to-file: "false"
+                {{- if (index .Values.coordinator.config "bind.listeners") }}
+                bind.listeners: {{ index .Values.coordinator.config "bind.listeners" }}
+                {{- else }}
+                bind.listeners: INTERNAL://0.0.0.0:0,CLIENT://0.0.0.0:9123
+                {{- end }}
+                {{- if (index .Values.coordinator.config "advertised.listeners") }}
+                advertised.listeners: {{ index .Values.coordinator.config "advertised.listeners" }}
+                {{- else }}
+                advertised.listeners: CLIENT://{{ include "fluss.coordinator.serviceName" . }}.{{ .Release.Namespace }}.svc:{{ .Values.coordinator.service.port }}
+                {{- end }}
+                {{- .Values.overrideProperties.coordinator | nindent 16 }}
+          ports:
+            - name: client
+              containerPort: {{ .Values.coordinator.service.port }}
+          readinessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          volumeMounts:
+            - name: config
+              mountPath: /opt/fluss/conf/server.yaml
+              subPath: server.yaml
+            {{- if .Values.coordinator.jaas.enabled }}
+            - name: jaas
+              mountPath: /opt/fluss/conf/{{ .Values.coordinator.jaas.key }}
+              subPath: {{ .Values.coordinator.jaas.key }}
+            {{- end }}
+            {{- if .Values.coordinator.persistence.enabled }}
+            - name: data
+              mountPath: {{ (index .Values.coordinator.config "data.dir") | default "/var/lib/fluss/data" }}
+            {{- end }}
+            {{- range .Values.coordinator.extraVolumeMounts }}
+            - {{- toYaml . | nindent 14 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.coordinator.resources | nindent 12 }}
+      {{- with .Values.coordinator.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.coordinator.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.coordinator.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "fluss.fullname" . }}-coordinator-config
+        {{- if .Values.coordinator.jaas.enabled }}
+        - name: jaas
+          secret:
+            secretName: {{ .Values.coordinator.jaas.existingSecret }}
+        {{- end }}
+        {{- range .Values.coordinator.extraVolumes }}
+        - {{- toYaml . | nindent 10 }}
+        {{- end }}
+  {{- if and .Values.coordinator.persistence.enabled (not .Values.coordinator.persistence.existingClaim) }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.coordinator.persistence.size }}
+        {{- if .Values.coordinator.persistence.storageClass }}
+        storageClassName: {{ .Values.coordinator.persistence.storageClass }}
+        {{- end }}
+  {{- end }}
+{{- end }}

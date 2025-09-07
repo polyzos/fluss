@@ -1,0 +1,22 @@
+{{- if .Values.tablet.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fluss.tablet.headlessServiceName" . }}
+  labels:
+    {{- include "fluss.labels" . | nindent 4 }}
+  {{- with .Values.tablet.service.headlessAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "fluss.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: tablet
+  ports:
+    - name: client
+      port: {{ .Values.tablet.service.port }}
+      targetPort: client
+{{- end }}

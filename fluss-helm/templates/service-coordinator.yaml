@@ -1,0 +1,21 @@
+{{- if .Values.coordinator.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fluss.coordinator.serviceName" . }}
+  labels:
+    {{- include "fluss.labels" . | nindent 4 }}
+  {{- with .Values.coordinator.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.coordinator.service.type }}
+  selector:
+    {{- include "fluss.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: coordinator
+  ports:
+    - name: client
+      port: {{ .Values.coordinator.service.port }}
+      targetPort: client
+{{- end }}

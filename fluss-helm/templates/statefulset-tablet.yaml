@@ -1,0 +1,203 @@
+{{- if .Values.tablet.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "fluss.fullname" . }}-tablet
+  labels:
+    {{- include "fluss.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "fluss.tablet.headlessServiceName" . }}
+  replicas: {{ .Values.tablet.replicas }}
+  selector:
+    matchLabels:
+      {{- include "fluss.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: tablet
+  template:
+    metadata:
+      labels:
+        {{- include "fluss.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: tablet
+      {{- with .Values.tablet.podLabels }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tablet.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ default (include "fluss.fullname" .) .Values.serviceAccount.name }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.tablet.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: wait-for-zookeeper
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh","-c"]
+          args:
+            - >-
+              ZK_ADDR='{{ index .Values.tablet.config "zookeeper.address" }}';
+              ZK_HOST=${ZK_ADDR%:*}; ZK_PORT=${ZK_ADDR##*:};
+              echo "Waiting for ZooKeeper at ${ZK_HOST}:${ZK_PORT}...";
+              until nc -z -w 5 ${ZK_HOST} ${ZK_PORT}; do echo waiting...; sleep 2; done;
+        - name: wait-for-coordinator
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh","-c"]
+          args:
+            - >-
+              COORD_SVC='{{ include "fluss.coordinator.serviceName" . }}.{{ .Release.Namespace }}.svc';
+              COORD_PORT='{{ .Values.coordinator.service.port }}';
+              echo "Waiting for Coordinator at ${COORD_SVC}:${COORD_PORT}...";
+              until nc -z -w 5 ${COORD_SVC} ${COORD_PORT}; do echo waiting...; sleep 2; done;
+        - name: render-config
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh","-c"]
+          args:
+            - >-
+              set -e;
+              POD_NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace);
+              HEADLESS={{ include "fluss.tablet.headlessServiceName" . }};
+              HOSTNAME=$(hostname);
+              ORDINAL=${HOSTNAME##*-};
+              export TABLET_SERVER_ID=${ORDINAL};
+              POD_FQDN=${HOSTNAME}.${HEADLESS}.${POD_NAMESPACE}.svc;
+              export POD_FQDN;
+              export TABLET_SERVICE_PORT={{ .Values.tablet.service.port }};
+              export NAMESPACE=${POD_NAMESPACE};
+              envsubst < /config/server.yaml > /opt/fluss/conf/server.yaml;
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: rendered-config
+              mountPath: /opt/fluss/conf
+      containers:
+        - name: tablet
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.tablet.containerSecurityContext | nindent 12 }}
+          command: ["/bin/sh","-c"]
+          args:
+            - >-
+              set -ex;
+              POD_NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace);
+              HEADLESS={{ include "fluss.tablet.headlessServiceName" . }};
+              HOSTNAME=$(hostname);
+              ORDINAL=${HOSTNAME##*-};
+              export TABLET_SERVER_ID=${ORDINAL};
+              POD_FQDN=${HOSTNAME}.${HEADLESS}.${POD_NAMESPACE}.svc;
+              export POD_FQDN;
+              export TABLET_SERVICE_PORT={{ .Values.tablet.service.port }};
+              export NAMESPACE=${POD_NAMESPACE};
+              {{- if .Values.tablet.hostTemplate }} export HOST={{ .Values.tablet.hostTemplate }}; {{- end }}
+              {{- if .Values.tablet.jaas.enabled }} export JVM_OPTS="$JVM_OPTS -Djava.security.auth.login.config=/opt/fluss/conf/jaas.conf"; {{- end }}
+              {{- if .Values.tablet.jvmOpts }} export JVM_OPTS="$JVM_OPTS {{ .Values.tablet.jvmOpts }}"; {{- end }}
+              if ! echo "$FLUSS_PROPERTIES" | grep -q '^[[:space:]]*bind.listeners:'; then export FLUSS_PROPERTIES=$(printf "%s\n%s\n" "$FLUSS_PROPERTIES" "bind.listeners: INTERNAL://0.0.0.0:0,CLIENT://0.0.0.0:9123"); fi;
+              if [ -x /docker-entrypoint.sh ]; then
+                exec /docker-entrypoint.sh tabletServer;
+              elif [ -x /opt/fluss/bin/tablet-server.sh ]; then
+                echo "Fallback to /opt/fluss/bin/tablet-server.sh with inline config preparation";
+                CONF_FILE=/opt/fluss/conf/server.yaml;
+                # Remove bind.listeners from file only if we plan to provide one via FLUSS_PROPERTIES
+                if [ -n "${FLUSS_PROPERTIES}" ] && echo "${FLUSS_PROPERTIES}" | grep -q '^[[:space:]]*bind.listeners:'; then
+                  sed -i '/^[[:space:]]*bind.listeners:/d' "${CONF_FILE}"
+                fi
+                # Append dynamic properties
+                if [ -n "${FLUSS_PROPERTIES}" ]; then
+                  printf "%s\n" "${FLUSS_PROPERTIES}" >> "${CONF_FILE}"
+                fi
+                # Ensure bind.listeners exists
+                if ! grep -q '^[[:space:]]*bind.listeners:' "${CONF_FILE}"; then
+                  echo "bind.listeners: CLIENT://0.0.0.0:9123" >> "${CONF_FILE}"
+                fi
+                # Substitute env vars (e.g., ${POD_FQDN}, ${TABLET_SERVICE_PORT})
+                envsubst < "${CONF_FILE}" > "${CONF_FILE}.tmp" && mv "${CONF_FILE}.tmp" "${CONF_FILE}"
+                exec /opt/fluss/bin/tablet-server.sh start-foreground;
+              else
+                echo "ERROR: No Fluss entrypoint or tablet-server.sh found";
+                ls -l /;
+                ls -l /opt || true;
+                ls -l /opt/fluss || true;
+                sleep 60;
+              fi;
+          env:
+            - name: FLUSS_PROPERTIES
+              value: |-
+                env.stdout-err.redirect-to-file: "false"
+                {{- if (index .Values.tablet.config "bind.listeners") }}
+                bind.listeners: {{ index .Values.tablet.config "bind.listeners" }}
+                {{- else }}
+                bind.listeners: INTERNAL://0.0.0.0:0,CLIENT://0.0.0.0:9123
+                {{- end }}
+                {{- .Values.overrideProperties.tablet | nindent 16 }}
+          ports:
+            - name: client
+              containerPort: {{ .Values.tablet.service.port }}
+          readinessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          volumeMounts:
+            - name: rendered-config
+              mountPath: /opt/fluss/conf
+            {{- if .Values.tablet.jaas.enabled }}
+            - name: jaas
+              mountPath: /opt/fluss/conf/{{ .Values.tablet.jaas.key }}
+              subPath: {{ .Values.tablet.jaas.key }}
+            {{- end }}
+            - name: data
+              mountPath: {{ (index .Values.tablet.config "data.dir") | default "/var/lib/fluss/data" }}
+            {{- range .Values.tablet.extraVolumeMounts }}
+            - {{- toYaml . | nindent 14 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.tablet.resources | nindent 12 }}
+      {{- with .Values.tablet.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tablet.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tablet.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "fluss.fullname" . }}-tablet-config
+        - name: rendered-config
+          emptyDir: {}
+        {{- if .Values.tablet.jaas.enabled }}
+        - name: jaas
+          secret:
+            secretName: {{ .Values.tablet.jaas.existingSecret }}
+        {{- end }}
+        {{- range .Values.tablet.extraVolumes }}
+        - {{- toYaml . | nindent 10 }}
+        {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.tablet.persistence.size }}
+        {{- if .Values.tablet.persistence.storageClass }}
+        storageClassName: {{ .Values.tablet.persistence.storageClass }}
+        {{- end }}
+{{- end }}

@@ -1,0 +1,19 @@
+apiVersion: v2
+name: fluss
+description: Helm chart to deploy Apache Fluss (Coordinator and Tablet Servers) on Kubernetes
+home: https://github.com/apache/fluss
+icon: https://fluss.apache.org/img/logo/svg/colored_logo.svg
+keywords:
+  - fluss
+  - streaming
+  - lakehouse
+  - realtime-analytics
+sources:
+  - https://github.com/apache/fluss
+  - https://fluss.apache.org/
+type: application
+version: 0.1.0
+appVersion: "0.7"
+maintainers:
+  - name: Apache Fluss Community
+    url: https://fluss.apache.org/

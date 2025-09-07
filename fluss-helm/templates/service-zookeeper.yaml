@@ -1,0 +1,22 @@
+{{- if .Values.zookeeper.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fluss.zookeeper.serviceName" . }}
+  labels:
+    {{- include "fluss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: zookeeper
+  {{- with .Values.zookeeper.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "fluss.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: zookeeper
+  ports:
+    - name: client
+      port: {{ .Values.zookeeper.service.port }}
+      targetPort: client
+{{- end }}
