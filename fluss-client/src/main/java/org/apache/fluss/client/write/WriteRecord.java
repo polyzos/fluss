@@ -51,8 +51,7 @@ public final class WriteRecord {
         checkNotNull(row, "row must not be null");
         checkNotNull(key, "key must not be null");
         checkNotNull(bucketKey, "key must not be null");
-        int estimatedSizeInBytes =
-                DefaultKvRecord.sizeOf(key, row) + RECORD_BATCH_HEADER_SIZE;
+        int estimatedSizeInBytes = DefaultKvRecord.sizeOf(key, row) + RECORD_BATCH_HEADER_SIZE;
         return new WriteRecord(
                 tablePath,
                 key,
@@ -71,8 +70,7 @@ public final class WriteRecord {
             @Nullable int[] targetColumns) {
         checkNotNull(key, "key must not be null");
         checkNotNull(bucketKey, "key must not be null");
-        int estimatedSizeInBytes =
-                DefaultKvRecord.sizeOf(key, null) + RECORD_BATCH_HEADER_SIZE;
+        int estimatedSizeInBytes = DefaultKvRecord.sizeOf(key, null) + RECORD_BATCH_HEADER_SIZE;
         return new WriteRecord(
                 tablePath,
                 key,
@@ -114,8 +112,7 @@ public final class WriteRecord {
     public static WriteRecord forCompactedAppend(
             PhysicalTablePath tablePath, CompactedRow row, @Nullable byte[] bucketKey) {
         checkNotNull(row);
-        int estimatedSizeInBytes =
-                CompactedLogRecord.sizeOf(row) + RECORD_BATCH_HEADER_SIZE;
+        int estimatedSizeInBytes = CompactedLogRecord.sizeOf(row) + RECORD_BATCH_HEADER_SIZE;
         return new WriteRecord(
                 tablePath,
                 null,
