@@ -30,6 +30,7 @@ import org.apache.fluss.row.indexed.IndexedRow;
 
 import javax.annotation.Nullable;
 
+import static org.apache.fluss.record.DefaultKvRecordBatch.RECORD_BATCH_HEADER_SIZE;
 import static org.apache.fluss.record.LogRecordBatch.CURRENT_LOG_MAGIC_VALUE;
 import static org.apache.fluss.record.LogRecordBatchFormat.recordBatchHeaderSize;
 import static org.apache.fluss.utils.Preconditions.checkNotNull;
@@ -52,7 +53,7 @@ public final class WriteRecord {
         checkNotNull(key, "key must not be null");
         checkNotNull(bucketKey, "key must not be null");
         int estimatedSizeInBytes =
-                DefaultKvRecord.sizeOf(key, row) + DefaultKvRecordBatch.RECORD_BATCH_HEADER_SIZE;
+                DefaultKvRecord.sizeOf(key, row) + RECORD_BATCH_HEADER_SIZE;
         return new WriteRecord(
                 tablePath,
                 key,
@@ -72,7 +73,7 @@ public final class WriteRecord {
         checkNotNull(key, "key must not be null");
         checkNotNull(bucketKey, "key must not be null");
         int estimatedSizeInBytes =
-                DefaultKvRecord.sizeOf(key, null) + DefaultKvRecordBatch.RECORD_BATCH_HEADER_SIZE;
+                DefaultKvRecord.sizeOf(key, null) + RECORD_BATCH_HEADER_SIZE;
         return new WriteRecord(
                 tablePath,
                 key,
@@ -115,7 +116,7 @@ public final class WriteRecord {
             PhysicalTablePath tablePath, CompactedRow row, @Nullable byte[] bucketKey) {
         checkNotNull(row);
         int estimatedSizeInBytes =
-                CompactedLogRecord.sizeOf(row) + DefaultLogRecordBatch.RECORD_BATCH_HEADER_SIZE;
+                CompactedLogRecord.sizeOf(row) + RECORD_BATCH_HEADER_SIZE;
         return new WriteRecord(
                 tablePath,
                 null,
