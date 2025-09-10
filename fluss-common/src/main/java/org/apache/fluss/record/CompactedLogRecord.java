@@ -31,7 +31,8 @@ import org.apache.fluss.utils.MurmurHashUtils;
 
 import java.io.IOException;
 
-import static org.apache.fluss.record.DefaultLogRecordBatch.LENGTH_LENGTH;
+import static org.apache.fluss.record.LogRecordBatchFormat.LENGTH_LENGTH;
+
 
 /**
  * An immutable log record for @CompactedRow which can be directly persisted. The on-wire schema is
