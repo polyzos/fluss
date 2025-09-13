@@ -131,6 +131,13 @@ public interface TabletServerGateway extends RpcGateway, AdminReadOnlyGateway {
     CompletableFuture<LimitScanResponse> limitScan(LimitScanRequest request);
 
     /**
+     * Full KV scan: return all key-value entries for the specified kv tablet bucket.
+     */
+    @RPC(api = ApiKeys.FULL_KV_SCAN)
+    CompletableFuture<org.apache.fluss.rpc.messages.FullKvScanResponse> fullKvScan(
+            org.apache.fluss.rpc.messages.FullKvScanRequest request);
+
+    /**
      * List offsets for the specified table bucket.
      *
      * @return the fetch response.

@@ -107,6 +107,9 @@ public final class KvTablet {
     private final RowMerger rowMerger;
     private final ArrowCompressionInfo arrowCompressionInfo;
 
+    // warn-only threshold for full scan size; if exceeded we log WARN but still return all
+    private final int fullScanWarnThreshold;
+
     /**
      * The kv data in pre-write buffer whose log offset is less than the flushedLogOffset has been
      * flushed into kv.
@@ -130,7 +133,8 @@ public final class KvTablet {
             KvFormat kvFormat,
             Schema schema,
             RowMerger rowMerger,
-            ArrowCompressionInfo arrowCompressionInfo) {
+            ArrowCompressionInfo arrowCompressionInfo,
+            int fullScanWarnThreshold) {
         this.physicalPath = physicalPath;
         this.tableBucket = tableBucket;
         this.logTablet = logTablet;
@@ -145,6 +149,7 @@ public final class KvTablet {
         this.schema = schema;
         this.rowMerger = rowMerger;
         this.arrowCompressionInfo = arrowCompressionInfo;
+        this.fullScanWarnThreshold = fullScanWarnThreshold;
     }
 
     public static KvTablet create(
@@ -205,7 +210,8 @@ public final class KvTablet {
                 kvFormat,
                 schema,
                 rowMerger,
-                arrowCompressionInfo);
+                arrowCompressionInfo,
+                serverConf.get(ConfigOptions.KV_FULL_SCAN_MAX_KEYS));
     }
 
     private static RocksDBKv buildRocksDBKv(Configuration configuration, File kvDir)
@@ -488,7 +494,61 @@ public final class KvTablet {
                 kvLock,
                 () -> {
                     rocksDBKv.checkIfRocksDBClosed();
-                    return rocksDBKv.limitScan(limit);
+                    if (limit <= 0) {
+                        long start = System.nanoTime();
+                        List<byte[]> values = rocksDBKv.fullScanValues();
+                        long tookMs = (System.nanoTime() - start) / 1_000_000L;
+                        int count = values.size();
+                        if (count > fullScanWarnThreshold) {
+                            LOG.warn(
+                                    "KV full-scan for {} returned {} entries which exceeds warning threshold {} (took {} ms)",
+                                    tableBucket,
+                                    count,
+                                    fullScanWarnThreshold,
+                                    tookMs);
+                        } else {
+                            LOG.info(
+                                    "KV full-scan for {} returned {} entries in {} ms (threshold={})",
+                                    tableBucket,
+                                    count,
+                                    tookMs,
+                                    fullScanWarnThreshold);
+                        }
+                        return values;
+                    } else {
+                        return rocksDBKv.limitScan(limit);
+                    }
+                });
+    }
+
+    /**
+     * Full KV scan returning key-value pairs. Logs duration and warns if count exceeds threshold.
+     */
+    public List<Tuple2<byte[], byte[]>> fullKvScanPairs() throws IOException {
+        return inReadLock(
+                kvLock,
+                () -> {
+                    rocksDBKv.checkIfRocksDBClosed();
+                    long start = System.nanoTime();
+                    List<Tuple2<byte[], byte[]>> kvs = rocksDBKv.fullScanKeyValues();
+                    long tookMs = (System.nanoTime() - start) / 1_000_000L;
+                    int count = kvs.size();
+                    if (count > fullScanWarnThreshold) {
+                        LOG.warn(
+                                "KV full key-value scan for {} returned {} entries which exceeds warning threshold {} (took {} ms)",
+                                tableBucket,
+                                count,
+                                fullScanWarnThreshold,
+                                tookMs);
+                    } else {
+                        LOG.info(
+                                "KV full key-value scan for {} returned {} entries in {} ms (threshold={})",
+                                tableBucket,
+                                count,
+                                tookMs,
+                                fullScanWarnThreshold);
+                    }
+                    return kvs;
                 });
     }
 

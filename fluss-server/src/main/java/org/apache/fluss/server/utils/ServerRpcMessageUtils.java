@@ -63,6 +63,8 @@ import org.apache.fluss.rpc.messages.GetLatestLakeSnapshotResponse;
 import org.apache.fluss.rpc.messages.InitWriterResponse;
 import org.apache.fluss.rpc.messages.LakeTieringHeartbeatResponse;
 import org.apache.fluss.rpc.messages.LimitScanResponse;
+import org.apache.fluss.rpc.messages.FullKvScanResponse;
+import org.apache.fluss.rpc.messages.PbRawKeyValue;
 import org.apache.fluss.rpc.messages.ListAclsResponse;
 import org.apache.fluss.rpc.messages.ListOffsetsRequest;
 import org.apache.fluss.rpc.messages.ListOffsetsResponse;
@@ -948,6 +950,23 @@ public class ServerRpcMessageUtils {
         }
 
         return limitScanResponse;
+    }
+
+    public static FullKvScanResponse makeFullKvScanResponse(
+            org.apache.fluss.rpc.entity.FullKvScanResultForBucket result) {
+        FullKvScanResponse response = new FullKvScanResponse();
+        if (result.failed()) {
+            response.setError(result.getErrorCode(), result.getErrorMessage());
+            return response;
+        }
+        if (result.getKeyValues() != null) {
+            for (org.apache.fluss.utils.types.Tuple2<byte[], byte[]> kv : result.getKeyValues()) {
+                PbRawKeyValue pb = response.addKv();
+                pb.setKey(kv.f0);
+                pb.setValue(kv.f1);
+            }
+        }
+        return response;
     }
 
     public static LookupResponse makeLookupResponse(

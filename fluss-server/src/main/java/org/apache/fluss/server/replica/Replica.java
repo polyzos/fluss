@@ -1124,6 +1124,36 @@ public final class Replica {
                 });
     }
 
+    public java.util.List<org.apache.fluss.utils.types.Tuple2<byte[], byte[]>> fullKvScan() {
+        if (!isKvTable()) {
+            throw new NonPrimaryKeyTableException(
+                    "the primary key table not exists for " + tableBucket);
+        }
+        return inReadLock(
+                leaderIsrUpdateLock,
+                () -> {
+                    try {
+                        if (!isLeader()) {
+                            throw new NotLeaderOrFollowerException(
+                                    String.format(
+                                            "Leader not local for bucket %s on tabletServer %d",
+                                            tableBucket, localTabletServerId));
+                        }
+                        checkNotNull(
+                                kvTablet,
+                                "KvTablet for the replica to full kv scan shouldn't be null.");
+                        return kvTablet.fullKvScanPairs();
+                    } catch (IOException e) {
+                        String errorMsg =
+                                String.format(
+                                        "Failed to full kv scan from local kv for table bucket %s, the cause is: %s",
+                                        tableBucket, e.getMessage());
+                        LOG.error(errorMsg, e);
+                        throw new KvStorageException(errorMsg, e);
+                    }
+                });
+    }
+
     public DefaultValueRecordBatch limitKvScan(int limit) {
         if (!isKvTable()) {
             throw new NonPrimaryKeyTableException(

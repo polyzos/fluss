@@ -41,6 +41,7 @@ import org.apache.fluss.remote.RemoteLogSegment;
 import org.apache.fluss.rpc.RpcClient;
 import org.apache.fluss.rpc.entity.FetchLogResultForBucket;
 import org.apache.fluss.rpc.entity.LimitScanResultForBucket;
+import org.apache.fluss.rpc.entity.FullKvScanResultForBucket;
 import org.apache.fluss.rpc.entity.ListOffsetsResultForBucket;
 import org.apache.fluss.rpc.entity.LookupResultForBucket;
 import org.apache.fluss.rpc.entity.PrefixLookupResultForBucket;
@@ -1567,6 +1568,24 @@ public class ReplicaManager {
     /** This TabletServer does not have any state for this {@link Replica} locally. */
     public static final class NoneReplica implements HostedReplica {}
 
+    public void fullKvScan(
+            TableBucket tableBucket,
+            java.util.function.Consumer<FullKvScanResultForBucket> responseCallback) {
+        FullKvScanResultForBucket resultForBucket;
+        TableMetricGroup tableMetrics = null;
+        try {
+            Replica replica = getReplicaOrException(tableBucket);
+            tableMetrics = replica.tableMetrics();
+            resultForBucket = new FullKvScanResultForBucket(tableBucket, replica.fullKvScan());
+        } catch (Exception e) {
+            if (isUnexpectedException(e)) {
+                LOG.error("Error fullKvScan on replica {}", tableBucket, e);
+            }
+            resultForBucket = new FullKvScanResultForBucket(tableBucket, ApiError.fromThrowable(e));
+        }
+        responseCallback.accept(resultForBucket);
+    }
+
     /** This TabletServer hosts the {@link Replica} and it is online. */
     public static final class OnlineReplica implements HostedReplica {
         private final Replica replica;
@@ -1615,3 +1634,4 @@ public class ReplicaManager {
         }
     }
 }
+

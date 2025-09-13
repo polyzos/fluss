@@ -256,6 +256,24 @@ message LimitScanResponse{
   optional bytes records = 4;
 }
 
+// full kv scan request and response
+message FullKvScanRequest {
+  required int64 table_id = 1;
+  optional int64 partition_id = 2;
+  required int32 bucket_id = 3;
+}
+
+message PbRawKeyValue {
+  required bytes key = 1;
+  required bytes value = 2;
+}
+
+message FullKvScanResponse {
+  optional int32 error_code = 1;
+  optional string error_message = 2;
+  repeated PbRawKeyValue kvs = 3;
+}
+
 
 // notify bucket leader and isr request
 message NotifyLeaderAndIsrRequest {

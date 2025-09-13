@@ -106,6 +106,7 @@ import static org.apache.fluss.server.utils.ServerRpcMessageUtils.getUpdateMetad
 import static org.apache.fluss.server.utils.ServerRpcMessageUtils.makeFetchLogResponse;
 import static org.apache.fluss.server.utils.ServerRpcMessageUtils.makeInitWriterResponse;
 import static org.apache.fluss.server.utils.ServerRpcMessageUtils.makeLimitScanResponse;
+import static org.apache.fluss.server.utils.ServerRpcMessageUtils.makeFullKvScanResponse;
 import static org.apache.fluss.server.utils.ServerRpcMessageUtils.makeListOffsetsResponse;
 import static org.apache.fluss.server.utils.ServerRpcMessageUtils.makeLookupResponse;
 import static org.apache.fluss.server.utils.ServerRpcMessageUtils.makeNotifyLeaderAndIsrResponse;
@@ -264,6 +265,21 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                         request.getBucketId()),
                 request.getLimit(),
                 value -> response.complete(makeLimitScanResponse(value)));
+        return response;
+    }
+
+    @Override
+    public CompletableFuture<org.apache.fluss.rpc.messages.FullKvScanResponse> fullKvScan(
+            org.apache.fluss.rpc.messages.FullKvScanRequest request) {
+        authorizeTable(READ, request.getTableId());
+        CompletableFuture<org.apache.fluss.rpc.messages.FullKvScanResponse> response =
+                new CompletableFuture<>();
+        replicaManager.fullKvScan(
+                new TableBucket(
+                        request.getTableId(),
+                        request.hasPartitionId() ? request.getPartitionId() : null,
+                        request.getBucketId()),
+                result -> response.complete(makeFullKvScanResponse(result)));
         return response;
     }
 

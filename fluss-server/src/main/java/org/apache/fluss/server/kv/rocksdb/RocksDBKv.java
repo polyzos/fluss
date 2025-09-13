@@ -36,6 +36,7 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.fluss.utils.types.Tuple2;
 
 /** A wrapper for the operation of {@link org.rocksdb.RocksDB}. */
 public class RocksDBKv implements AutoCloseable {
@@ -139,6 +140,47 @@ public class RocksDBKv implements AutoCloseable {
         }
 
         return pkList;
+    }
+
+    /**
+     * Scan all values in RocksDB without any limit. This should be used carefully for small tables.
+     */
+    public List<byte[]> fullScanValues() {
+        List<byte[]> values = new ArrayList<>();
+        ReadOptions readOptions = new ReadOptions();
+        RocksIterator iterator = db.newIterator(defaultColumnFamilyHandle, readOptions);
+        try {
+            iterator.seekToFirst();
+            while (iterator.isValid()) {
+                values.add(iterator.value());
+                iterator.next();
+            }
+        } finally {
+            readOptions.close();
+            iterator.close();
+        }
+        return values;
+    }
+
+    /**
+     * Scan all key-value entries in RocksDB without any limit. This should be used carefully for
+     * small tables.
+     */
+    public List<Tuple2<byte[], byte[]>> fullScanKeyValues() {
+        List<Tuple2<byte[], byte[]>> kvs = new ArrayList<>();
+        ReadOptions readOptions = new ReadOptions();
+        RocksIterator iterator = db.newIterator(defaultColumnFamilyHandle, readOptions);
+        try {
+            iterator.seekToFirst();
+            while (iterator.isValid()) {
+                kvs.add(Tuple2.of(iterator.key(), iterator.value()));
+                iterator.next();
+            }
+        } finally {
+            readOptions.close();
+            iterator.close();
+        }
+        return kvs;
     }
 
     public void put(byte[] key, byte[] value) throws IOException {

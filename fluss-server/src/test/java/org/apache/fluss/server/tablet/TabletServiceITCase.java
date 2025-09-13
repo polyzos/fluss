@@ -702,6 +702,37 @@ public class TabletServiceITCase {
     }
 
     @Test
+    void testFullScanPrimaryKeyTableReturnsAll() throws Exception {
+        long tableId =
+                createTable(
+                        FLUSS_CLUSTER_EXTENSION, DATA1_TABLE_PATH_PK, DATA1_TABLE_DESCRIPTOR_PK);
+        TableBucket tb = new TableBucket(tableId, 0);
+
+        FLUSS_CLUSTER_EXTENSION.waitUntilAllReplicaReady(tb);
+
+        int leader = FLUSS_CLUSTER_EXTENSION.waitAndGetLeader(tb);
+        TabletServerGateway leaderGateWay =
+                FLUSS_CLUSTER_EXTENSION.newTabletServerClientForNode(leader);
+
+        // empty full scan should return nothing
+        DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
+        assertLimitScanResponse(
+                leaderGateWay.limitScan(newLimitScanRequest(tableId, 0, -1)).get(), builder.build());
+
+        // send one batch kv.
+        DefaultKvRecordBatch kvRecordBatch =
+                (DefaultKvRecordBatch) genKvRecordBatch(DATA_1_WITH_KEY_AND_VALUE);
+        assertPutKvResponse(
+                leaderGateWay.putKv(newPutKvRequest(tableId, 0, 1, kvRecordBatch)).get());
+
+        // full scan should return all existing values for keys
+        builder.append(DEFAULT_SCHEMA_ID, compactedRow(DATA1_ROW_TYPE, new Object[] {1, "a1"}));
+        builder.append(DEFAULT_SCHEMA_ID, compactedRow(DATA1_ROW_TYPE, new Object[] {2, "b1"}));
+        assertLimitScanResponse(
+                leaderGateWay.limitScan(newLimitScanRequest(tableId, 0, -1)).get(), builder.build());
+    }
+
+    @Test
     void testLimitScanLogTable() throws Exception {
         long logTableId =
                 createTable(FLUSS_CLUSTER_EXTENSION, DATA1_TABLE_PATH, DATA1_TABLE_DESCRIPTOR);
