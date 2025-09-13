@@ -80,4 +80,10 @@ public interface Scan {
      * #limit(int)} and only support for Primary Key Tables.
      */
     BatchScanner createBatchScanner(TableBucket tableBucket, long snapshotId);
+
+    /**
+     * Creates a {@link BatchScanner} that performs a full KV scan (values only) for the given table bucket.
+     * This scan ignores any previously configured {@link #limit(int)} and will return all current rows.
+     */
+    BatchScanner createFullScanValuesScanner(TableBucket tableBucket);
 }

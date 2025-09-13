@@ -20,6 +20,10 @@ package org.apache.fluss.rpc.gateway;
 import org.apache.fluss.rpc.RpcGateway;
 import org.apache.fluss.rpc.messages.FetchLogRequest;
 import org.apache.fluss.rpc.messages.FetchLogResponse;
+import org.apache.fluss.rpc.messages.FullScanEntriesRequest;
+import org.apache.fluss.rpc.messages.FullScanEntriesResponse;
+import org.apache.fluss.rpc.messages.FullScanValuesRequest;
+import org.apache.fluss.rpc.messages.FullScanValuesResponse;
 import org.apache.fluss.rpc.messages.InitWriterRequest;
 import org.apache.fluss.rpc.messages.InitWriterResponse;
 import org.apache.fluss.rpc.messages.LimitScanRequest;
@@ -129,6 +133,14 @@ public interface TabletServerGateway extends RpcGateway, AdminReadOnlyGateway {
      */
     @RPC(api = ApiKeys.LIMIT_SCAN)
     CompletableFuture<LimitScanResponse> limitScan(LimitScanRequest request);
+
+    /** Full KV database scan (values only) for the specified bucket. */
+    @RPC(api = ApiKeys.FULL_SCAN_VALUES)
+    CompletableFuture<FullScanValuesResponse> fullScanValues(FullScanValuesRequest request);
+
+    /** Full KV database scan (key-value entries) for the specified bucket. */
+    @RPC(api = ApiKeys.FULL_SCAN_ENTRIES)
+    CompletableFuture<FullScanEntriesResponse> fullScanEntries(FullScanEntriesRequest request);
 
     /**
      * List offsets for the specified table bucket.

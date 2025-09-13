@@ -40,6 +40,8 @@ import org.apache.fluss.remote.RemoteLogFetchInfo;
 import org.apache.fluss.remote.RemoteLogSegment;
 import org.apache.fluss.rpc.RpcClient;
 import org.apache.fluss.rpc.entity.FetchLogResultForBucket;
+import org.apache.fluss.rpc.entity.FullScanEntriesResultForBucket;
+import org.apache.fluss.rpc.entity.FullScanValuesResultForBucket;
 import org.apache.fluss.rpc.entity.LimitScanResultForBucket;
 import org.apache.fluss.rpc.entity.ListOffsetsResultForBucket;
 import org.apache.fluss.rpc.entity.LookupResultForBucket;
@@ -995,6 +997,38 @@ public class ReplicaManager {
                     new LimitScanResultForBucket(tableBucket, ApiError.fromThrowable(e));
         }
         responseCallback.accept(limitScanResultForBucket);
+    }
+
+    public void fullScanValues(
+            TableBucket tableBucket, Consumer<FullScanValuesResultForBucket> responseCallback) {
+        FullScanValuesResultForBucket result;
+        try {
+            Replica replica = getReplicaOrException(tableBucket);
+            result = new FullScanValuesResultForBucket(tableBucket, replica.fullKvScanValues());
+        } catch (Exception e) {
+            if (isUnexpectedException(e)) {
+                LOG.error("Error fullScanValues on replica {}", tableBucket, e);
+            }
+            result = new FullScanValuesResultForBucket(tableBucket, ApiError.fromThrowable(e));
+        }
+        responseCallback.accept(result);
+    }
+
+    public void fullScanEntries(
+            TableBucket tableBucket, Consumer<FullScanEntriesResultForBucket> responseCallback) {
+        FullScanEntriesResultForBucket result;
+        try {
+            Replica replica = getReplicaOrException(tableBucket);
+            org.apache.fluss.utils.types.Tuple2<java.util.List<byte[]>, java.util.List<byte[]>> kv =
+                    replica.fullKvScanEntries();
+            result = new FullScanEntriesResultForBucket(tableBucket, kv.f0, kv.f1);
+        } catch (Exception e) {
+            if (isUnexpectedException(e)) {
+                LOG.error("Error fullScanEntries on replica {}", tableBucket, e);
+            }
+            result = new FullScanEntriesResultForBucket(tableBucket, ApiError.fromThrowable(e));
+        }
+        responseCallback.accept(result);
     }
 
     public Map<TableBucket, LogReadResult> readFromLog(

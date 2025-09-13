@@ -268,6 +268,42 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
     }
 
     @Override
+    public CompletableFuture<org.apache.fluss.rpc.messages.FullScanValuesResponse> fullScanValues(
+            org.apache.fluss.rpc.messages.FullScanValuesRequest request) {
+        authorizeTable(READ, request.getTableId());
+        CompletableFuture<org.apache.fluss.rpc.messages.FullScanValuesResponse> response =
+                new CompletableFuture<>();
+        replicaManager.fullScanValues(
+                new TableBucket(
+                        request.getTableId(),
+                        request.hasPartitionId() ? request.getPartitionId() : null,
+                        request.getBucketId()),
+                value ->
+                        response.complete(
+                                org.apache.fluss.server.utils.ServerRpcMessageUtils
+                                        .makeFullScanValuesResponse(value)));
+        return response;
+    }
+
+    @Override
+    public CompletableFuture<org.apache.fluss.rpc.messages.FullScanEntriesResponse> fullScanEntries(
+            org.apache.fluss.rpc.messages.FullScanEntriesRequest request) {
+        authorizeTable(READ, request.getTableId());
+        CompletableFuture<org.apache.fluss.rpc.messages.FullScanEntriesResponse> response =
+                new CompletableFuture<>();
+        replicaManager.fullScanEntries(
+                new TableBucket(
+                        request.getTableId(),
+                        request.hasPartitionId() ? request.getPartitionId() : null,
+                        request.getBucketId()),
+                value ->
+                        response.complete(
+                                org.apache.fluss.server.utils.ServerRpcMessageUtils
+                                        .makeFullScanEntriesResponse(value)));
+        return response;
+    }
+
+    @Override
     public CompletableFuture<NotifyLeaderAndIsrResponse> notifyLeaderAndIsr(
             NotifyLeaderAndIsrRequest notifyLeaderAndIsrRequest) {
         CompletableFuture<NotifyLeaderAndIsrResponse> response = new CompletableFuture<>();

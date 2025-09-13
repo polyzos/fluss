@@ -41,6 +41,8 @@ import org.apache.fluss.record.MemoryLogRecords;
 import org.apache.fluss.remote.RemoteLogFetchInfo;
 import org.apache.fluss.remote.RemoteLogSegment;
 import org.apache.fluss.rpc.entity.FetchLogResultForBucket;
+import org.apache.fluss.rpc.entity.FullScanEntriesResultForBucket;
+import org.apache.fluss.rpc.entity.FullScanValuesResultForBucket;
 import org.apache.fluss.rpc.entity.LimitScanResultForBucket;
 import org.apache.fluss.rpc.entity.ListOffsetsResultForBucket;
 import org.apache.fluss.rpc.entity.LookupResultForBucket;
@@ -56,6 +58,8 @@ import org.apache.fluss.rpc.messages.CreateAclsResponse;
 import org.apache.fluss.rpc.messages.DropAclsResponse;
 import org.apache.fluss.rpc.messages.FetchLogRequest;
 import org.apache.fluss.rpc.messages.FetchLogResponse;
+import org.apache.fluss.rpc.messages.FullScanEntriesResponse;
+import org.apache.fluss.rpc.messages.FullScanValuesResponse;
 import org.apache.fluss.rpc.messages.GetFileSystemSecurityTokenResponse;
 import org.apache.fluss.rpc.messages.GetKvSnapshotMetadataResponse;
 import org.apache.fluss.rpc.messages.GetLatestKvSnapshotsResponse;
@@ -81,6 +85,7 @@ import org.apache.fluss.rpc.messages.PbAdjustIsrReqForTable;
 import org.apache.fluss.rpc.messages.PbAdjustIsrRespForBucket;
 import org.apache.fluss.rpc.messages.PbAdjustIsrRespForTable;
 import org.apache.fluss.rpc.messages.PbBucketMetadata;
+import org.apache.fluss.rpc.messages.PbBytesKeyValue;
 import org.apache.fluss.rpc.messages.PbCreateAclRespInfo;
 import org.apache.fluss.rpc.messages.PbDropAclsFilterResult;
 import org.apache.fluss.rpc.messages.PbDropAclsMatchingAcl;
@@ -948,6 +953,44 @@ public class ServerRpcMessageUtils {
         }
 
         return limitScanResponse;
+    }
+
+    public static FullScanValuesResponse makeFullScanValuesResponse(
+            FullScanValuesResultForBucket bucketResult) {
+        FullScanValuesResponse response = new FullScanValuesResponse();
+        if (bucketResult.failed()) {
+            response.setError(bucketResult.getErrorCode(), bucketResult.getErrorMessage());
+        } else {
+            DefaultValueRecordBatch values = bucketResult.getValues();
+            if (values != null) {
+                response.setRecords(
+                        values.getSegment(), values.getPosition(), values.sizeInBytes());
+            }
+        }
+        return response;
+    }
+
+    public static FullScanEntriesResponse makeFullScanEntriesResponse(
+            FullScanEntriesResultForBucket bucketResult) {
+        FullScanEntriesResponse response = new FullScanEntriesResponse();
+        if (bucketResult.failed()) {
+            response.setError(bucketResult.getErrorCode(), bucketResult.getErrorMessage());
+        } else {
+            List<byte[]> keys = bucketResult.getKeys();
+            List<byte[]> vals = bucketResult.getValues();
+            if (keys != null && vals != null) {
+                for (int i = 0; i < keys.size(); i++) {
+                    PbBytesKeyValue kv = new PbBytesKeyValue().setKey(keys.get(i));
+                    if (vals.get(i) != null) {
+                        kv.setValue(vals.get(i));
+                    }
+                    // addEntry() returns a new mutable entry and the addEntry(PbBytesKeyValue) is
+                    // private; copy fields.
+                    response.addEntry().copyFrom(kv);
+                }
+            }
+        }
+        return response;
     }
 
     public static LookupResponse makeLookupResponse(

@@ -64,4 +64,51 @@ class RocksDBKvTest {
             assertThat(rocksDBKv.multiGet(Arrays.asList(key, key2))).containsExactly(null, val2);
         }
     }
+
+    @Test
+    void testFullScanValuesAndEntries(@TempDir Path tempDir) throws Exception {
+        File instanceBasePath = tempDir.toFile();
+        RocksDBResourceContainer rocksDBResourceContainer =
+                new RocksDBResourceContainer(new Configuration(), instanceBasePath);
+        RocksDBKvBuilder rocksDBKvBuilder =
+                new RocksDBKvBuilder(
+                        instanceBasePath,
+                        rocksDBResourceContainer,
+                        rocksDBResourceContainer.getColumnOptions());
+
+        try (RocksDBKv rocksDBKv = rocksDBKvBuilder.build()) {
+            byte[] k1 = new byte[] {1};
+            byte[] v1 = new byte[] {10};
+            byte[] k2 = new byte[] {2};
+            byte[] v2 = new byte[] {20};
+            rocksDBKv.put(k1, v1);
+            rocksDBKv.put(k2, v2);
+
+            assertThat(rocksDBKv.fullScanValues(1000)).hasSize(2);
+            assertThat(rocksDBKv.fullScanEntries(1000)).hasSize(2);
+        }
+    }
+
+    @Test
+    void testFullScanThreshold(@TempDir Path tempDir) throws Exception {
+        File instanceBasePath = tempDir.toFile();
+        RocksDBResourceContainer rocksDBResourceContainer =
+                new RocksDBResourceContainer(new Configuration(), instanceBasePath);
+        RocksDBKvBuilder rocksDBKvBuilder =
+                new RocksDBKvBuilder(
+                        instanceBasePath,
+                        rocksDBResourceContainer,
+                        rocksDBResourceContainer.getColumnOptions());
+
+        try (RocksDBKv rocksDBKv = rocksDBKvBuilder.build()) {
+            // insert two keys
+            rocksDBKv.put(new byte[] {1}, new byte[] {1});
+            rocksDBKv.put(new byte[] {2}, new byte[] {2});
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> rocksDBKv.fullScanValues(1))
+                    .isInstanceOf(IllegalStateException.class);
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> rocksDBKv.fullScanEntries(1))
+                    .isInstanceOf(IllegalStateException.class);
+        }
+    }
 }

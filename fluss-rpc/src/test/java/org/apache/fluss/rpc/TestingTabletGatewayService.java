@@ -23,6 +23,10 @@ import org.apache.fluss.rpc.messages.DatabaseExistsRequest;
 import org.apache.fluss.rpc.messages.DatabaseExistsResponse;
 import org.apache.fluss.rpc.messages.FetchLogRequest;
 import org.apache.fluss.rpc.messages.FetchLogResponse;
+import org.apache.fluss.rpc.messages.FullScanEntriesRequest;
+import org.apache.fluss.rpc.messages.FullScanEntriesResponse;
+import org.apache.fluss.rpc.messages.FullScanValuesRequest;
+import org.apache.fluss.rpc.messages.FullScanValuesResponse;
 import org.apache.fluss.rpc.messages.GetDatabaseInfoRequest;
 import org.apache.fluss.rpc.messages.GetDatabaseInfoResponse;
 import org.apache.fluss.rpc.messages.GetFileSystemSecurityTokenRequest;
@@ -131,6 +135,17 @@ public class TestingTabletGatewayService extends TestingGatewayService
     @Override
     public CompletableFuture<LimitScanResponse> limitScan(LimitScanRequest request) {
         return null;
+    }
+
+    @Override
+    public CompletableFuture<FullScanValuesResponse> fullScanValues(FullScanValuesRequest request) {
+        return CompletableFuture.completedFuture(new FullScanValuesResponse());
+    }
+
+    @Override
+    public CompletableFuture<FullScanEntriesResponse> fullScanEntries(
+            FullScanEntriesRequest request) {
+        return CompletableFuture.completedFuture(new FullScanEntriesResponse());
     }
 
     @Override

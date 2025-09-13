@@ -97,6 +97,7 @@ public final class KvTablet {
     private final long writeBatchSize;
     private final RocksDBKv rocksDBKv;
     private final KvPreWriteBuffer kvPreWriteBuffer;
+    private final int fullScanMaxKeys;
 
     // A lock that guards all modifications to the kv.
     private final ReadWriteLock kvLock = new ReentrantReadWriteLock();
@@ -130,7 +131,8 @@ public final class KvTablet {
             KvFormat kvFormat,
             Schema schema,
             RowMerger rowMerger,
-            ArrowCompressionInfo arrowCompressionInfo) {
+            ArrowCompressionInfo arrowCompressionInfo,
+            int fullScanMaxKeys) {
         this.physicalPath = physicalPath;
         this.tableBucket = tableBucket;
         this.logTablet = logTablet;
@@ -145,6 +147,7 @@ public final class KvTablet {
         this.schema = schema;
         this.rowMerger = rowMerger;
         this.arrowCompressionInfo = arrowCompressionInfo;
+        this.fullScanMaxKeys = fullScanMaxKeys;
     }
 
     public static KvTablet create(
@@ -205,7 +208,8 @@ public final class KvTablet {
                 kvFormat,
                 schema,
                 rowMerger,
-                arrowCompressionInfo);
+                arrowCompressionInfo,
+                serverConf.get(ConfigOptions.KV_FULLSCAN_MAX_KEYS));
     }
 
     private static RocksDBKv buildRocksDBKv(Configuration configuration, File kvDir)
@@ -489,6 +493,32 @@ public final class KvTablet {
                 () -> {
                     rocksDBKv.checkIfRocksDBClosed();
                     return rocksDBKv.limitScan(limit);
+                });
+    }
+
+    /**
+     * Full database scan without limit. Returns values only. Warning and exception will be thrown
+     * if the size exceeds configured threshold.
+     */
+    public List<byte[]> fullScanValues() throws IOException {
+        return inReadLock(
+                kvLock,
+                () -> {
+                    rocksDBKv.checkIfRocksDBClosed();
+                    return rocksDBKv.fullScanValues(fullScanMaxKeys);
+                });
+    }
+
+    /**
+     * Full database scan without limit. Returns key-value entries. Warning and exception will be
+     * thrown if the size exceeds configured threshold.
+     */
+    public List<Tuple2<byte[], byte[]>> fullScanEntries() throws IOException {
+        return inReadLock(
+                kvLock,
+                () -> {
+                    rocksDBKv.checkIfRocksDBClosed();
+                    return rocksDBKv.fullScanEntries(fullScanMaxKeys);
                 });
     }
 

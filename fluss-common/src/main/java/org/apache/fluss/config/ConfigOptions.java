@@ -1435,6 +1435,23 @@ public class ConfigOptions {
                             "The max size of the consumed memory for RocksDB batch write, "
                                     + "will flush just based on item count if this config set to 0.");
 
+    // Full-DB scan: hard safety rail for small tables
+    public static final ConfigOption<Integer> KV_FULLSCAN_MAX_KEYS =
+            key("kv.fullscan.max.keys")
+                    .intType()
+                    .defaultValue(10_000)
+                    .withDescription(
+                            "Maximum number of keys allowed for full-RocksDB scans. "
+                                    + "If the estimated key count is larger, the scan will WARN and throw to prevent abuse.");
+
+    // Incremental scan toggle; requires WAL / transaction log access
+    public static final ConfigOption<Boolean> KV_INCREMENTAL_SCAN_ENABLED =
+            key("kv.incremental.scan.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "If true, enables incremental scans using RocksDB transaction log.");
+
     // --------------------------------------------------------------------------
     // Provided configurable ColumnFamilyOptions within Fluss
     // --------------------------------------------------------------------------

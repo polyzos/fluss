@@ -256,6 +256,38 @@ message LimitScanResponse{
   optional bytes records = 4;
 }
 
+// full scan KV (values only)
+message FullScanValuesRequest {
+  required int64 table_id = 1;
+  optional int64 partition_id = 2;
+  required int32 bucket_id = 3;
+}
+
+message FullScanValuesResponse {
+  optional int32 error_code = 1;
+  optional string error_message = 2;
+  // DefaultValueRecordBatch bytes
+  optional bytes records = 3;
+}
+
+// full scan KV (key-value entries)
+message PbBytesKeyValue {
+  required bytes key = 1;
+  optional bytes value = 2;
+}
+
+message FullScanEntriesRequest {
+  required int64 table_id = 1;
+  optional int64 partition_id = 2;
+  required int32 bucket_id = 3;
+}
+
+message FullScanEntriesResponse {
+  optional int32 error_code = 1;
+  optional string error_message = 2;
+  repeated PbBytesKeyValue entries = 3;
+}
+
 
 // notify bucket leader and isr request
 message NotifyLeaderAndIsrRequest {

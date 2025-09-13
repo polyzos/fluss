@@ -1198,6 +1198,78 @@ public final class Replica {
                 });
     }
 
+    public DefaultValueRecordBatch fullKvScanValues() {
+        if (!isKvTable()) {
+            throw new NonPrimaryKeyTableException(
+                    "the primary key table not exists for " + tableBucket);
+        }
+        return inReadLock(
+                leaderIsrUpdateLock,
+                () -> {
+                    try {
+                        if (!isLeader()) {
+                            throw new NotLeaderOrFollowerException(
+                                    String.format(
+                                            "Leader not local for bucket %s on tabletServer %d",
+                                            tableBucket, localTabletServerId));
+                        }
+                        checkNotNull(
+                                kvTablet,
+                                "KvTablet for the replica to full scan shouldn't be null.");
+                        List<byte[]> values = kvTablet.fullScanValues();
+                        DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
+                        for (byte[] v : values) {
+                            builder.append(v);
+                        }
+                        return builder.build();
+                    } catch (IOException e) {
+                        String errorMsg =
+                                String.format(
+                                        "Failed to full scan (values) from local kv for table bucket %s, the cause is: %s",
+                                        tableBucket, e.getMessage());
+                        LOG.error(errorMsg, e);
+                        throw new KvStorageException(errorMsg, e);
+                    }
+                });
+    }
+
+    public Tuple2<List<byte[]>, List<byte[]>> fullKvScanEntries() {
+        if (!isKvTable()) {
+            throw new NonPrimaryKeyTableException(
+                    "the primary key table not exists for " + tableBucket);
+        }
+        return inReadLock(
+                leaderIsrUpdateLock,
+                () -> {
+                    try {
+                        if (!isLeader()) {
+                            throw new NotLeaderOrFollowerException(
+                                    String.format(
+                                            "Leader not local for bucket %s on tabletServer %d",
+                                            tableBucket, localTabletServerId));
+                        }
+                        checkNotNull(
+                                kvTablet,
+                                "KvTablet for the replica to full scan shouldn't be null.");
+                        List<Tuple2<byte[], byte[]>> entries = kvTablet.fullScanEntries();
+                        List<byte[]> keys = new java.util.ArrayList<>(entries.size());
+                        List<byte[]> values = new java.util.ArrayList<>(entries.size());
+                        for (Tuple2<byte[], byte[]> e : entries) {
+                            keys.add(e.f0);
+                            values.add(e.f1);
+                        }
+                        return Tuple2.of(keys, values);
+                    } catch (IOException e) {
+                        String errorMsg =
+                                String.format(
+                                        "Failed to full scan (entries) from local kv for table bucket %s, the cause is: %s",
+                                        tableBucket, e.getMessage());
+                        LOG.error(errorMsg, e);
+                        throw new KvStorageException(errorMsg, e);
+                    }
+                });
+    }
+
     /**
      * Returns a tuple where the first element is a boolean indicating whether enough replicas
      * reached `requiredOffset` and the second element is an error (which would be `Errors.NONE` for

@@ -260,6 +260,20 @@ public class RpcMessageTestUtils {
         return new LimitScanRequest().setTableId(tableId).setBucketId(bucketId).setLimit(limit);
     }
 
+    public static org.apache.fluss.rpc.messages.FullScanValuesRequest newFullScanValuesRequest(
+            long tableId, int bucketId) {
+        return new org.apache.fluss.rpc.messages.FullScanValuesRequest()
+                .setTableId(tableId)
+                .setBucketId(bucketId);
+    }
+
+    public static org.apache.fluss.rpc.messages.FullScanEntriesRequest newFullScanEntriesRequest(
+            long tableId, int bucketId) {
+        return new org.apache.fluss.rpc.messages.FullScanEntriesRequest()
+                .setTableId(tableId)
+                .setBucketId(bucketId);
+    }
+
     public static ListOffsetsRequest newListOffsetsRequest(
             int followerServerId, int offsetType, long tableId, int bucketId) {
         ListOffsetsRequest listOffsetsRequest =

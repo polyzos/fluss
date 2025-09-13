@@ -918,4 +918,51 @@ class KvTabletTest {
     private Value valueOf(BinaryRow row) {
         return Value.of(ValueEncoder.encodeValue(schemaId, row));
     }
+
+    @Test
+    void testFullScanViaTablet_returnsAllEntries() throws Exception {
+        final Schema schema = DATA1_SCHEMA_PK;
+        initLogTabletAndKvTablet(schema, new HashMap<>());
+
+        // Build two records
+        KvRecord r1 = kvRecordFactory.ofRecord("k1".getBytes(), new Object[] {1, "v1"});
+        KvRecord r2 = kvRecordFactory.ofRecord("k2".getBytes(), new Object[] {2, "v2"});
+        KvRecordBatch kvRecordBatch = kvRecordBatchFactory.ofRecords(Arrays.asList(r1, r2));
+
+        LogAppendInfo appendInfo = kvTablet.putAsLeader(kvRecordBatch, null);
+        // flush up to last offset so that data moves from pre-write buffer to RocksDB
+        kvTablet.flush(
+                appendInfo.lastOffset() + 1,
+                t -> {
+                    throw new RuntimeException(t);
+                });
+
+        // Full scans
+        assertThat(kvTablet.fullScanValues()).hasSize(2);
+        assertThat(kvTablet.fullScanEntries()).hasSize(2);
+    }
+
+    @Test
+    void testFullScanViaTablet_threshold() throws Exception {
+        final Schema schema = DATA1_SCHEMA_PK;
+        Map<String, String> tableCfg = new HashMap<>();
+        // Configure low threshold
+        conf.set(org.apache.fluss.config.ConfigOptions.KV_FULLSCAN_MAX_KEYS, 1);
+        initLogTabletAndKvTablet(schema, tableCfg);
+
+        KvRecord r1 = kvRecordFactory.ofRecord("k1".getBytes(), new Object[] {1, "v1"});
+        KvRecord r2 = kvRecordFactory.ofRecord("k2".getBytes(), new Object[] {2, "v2"});
+        KvRecordBatch kvRecordBatch = kvRecordBatchFactory.ofRecords(Arrays.asList(r1, r2));
+        LogAppendInfo appendInfo = kvTablet.putAsLeader(kvRecordBatch, null);
+        kvTablet.flush(
+                appendInfo.lastOffset() + 1,
+                t -> {
+                    throw new RuntimeException(t);
+                });
+
+        assertThatThrownBy(() -> kvTablet.fullScanValues())
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> kvTablet.fullScanEntries())
+                .isInstanceOf(IllegalStateException.class);
+    }
 }

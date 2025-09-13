@@ -22,6 +22,7 @@ import org.apache.fluss.rocksdb.RocksDBOperationUtils;
 import org.apache.fluss.server.utils.ResourceGuard;
 import org.apache.fluss.utils.BytesUtils;
 import org.apache.fluss.utils.IOUtils;
+import org.apache.fluss.utils.types.Tuple2;
 
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
@@ -30,6 +31,8 @@ import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 import org.rocksdb.WriteOptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
@@ -39,6 +42,8 @@ import java.util.List;
 
 /** A wrapper for the operation of {@link org.rocksdb.RocksDB}. */
 public class RocksDBKv implements AutoCloseable {
+
+    private static final Logger LOG = LoggerFactory.getLogger(RocksDBKv.class);
 
     /** The container of RocksDB option factory and predefined options. */
     private final RocksDBResourceContainer optionsContainer;
@@ -139,6 +144,124 @@ public class RocksDBKv implements AutoCloseable {
         }
 
         return pkList;
+    }
+
+    /**
+     * Full database scan without limit. Returns values only. Applies a safety threshold on
+     * estimated key count; if exceeded, warns and throws.
+     */
+    public List<byte[]> fullScanValues(int maxKeysThreshold) {
+        // Early pre-check using RocksDB estimate to avoid heavy scans
+        long estimate = -1L;
+        try {
+            estimate = db.getLongProperty(defaultColumnFamilyHandle, "rocksdb.estimate-num-keys");
+        } catch (RocksDBException e) {
+            LOG.debug("Failed to get rocksdb.estimate-num-keys; proceeding with scan.", e);
+        }
+        if (estimate >= 0 && estimate > maxKeysThreshold) {
+            LOG.warn(
+                    "Full-scan aborted: estimated key count {} exceeds threshold {}.",
+                    estimate,
+                    maxKeysThreshold);
+            throw new IllegalStateException(
+                    "Full-scan not allowed: estimated key count "
+                            + estimate
+                            + " exceeds threshold "
+                            + maxKeysThreshold);
+        }
+
+        long startNs = System.nanoTime();
+        List<byte[]> values =
+                new ArrayList<>(
+                        (int) (estimate > 0 && estimate < Integer.MAX_VALUE ? estimate : 128));
+        ReadOptions readOptions = new ReadOptions();
+        RocksIterator iterator = db.newIterator(defaultColumnFamilyHandle, readOptions);
+        int count = 0;
+        try {
+            iterator.seekToFirst();
+            while (iterator.isValid()) {
+                values.add(iterator.value());
+                iterator.next();
+                count++;
+                if (count > maxKeysThreshold) {
+                    LOG.warn(
+                            "Full-scan aborted mid-iteration: actual count {} exceeded threshold {}.",
+                            count,
+                            maxKeysThreshold);
+                    throw new IllegalStateException(
+                            "Full-scan not allowed: actual key count exceeded threshold "
+                                    + maxKeysThreshold);
+                }
+            }
+        } finally {
+            readOptions.close();
+            iterator.close();
+        }
+        long elapsedMs = (System.nanoTime() - startNs) / 1_000_000L;
+        LOG.info("Full-scan completed: {} entries in {} ms.", count, elapsedMs);
+        return values;
+    }
+
+    /**
+     * Full database scan without limit. Returns key-value pairs. Applies a safety threshold on
+     * estimated key count; if exceeded, warns and throws.
+     */
+    public List<Tuple2<byte[], byte[]>> fullScanEntries(int maxKeysThreshold) {
+        long estimate = -1L;
+        try {
+            estimate = db.getLongProperty(defaultColumnFamilyHandle, "rocksdb.estimate-num-keys");
+        } catch (RocksDBException e) {
+            LOG.debug("Failed to get rocksdb.estimate-num-keys; proceeding with scan.", e);
+        }
+        if (estimate >= 0 && estimate > maxKeysThreshold) {
+            LOG.warn(
+                    "Full-scan aborted: estimated key count {} exceeds threshold {}.",
+                    estimate,
+                    maxKeysThreshold);
+            throw new IllegalStateException(
+                    "Full-scan not allowed: estimated key count "
+                            + estimate
+                            + " exceeds threshold "
+                            + maxKeysThreshold);
+        }
+
+        long startNs = System.nanoTime();
+        List<Tuple2<byte[], byte[]>> entries =
+                new ArrayList<>(
+                        (int) (estimate > 0 && estimate < Integer.MAX_VALUE ? estimate : 128));
+        ReadOptions readOptions = new ReadOptions();
+        RocksIterator iterator = db.newIterator(defaultColumnFamilyHandle, readOptions);
+        int count = 0;
+        try {
+            iterator.seekToFirst();
+            while (iterator.isValid()) {
+                // copy key/value since RocksIterator buffers can be reused
+                byte[] k = iterator.key();
+                byte[] v = iterator.value();
+                byte[] kc = new byte[k.length];
+                System.arraycopy(k, 0, kc, 0, k.length);
+                byte[] vc = new byte[v.length];
+                System.arraycopy(v, 0, vc, 0, v.length);
+                entries.add(Tuple2.of(kc, vc));
+                iterator.next();
+                count++;
+                if (count > maxKeysThreshold) {
+                    LOG.warn(
+                            "Full-scan aborted mid-iteration: actual count {} exceeded threshold {}.",
+                            count,
+                            maxKeysThreshold);
+                    throw new IllegalStateException(
+                            "Full-scan not allowed: actual key count exceeded threshold "
+                                    + maxKeysThreshold);
+                }
+            }
+        } finally {
+            readOptions.close();
+            iterator.close();
+        }
+        long elapsedMs = (System.nanoTime() - startNs) / 1_000_000L;
+        LOG.info("Full-scan (entries) completed: {} entries in {} ms.", count, elapsedMs);
+        return entries;
     }
 
     public void put(byte[] key, byte[] value) throws IOException {
