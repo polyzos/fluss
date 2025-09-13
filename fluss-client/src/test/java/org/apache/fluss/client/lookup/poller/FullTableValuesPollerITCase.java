@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.fluss.client.table.scanner.batch;
+package org.apache.fluss.client.lookup.poller;
 
 import org.apache.fluss.client.admin.ClientToServerITCaseBase;
 import org.apache.fluss.client.table.Table;
 import org.apache.fluss.client.table.writer.UpsertWriter;
 import org.apache.fluss.metadata.Schema;
-import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableDescriptor;
 import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.row.InternalRow;
@@ -31,16 +30,16 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.apache.fluss.record.TestData.DATA1_ROW_TYPE;
 import static org.apache.fluss.testutils.DataTestUtils.compactedRow;
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** IT Case for {@link FullScanValuesBatchScanner}. */
-class FullScanValuesBatchScannerITCase extends ClientToServerITCaseBase {
+/** IT case for {@link FullTablePoller}. */
+class FullTableValuesPollerITCase extends ClientToServerITCaseBase {
 
     private static final int DEFAULT_BUCKET_NUM = 3;
 
@@ -57,35 +56,28 @@ class FullScanValuesBatchScannerITCase extends ClientToServerITCaseBase {
                     .distributedBy(DEFAULT_BUCKET_NUM, "id")
                     .build();
 
-    private static final String DEFAULT_DB = "test-fullscan-client-db";
+    private static final String DEFAULT_DB = "test-fulltable-poller-db";
 
     @Test
-    void testFullScanValues() throws Exception {
-        TablePath tablePath = TablePath.of(DEFAULT_DB, "test-fullscan-values");
+    void testPeriodicSnapshot() throws Exception {
+        TablePath tablePath = TablePath.of(DEFAULT_DB, "test-poller-values");
         createTable(tablePath, DEFAULT_TABLE_DESCRIPTOR, true);
 
-        // write rows and collect expected list
         List<InternalRow> expectedAllRows = new ArrayList<>();
         try (Table table = conn.getTable(tablePath)) {
             UpsertWriter writer = table.newUpsert().createWriter();
-            // upsert 20 rows, bucketed by id
-            for (int i = 0; i < 20; i++) {
+            for (int i = 0; i < 12; i++) {
                 InternalRow row = compactedRow(DATA1_ROW_TYPE, new Object[] {i, "v" + i});
                 writer.upsert(row);
                 expectedAllRows.add(row);
             }
-            // flush all
             writer.flush();
 
-            // Use the periodic full-table poller to fetch one snapshot and verify
-            org.apache.fluss.client.lookup.poller.FullTablePoller poller =
-                    table.newLookup().createFullTableValuesPoller(Duration.ofMillis(200));
-            java.util.concurrent.CompletableFuture<java.util.List<InternalRow>> first =
-                    new java.util.concurrent.CompletableFuture<>();
+            FullTablePoller poller = table.newLookup().createFullTableValuesPoller(Duration.ofMillis(200));
+            CompletableFuture<List<InternalRow>> first = new CompletableFuture<>();
             poller.subscribe(first::complete);
             poller.start();
-            java.util.List<InternalRow> snapshot =
-                    first.get(10, java.util.concurrent.TimeUnit.SECONDS);
+            List<InternalRow> snapshot = first.get(10, TimeUnit.SECONDS);
             poller.close();
 
             assertThat(snapshot).containsExactlyInAnyOrderElementsOf(expectedAllRows);

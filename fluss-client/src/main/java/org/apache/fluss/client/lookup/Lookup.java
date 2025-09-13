@@ -96,4 +96,11 @@ public interface Lookup {
      * @return the lookuper
      */
     Lookuper createLookuper();
+
+    /**
+     * Creates a periodic full-table poller that, at a fixed period, fetches the entire current
+     * state (values-only) of all buckets of this primary-key table and emits merged snapshots to
+     * subscribers. The poller uses the server-side full-scan RPC with threshold protection.
+     */
+    org.apache.fluss.client.lookup.poller.FullTablePoller createFullTableValuesPoller(java.time.Duration period);
 }

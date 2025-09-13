@@ -63,4 +63,10 @@ public class TableLookup implements Lookup {
                     tableInfo, metadataUpdater, lookupClient, lookupColumnNames);
         }
     }
+
+    @Override
+    public org.apache.fluss.client.lookup.poller.FullTablePoller createFullTableValuesPoller(java.time.Duration period) {
+        return new org.apache.fluss.client.lookup.poller.TableFullScanValuesPoller(
+                tableInfo, metadataUpdater, period, null);
+    }
 }
