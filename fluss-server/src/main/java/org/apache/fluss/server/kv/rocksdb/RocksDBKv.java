@@ -26,6 +26,7 @@ import org.apache.fluss.utils.IOUtils;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
 import org.rocksdb.ReadOptions;
+import org.rocksdb.Snapshot;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
@@ -139,6 +140,42 @@ public class RocksDBKv implements AutoCloseable {
         }
 
         return pkList;
+    }
+
+    /** Estimate number of keys in this RocksDB instance. */
+    public long estimateNumKeys() {
+        try {
+            String v = db.getProperty("rocksdb.estimate-num-keys");
+            if (v == null) {
+                return -1L;
+            }
+            return Long.parseLong(v.trim());
+        } catch (Exception e) {
+            return -1L;
+        }
+    }
+
+    /** Full scan values under a consistent snapshot. */
+    public List<byte[]> fullScan() {
+        List<byte[]> values = new ArrayList<>();
+        Snapshot snapshot = db.getSnapshot();
+        ReadOptions readOptions = new ReadOptions();
+        readOptions.setSnapshot(snapshot);
+        RocksIterator iterator = db.newIterator(defaultColumnFamilyHandle, readOptions);
+        try {
+            iterator.seekToFirst();
+            while (iterator.isValid()) {
+                values.add(iterator.value());
+                iterator.next();
+            }
+        } finally {
+            iterator.close();
+            readOptions.close();
+            if (snapshot != null) {
+                db.releaseSnapshot(snapshot);
+            }
+        }
+        return values;
     }
 
     public void put(byte[] key, byte[] value) throws IOException {

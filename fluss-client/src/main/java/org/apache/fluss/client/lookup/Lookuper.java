@@ -41,4 +41,12 @@ public interface Lookuper {
      * @return the result of lookup.
      */
     CompletableFuture<LookupResult> lookup(InternalRow lookupKey);
+
+    /**
+     * Perform a full-table scan over the KV store and return all rows. Intended for small tables only.
+     * Implementations that do not support full scan may throw UnsupportedOperationException.
+     */
+    default CompletableFuture<java.util.List<InternalRow>> scanAll() {
+        throw new UnsupportedOperationException("scanAll is not supported for this lookuper");
+    }
 }

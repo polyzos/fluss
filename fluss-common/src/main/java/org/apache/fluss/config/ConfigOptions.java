@@ -1442,6 +1442,14 @@ public class ConfigOptions {
                             "The max size of the consumed memory for RocksDB batch write, "
                                     + "will flush just based on item count if this config set to 0.");
 
+    // Threshold for full-table KV scan safety
+    public static final ConfigOption<Integer> KV_FULLSCAN_MAX_KEYS =
+            key("kv.fullscan.max-keys")
+                    .intType()
+                    .defaultValue(10_000)
+                    .withDescription(
+                            "Maximum number of keys allowed for a full KV scan. If the estimated total keys across buckets exceed this value, the server will reject the full-scan with a warning.");
+
     // --------------------------------------------------------------------------
     // Provided configurable ColumnFamilyOptions within Fluss
     // --------------------------------------------------------------------------

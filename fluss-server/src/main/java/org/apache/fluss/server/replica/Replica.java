@@ -1160,6 +1160,67 @@ public final class Replica {
                 });
     }
 
+    public java.util.List<byte[]> fullKvScanRaw() {
+        if (!isKvTable()) {
+            throw new NonPrimaryKeyTableException(
+                    "the primary key table not exists for " + tableBucket);
+        }
+        return inReadLock(
+                leaderIsrUpdateLock,
+                () -> {
+                    try {
+                        if (!isLeader()) {
+                            throw new NotLeaderOrFollowerException(
+                                    String.format(
+                                            "Leader not local for bucket %s on tabletServer %d",
+                                            tableBucket, localTabletServerId));
+                        }
+                        checkNotNull(kvTablet, "KvTablet for the replica to full scan shouldn't be null.");
+                        return kvTablet.fullScan();
+                    } catch (IOException e) {
+                        String errorMsg =
+                                String.format(
+                                        "Failed to full scan from local kv for table bucket %s, the cause is: %s",
+                                        tableBucket, e.getMessage());
+                        LOG.error(errorMsg, e);
+                        throw new KvStorageException(errorMsg, e);
+                    }
+                });
+    }
+
+    public DefaultValueRecordBatch fullKvScan() {
+        if (!isKvTable()) {
+            throw new NonPrimaryKeyTableException(
+                    "the primary key table not exists for " + tableBucket);
+        }
+        return inReadLock(
+                leaderIsrUpdateLock,
+                () -> {
+                    try {
+                        if (!isLeader()) {
+                            throw new NotLeaderOrFollowerException(
+                                    String.format(
+                                            "Leader not local for bucket %s on tabletServer %d",
+                                            tableBucket, localTabletServerId));
+                        }
+                        checkNotNull(kvTablet, "KvTablet for the replica to full scan shouldn't be null.");
+                        List<byte[]> bytes = kvTablet.fullScan();
+                        DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
+                        for (byte[] v : bytes) {
+                            builder.append(v);
+                        }
+                        return builder.build();
+                    } catch (IOException e) {
+                        String errorMsg =
+                                String.format(
+                                        "Failed to full scan from local kv for table bucket %s, the cause is: %s",
+                                        tableBucket, e.getMessage());
+                        LOG.error(errorMsg, e);
+                        throw new KvStorageException(errorMsg, e);
+                    }
+                });
+    }
+
     public LogRecords limitLogScan(int limit) {
         return inReadLock(
                 leaderIsrUpdateLock,

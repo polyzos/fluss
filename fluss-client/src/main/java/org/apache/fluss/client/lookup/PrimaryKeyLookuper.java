@@ -136,4 +136,52 @@ class PrimaryKeyLookuper implements Lookuper {
                             return new LookupResult(row);
                         });
     }
+
+    @Override
+    public CompletableFuture<java.util.List<InternalRow>> scanAll() {
+        // Determine unique leaders across all buckets
+        java.util.Set<Integer> leaders = new java.util.HashSet<>();
+        long tableId = tableInfo.getTableId();
+        for (int b = 0; b < numBuckets; b++) {
+            TableBucket tb = new TableBucket(tableId, null, b);
+            // ensure metadata for bucket
+            metadataUpdater.checkAndUpdateMetadata(tableInfo.getTablePath(), tb);
+            int leader = metadataUpdater.leaderFor(tb);
+            leaders.add(leader);
+        }
+        java.util.List<java.util.concurrent.CompletableFuture<org.apache.fluss.rpc.messages.FullScanResponse>> futures = new java.util.ArrayList<>();
+        for (Integer leader : leaders) {
+            org.apache.fluss.rpc.gateway.TabletServerGateway gateway =
+                    metadataUpdater.newTabletServerClientForNode(leader);
+            if (gateway != null) {
+                org.apache.fluss.rpc.messages.FullScanRequest req =
+                        new org.apache.fluss.rpc.messages.FullScanRequest().setTableId(tableId);
+                futures.add(gateway.fullScan(req));
+            }
+        }
+        return java.util.concurrent.CompletableFuture
+                .allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0]))
+                .thenApply(
+                        v -> {
+                            java.util.List<InternalRow> rows = new java.util.ArrayList<>();
+                            for (java.util.concurrent.CompletableFuture<org.apache.fluss.rpc.messages.FullScanResponse> f : futures) {
+                                org.apache.fluss.rpc.messages.FullScanResponse resp = f.join();
+                                if (resp.hasErrorCode() && resp.getErrorCode() != org.apache.fluss.rpc.protocol.Errors.NONE.code()) {
+                                    // propagate the error to the caller by throwing
+                                    org.apache.fluss.rpc.protocol.Errors.forCode(resp.getErrorCode()).maybeThrow();
+                                }
+                                if (resp.hasRecords()) {
+                                    java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(resp.getRecords());
+                                    org.apache.fluss.record.DefaultValueRecordBatch valueRecords =
+                                            org.apache.fluss.record.DefaultValueRecordBatch.pointToByteBuffer(buffer);
+                                    org.apache.fluss.record.ValueRecordReadContext readContext =
+                                            new org.apache.fluss.record.ValueRecordReadContext(kvValueDecoder.getRowDecoder());
+                                    for (org.apache.fluss.record.ValueRecord record : valueRecords.records(readContext)) {
+                                        rows.add(record.getRow());
+                                    }
+                                }
+                            }
+                            return rows;
+                        });
+    }
 }

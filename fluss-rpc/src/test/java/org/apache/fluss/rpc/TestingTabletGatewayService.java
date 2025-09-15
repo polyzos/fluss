@@ -162,6 +162,12 @@ public class TestingTabletGatewayService extends TestingGatewayService
     }
 
     @Override
+    public CompletableFuture<org.apache.fluss.rpc.messages.FullScanResponse> fullScan(
+            org.apache.fluss.rpc.messages.FullScanRequest request) {
+        return null;
+    }
+
+    @Override
     public CompletableFuture<ListDatabasesResponse> listDatabases(ListDatabasesRequest request) {
         return null;
     }

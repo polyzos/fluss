@@ -492,6 +492,24 @@ public final class KvTablet {
                 });
     }
 
+    public List<byte[]> fullScan() throws IOException {
+        return inReadLock(
+                kvLock,
+                () -> {
+                    rocksDBKv.checkIfRocksDBClosed();
+                    return rocksDBKv.fullScan();
+                });
+    }
+
+    public long estimateNumKeys() {
+        return inReadLock(
+                kvLock,
+                () -> {
+                    rocksDBKv.checkIfRocksDBClosed();
+                    return rocksDBKv.estimateNumKeys();
+                });
+    }
+
     public KvBatchWriter createKvBatchWriter() {
         return rocksDBKv.newWriteBatch(writeBatchSize);
     }

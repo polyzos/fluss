@@ -36,6 +36,8 @@ import org.apache.fluss.rpc.messages.InitWriterRequest;
 import org.apache.fluss.rpc.messages.InitWriterResponse;
 import org.apache.fluss.rpc.messages.LimitScanRequest;
 import org.apache.fluss.rpc.messages.LimitScanResponse;
+import org.apache.fluss.rpc.messages.FullScanRequest;
+import org.apache.fluss.rpc.messages.FullScanResponse;
 import org.apache.fluss.rpc.messages.ListOffsetsRequest;
 import org.apache.fluss.rpc.messages.ListOffsetsResponse;
 import org.apache.fluss.rpc.messages.LookupRequest;
@@ -118,6 +120,8 @@ import static org.apache.fluss.server.utils.ServerRpcMessageUtils.toPrefixLookup
 
 /** An RPC Gateway service for tablet server. */
 public final class TabletService extends RpcServiceBase implements TabletServerGateway {
+
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(TabletService.class);
 
     private final String serviceName;
     private final ReplicaManager replicaManager;
@@ -265,6 +269,49 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 request.getLimit(),
                 value -> response.complete(makeLimitScanResponse(value)));
         return response;
+    }
+
+    @Override
+    public CompletableFuture<FullScanResponse> fullScan(FullScanRequest request) {
+        authorizeTable(READ, request.getTableId());
+        long start = System.currentTimeMillis();
+        try {
+            ReplicaManager.FullScanAggregate agg =
+                    replicaManager.fullScan(
+                            request.getTableId(),
+                            request.hasPartitionId() ? request.getPartitionId() : null);
+            org.apache.fluss.record.DefaultValueRecordBatch batch = agg.records;
+            org.apache.fluss.memory.MemorySegment seg = batch.getSegment();
+            int pos = batch.getPosition();
+            int size = batch.sizeInBytes();
+            byte[] all = new byte[size];
+            System.arraycopy(seg.getHeapMemory(), pos, all, 0, size);
+            long elapsed = System.currentTimeMillis() - start;
+            LOG.info(
+                    "FullScan success for tableId={}, partitionId={}, values={}, elapsedMs={}",
+                    request.getTableId(),
+                    request.hasPartitionId() ? request.getPartitionId() : null,
+                    batch.getRecordCount(),
+                    elapsed);
+            FullScanResponse resp =
+                    new FullScanResponse()
+                            .setRecords(all)
+                            .setEstimatedKeyCount(agg.estimatedKeyCount)
+                            .setElapsedMs(elapsed);
+            return CompletableFuture.completedFuture(resp);
+        } catch (Exception e) {
+            Errors err = Errors.forException(e);
+            LOG.warn(
+                    "FullScan failed for tableId={}, partitionId={}, error: {}",
+                    request.getTableId(),
+                    request.hasPartitionId() ? request.getPartitionId() : null,
+                    e.toString());
+            FullScanResponse resp =
+                    new FullScanResponse()
+                            .setErrorCode(err.code())
+                            .setErrorMessage(Errors.maybeUnwrapException(e).getMessage());
+            return CompletableFuture.completedFuture(resp);
+        }
     }
 
     @Override
