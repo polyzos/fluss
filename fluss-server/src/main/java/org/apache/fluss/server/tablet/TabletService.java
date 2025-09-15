@@ -32,12 +32,12 @@ import org.apache.fluss.rpc.entity.ResultForBucket;
 import org.apache.fluss.rpc.gateway.TabletServerGateway;
 import org.apache.fluss.rpc.messages.FetchLogRequest;
 import org.apache.fluss.rpc.messages.FetchLogResponse;
+import org.apache.fluss.rpc.messages.FullScanRequest;
+import org.apache.fluss.rpc.messages.FullScanResponse;
 import org.apache.fluss.rpc.messages.InitWriterRequest;
 import org.apache.fluss.rpc.messages.InitWriterResponse;
 import org.apache.fluss.rpc.messages.LimitScanRequest;
 import org.apache.fluss.rpc.messages.LimitScanResponse;
-import org.apache.fluss.rpc.messages.FullScanRequest;
-import org.apache.fluss.rpc.messages.FullScanResponse;
 import org.apache.fluss.rpc.messages.ListOffsetsRequest;
 import org.apache.fluss.rpc.messages.ListOffsetsResponse;
 import org.apache.fluss.rpc.messages.LookupRequest;
@@ -121,7 +121,8 @@ import static org.apache.fluss.server.utils.ServerRpcMessageUtils.toPrefixLookup
 /** An RPC Gateway service for tablet server. */
 public final class TabletService extends RpcServiceBase implements TabletServerGateway {
 
-    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(TabletService.class);
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(TabletService.class);
 
     private final String serviceName;
     private final ReplicaManager replicaManager;

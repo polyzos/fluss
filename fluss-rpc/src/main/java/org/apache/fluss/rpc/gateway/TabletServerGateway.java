@@ -174,8 +174,8 @@ public interface TabletServerGateway extends RpcGateway, AdminReadOnlyGateway {
             NotifyLakeTableOffsetRequest request);
 
     /**
-     * Full scan of a small KV table across all buckets owned by this tablet server for the given table/partition.
-     * Returns a value record batch containing all values.
+     * Full scan of a small KV table across all buckets owned by this tablet server for the given
+     * table/partition. Returns a value record batch containing all values.
      */
     @RPC(api = ApiKeys.FULL_SCAN)
     CompletableFuture<org.apache.fluss.rpc.messages.FullScanResponse> fullScan(

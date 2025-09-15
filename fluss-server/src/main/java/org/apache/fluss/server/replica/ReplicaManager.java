@@ -967,7 +967,9 @@ public class ReplicaManager {
     public static class FullScanAggregate {
         public final org.apache.fluss.record.DefaultValueRecordBatch records;
         public final long estimatedKeyCount;
-        public FullScanAggregate(org.apache.fluss.record.DefaultValueRecordBatch records, long estimatedKeyCount) {
+
+        public FullScanAggregate(
+                org.apache.fluss.record.DefaultValueRecordBatch records, long estimatedKeyCount) {
             this.records = records;
             this.estimatedKeyCount = estimatedKeyCount;
         }
@@ -975,12 +977,16 @@ public class ReplicaManager {
 
     public FullScanAggregate fullScan(long tableId, @Nullable Long partitionId) {
         long estimated = 0L;
-        // First pass: estimate keys across matching replicas
+        // First pass: estimate keys across matching leader KV replicas only
         for (Replica replica : getOnlineReplicaList()) {
             TableBucket tb = replica.getTableBucket();
             if (tb.getTableId() != tableId) continue;
-            if (partitionId != null && (tb.getPartitionId() == null || tb.getPartitionId().longValue() != partitionId.longValue())) continue;
+            if (partitionId != null
+                    && (tb.getPartitionId() == null
+                            || tb.getPartitionId().longValue() != partitionId.longValue()))
+                continue;
             if (!replica.isKvTable()) continue;
+            if (!replica.isLeader()) continue; // only leader counts
             if (replica.getKvTablet() != null) {
                 long est = replica.getKvTablet().estimateNumKeys();
                 if (est > 0) estimated += est;
@@ -988,35 +994,50 @@ public class ReplicaManager {
         }
         int max = conf.get(ConfigOptions.KV_FULLSCAN_MAX_KEYS);
         if (estimated > max) {
-            LOG.warn("FullScan rejected for tableId={}, partitionId={}, estimatedKeys={} exceeds threshold {}", tableId, partitionId, estimated, max);
+            LOG.warn(
+                    "FullScan rejected for tableId={}, partitionId={}, estimatedKeys={} exceeds threshold {}",
+                    tableId,
+                    partitionId,
+                    estimated,
+                    max);
             throw new org.apache.fluss.exception.InvalidConfigException(
-                    String.format("Estimated key count %d exceeds kv.fullscan.max-keys=%d; consider increasing threshold or avoid full scan.", estimated, max));
+                    String.format(
+                            "Estimated key count %d exceeds kv.fullscan.max-keys=%d; consider increasing threshold or avoid full scan.",
+                            estimated, max));
         }
         org.apache.fluss.record.DefaultValueRecordBatch.Builder builder;
         try {
             builder = org.apache.fluss.record.DefaultValueRecordBatch.builder();
         } catch (java.io.IOException e) {
-            throw new org.apache.fluss.exception.KvStorageException("Failed to build record batch", e);
+            throw new org.apache.fluss.exception.KvStorageException(
+                    "Failed to build record batch", e);
         }
-        // Second pass: full scan and aggregate values
+        // Second pass: full scan and aggregate values from leaders only
         for (Replica replica : getOnlineReplicaList()) {
             TableBucket tb = replica.getTableBucket();
             if (tb.getTableId() != tableId) continue;
-            if (partitionId != null && (tb.getPartitionId() == null || tb.getPartitionId().longValue() != partitionId.longValue())) continue;
+            if (partitionId != null
+                    && (tb.getPartitionId() == null
+                            || tb.getPartitionId().longValue() != partitionId.longValue()))
+                continue;
             if (!replica.isKvTable()) continue;
+            if (!replica.isLeader()) continue; // only leader scans
             try {
                 java.util.List<byte[]> vals = replica.fullKvScanRaw();
                 for (byte[] v : vals) {
                     builder.append(v);
                 }
             } catch (Exception e) {
-                throw e instanceof RuntimeException ? (RuntimeException) e : new org.apache.fluss.exception.KvStorageException("Full scan failed", e);
+                throw e instanceof RuntimeException
+                        ? (RuntimeException) e
+                        : new org.apache.fluss.exception.KvStorageException("Full scan failed", e);
             }
         }
         try {
             return new FullScanAggregate(builder.build(), estimated);
         } catch (java.io.IOException e) {
-            throw new org.apache.fluss.exception.KvStorageException("Failed to build value batch", e);
+            throw new org.apache.fluss.exception.KvStorageException(
+                    "Failed to build value batch", e);
         }
     }
 

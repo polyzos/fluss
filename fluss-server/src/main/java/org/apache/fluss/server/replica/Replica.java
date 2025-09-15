@@ -1175,7 +1175,9 @@ public final class Replica {
                                             "Leader not local for bucket %s on tabletServer %d",
                                             tableBucket, localTabletServerId));
                         }
-                        checkNotNull(kvTablet, "KvTablet for the replica to full scan shouldn't be null.");
+                        checkNotNull(
+                                kvTablet,
+                                "KvTablet for the replica to full scan shouldn't be null.");
                         return kvTablet.fullScan();
                     } catch (IOException e) {
                         String errorMsg =
@@ -1203,7 +1205,9 @@ public final class Replica {
                                             "Leader not local for bucket %s on tabletServer %d",
                                             tableBucket, localTabletServerId));
                         }
-                        checkNotNull(kvTablet, "KvTablet for the replica to full scan shouldn't be null.");
+                        checkNotNull(
+                                kvTablet,
+                                "KvTablet for the replica to full scan shouldn't be null.");
                         List<byte[]> bytes = kvTablet.fullScan();
                         DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
                         for (byte[] v : bytes) {

@@ -26,10 +26,10 @@ import org.apache.fluss.utils.IOUtils;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
 import org.rocksdb.ReadOptions;
-import org.rocksdb.Snapshot;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
+import org.rocksdb.Snapshot;
 import org.rocksdb.WriteOptions;
 
 import javax.annotation.Nullable;
