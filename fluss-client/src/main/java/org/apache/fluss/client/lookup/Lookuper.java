@@ -20,6 +20,7 @@ package org.apache.fluss.client.lookup;
 import org.apache.fluss.annotation.PublicEvolving;
 import org.apache.fluss.row.InternalRow;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -41,4 +42,21 @@ public interface Lookuper {
      * @return the result of lookup.
      */
     CompletableFuture<LookupResult> lookup(InternalRow lookupKey);
+
+    /**
+     * Bounded snapshot read that returns all current values in the KV table. This is not a
+     * streaming scan; it performs a snapshot read across leaders and returns a finite list.
+     * For partitioned tables, prefer the partition-specific variant.
+     */
+    default CompletableFuture<List<InternalRow>> snapshotAll() {
+        throw new UnsupportedOperationException("snapshotAll() is only supported for primary key lookuper.");
+    }
+
+    /**
+     * Bounded snapshot read for a specific partition of a partitioned KV table. Implementations
+     * may throw UnsupportedOperationException if not supported.
+     */
+    default CompletableFuture<List<InternalRow>> snapshotAllPartition(String partitionName) {
+        throw new UnsupportedOperationException("snapshotAllPartition() is not supported by this lookuper.");
+    }
 }
