@@ -24,7 +24,12 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * The lookup-er is used to lookup row of a primary key table by primary key or prefix key.
+ * The lookuper is used to fetch rows from a table either by primary key or by a key prefix,
+ * depending on how it is created.
+ *
+ * <p>Instances are created via {@link Lookup} builders (e.g., {@code table.newLookup()}) and can
+ * target primary-key lookups (exact match) or prefix-key lookups. Some operations are only
+ * supported for primary-key tables and will throw {@link UnsupportedOperationException} otherwise.
  *
  * @since 0.6
  */
@@ -32,31 +37,52 @@ import java.util.concurrent.CompletableFuture;
 public interface Lookuper {
 
     /**
-     * Lookups certain row from the given lookup key.
+     * Performs a lookup using the provided key.
      *
-     * <p>The lookup key must be a primary key if the lookuper is a Primary Key Lookuper (created by
-     * {@code table.newLookup().createLookuper()}), or be the prefix key if the lookuper is a Prefix
-     * Key Lookuper (created by {@code table.newLookup().lookupBy(prefixKeys).createLookuper()}).
+     * <p>The lookup key must be:
      *
-     * @param lookupKey the lookup key.
-     * @return the result of lookup.
+     * <ul>
+     *   <li>the primary key if this lookuper is a Primary Key Lookuper (created via {@code
+     *       table.newLookup().createLookuper()}), or
+     *   <li>a key prefix if this lookuper is a Prefix Key Lookuper (created via {@code
+     *       table.newLookup().lookupBy(prefixKeys).createLookuper()}).
+     * </ul>
+     *
+     * @param lookupKey the lookup key row (schema must match the expected key shape)
+     * @return a future that completes with a {@link LookupResult} containing the matched row or
+     *     empty if not found; the future may complete exceptionally on RPC or server errors
      */
     CompletableFuture<LookupResult> lookup(InternalRow lookupKey);
 
     /**
-     * Bounded snapshot read that returns all current values in the KV table. This is not a
-     * streaming scan; it performs a snapshot read across leaders and returns a finite list.
-     * For partitioned tables, prefer the partition-specific variant.
+     * Returns all current values of a primary-key KV table using a point-in-time snapshot. This is
+     * not a streaming/cursor operation; it materializes the full result as a list.
+     *
+     * <p>For partitioned tables, prefer {@link #snapshotAllPartition(String)}.
+     *
+     * @return a future completing with an unordered list of {@link InternalRow} representing the
+     *     current values; the future may complete exceptionally if unsupported by the lookuper or
+     *     on RPC/server errors
+     * @throws UnsupportedOperationException if the implementation does not support snapshot reads
      */
     default CompletableFuture<List<InternalRow>> snapshotAll() {
-        throw new UnsupportedOperationException("snapshotAll() is only supported for primary key lookuper.");
+        throw new UnsupportedOperationException(
+                "snapshotAll() is only supported for primary key lookuper.");
     }
 
     /**
-     * Bounded snapshot read for a specific partition of a partitioned KV table. Implementations
-     * may throw UnsupportedOperationException if not supported.
+     * Returns all current values for the specified partition of a partitioned primary-key table,
+     * using a point-in-time snapshot.
+     *
+     * @param partitionName the partition identifier (e.g., a date-based partition value)
+     * @return a future completing with an unordered list of {@link InternalRow} for that partition;
+     *     the future may complete exceptionally if unsupported by the lookuper or on RPC/server
+     *     errors
+     * @throws UnsupportedOperationException if the implementation does not support partition
+     *     snapshot reads
      */
     default CompletableFuture<List<InternalRow>> snapshotAllPartition(String partitionName) {
-        throw new UnsupportedOperationException("snapshotAllPartition() is not supported by this lookuper.");
+        throw new UnsupportedOperationException(
+                "snapshotAllPartition() is not supported by this lookuper.");
     }
 }
