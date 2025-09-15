@@ -136,4 +136,94 @@ class PrimaryKeyLookuper implements Lookuper {
                             return new LookupResult(row);
                         });
     }
+
+    @Override
+    public CompletableFuture<java.util.List<org.apache.fluss.row.InternalRow>> snapshotAll() {
+        // Non-partitioned table only. For partitioned tables, prefer snapshotAllPartition.
+        if (tableInfo.isPartitioned()) {
+            CompletableFuture<java.util.List<org.apache.fluss.row.InternalRow>> f = new CompletableFuture<>();
+            f.completeExceptionally(new org.apache.fluss.exception.TableNotPartitionedException(
+                    "Table is partitioned. Please call snapshotAllPartition(partitionName)."));
+            return f;
+        }
+        return sendFullScan(null);
+    }
+
+    @Override
+    public CompletableFuture<java.util.List<org.apache.fluss.row.InternalRow>> snapshotAllPartition(String partitionName) {
+        if (!tableInfo.isPartitioned()) {
+            CompletableFuture<java.util.List<org.apache.fluss.row.InternalRow>> f = new CompletableFuture<>();
+            f.completeExceptionally(new org.apache.fluss.exception.TableNotPartitionedException(
+                    "Table is not partitioned."));
+            return f;
+        }
+        // Resolve partition id from name
+        org.apache.fluss.metadata.TablePath tablePath = tableInfo.getTablePath();
+        org.apache.fluss.metadata.PhysicalTablePath physical = org.apache.fluss.metadata.PhysicalTablePath.of(tablePath, partitionName);
+        try {
+            metadataUpdater.checkAndUpdatePartitionMetadata(physical);
+        } catch (org.apache.fluss.exception.PartitionNotExistException e) {
+            CompletableFuture<java.util.List<org.apache.fluss.row.InternalRow>> f = new CompletableFuture<>();
+            f.completeExceptionally(e);
+            return f;
+        }
+        java.util.Optional<Long> pidOpt = metadataUpdater.getPartitionId(physical);
+        if (!pidOpt.isPresent()) {
+            CompletableFuture<java.util.List<org.apache.fluss.row.InternalRow>> f = new CompletableFuture<>();
+            f.completeExceptionally(new org.apache.fluss.exception.PartitionNotExistException(
+                    "Partition '" + partitionName + "' not found for table " + tablePath));
+            return f;
+        }
+        return sendFullScan(pidOpt.get());
+    }
+
+    private CompletableFuture<java.util.List<org.apache.fluss.row.InternalRow>> sendFullScan(@Nullable Long partitionId) {
+        long tableId = tableInfo.getTableId();
+        int buckets = tableInfo.getNumBuckets();
+        // Compute unique leader tablet servers for this table/partition
+        java.util.Set<Integer> leaderServers = new java.util.HashSet<>();
+        for (int b = 0; b < buckets; b++) {
+            TableBucket tb = new TableBucket(tableId, partitionId, b);
+            // Ensure metadata present for this bucket
+            metadataUpdater.checkAndUpdateMetadata(tableInfo.getTablePath(), tb);
+            int leader = metadataUpdater.leaderFor(tb);
+            leaderServers.add(leader);
+        }
+        java.util.List<java.util.concurrent.CompletableFuture<org.apache.fluss.rpc.messages.FullScanResponse>> futures = new java.util.ArrayList<>();
+        for (Integer serverId : leaderServers) {
+            org.apache.fluss.rpc.gateway.TabletServerGateway gateway = metadataUpdater.newTabletServerClientForNode(serverId);
+            if (gateway == null) {
+                java.util.concurrent.CompletableFuture<java.util.List<org.apache.fluss.row.InternalRow>> f = new java.util.concurrent.CompletableFuture<>();
+                f.completeExceptionally(new org.apache.fluss.exception.LeaderNotAvailableException("Server " + serverId + " is not found in metadata cache."));
+                return f;
+            }
+            org.apache.fluss.rpc.messages.FullScanRequest req = new org.apache.fluss.rpc.messages.FullScanRequest().setTableId(tableId);
+            if (partitionId != null) {
+                req.setPartitionId(partitionId);
+            }
+            futures.add(gateway.fullScan(req));
+        }
+        // Decode all responses and aggregate rows
+        return java.util.concurrent.CompletableFuture
+                .allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0]))
+                .thenApply(v -> {
+                    java.util.List<org.apache.fluss.row.InternalRow> out = new java.util.ArrayList<>();
+                    for (java.util.concurrent.CompletableFuture<org.apache.fluss.rpc.messages.FullScanResponse> f : futures) {
+                        org.apache.fluss.rpc.messages.FullScanResponse resp = f.join();
+                        if (resp.hasErrorCode() && resp.getErrorCode() != org.apache.fluss.rpc.protocol.Errors.NONE.code()) {
+                            org.apache.fluss.rpc.protocol.Errors err = org.apache.fluss.rpc.protocol.Errors.forCode(resp.getErrorCode());
+                            throw err.exception(resp.hasErrorMessage() ? resp.getErrorMessage() : err.message());
+                        }
+                        if (resp.hasRecords()) {
+                            java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(resp.getRecords());
+                            org.apache.fluss.record.DefaultValueRecordBatch values = org.apache.fluss.record.DefaultValueRecordBatch.pointToByteBuffer(buf);
+                            org.apache.fluss.record.ValueRecordReadContext ctx = new org.apache.fluss.record.ValueRecordReadContext(kvValueDecoder.getRowDecoder());
+                            for (org.apache.fluss.record.ValueRecord rec : values.records(ctx)) {
+                                out.add(rec.getRow());
+                            }
+                        }
+                    }
+                    return out;
+                });
+    }
 }

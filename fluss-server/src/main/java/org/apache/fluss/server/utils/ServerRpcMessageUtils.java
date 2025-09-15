@@ -63,6 +63,7 @@ import org.apache.fluss.rpc.messages.GetLatestLakeSnapshotResponse;
 import org.apache.fluss.rpc.messages.InitWriterResponse;
 import org.apache.fluss.rpc.messages.LakeTieringHeartbeatResponse;
 import org.apache.fluss.rpc.messages.LimitScanResponse;
+import org.apache.fluss.rpc.messages.FullScanResponse;
 import org.apache.fluss.rpc.messages.ListAclsResponse;
 import org.apache.fluss.rpc.messages.ListOffsetsRequest;
 import org.apache.fluss.rpc.messages.ListOffsetsResponse;

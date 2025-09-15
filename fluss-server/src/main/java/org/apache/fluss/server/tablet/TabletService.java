@@ -52,6 +52,8 @@ import org.apache.fluss.rpc.messages.NotifyRemoteLogOffsetsRequest;
 import org.apache.fluss.rpc.messages.NotifyRemoteLogOffsetsResponse;
 import org.apache.fluss.rpc.messages.PrefixLookupRequest;
 import org.apache.fluss.rpc.messages.PrefixLookupResponse;
+import org.apache.fluss.rpc.messages.FullScanRequest;
+import org.apache.fluss.rpc.messages.FullScanResponse;
 import org.apache.fluss.rpc.messages.ProduceLogRequest;
 import org.apache.fluss.rpc.messages.ProduceLogResponse;
 import org.apache.fluss.rpc.messages.PutKvRequest;
@@ -366,6 +368,36 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
             NotifyLakeTableOffsetRequest request) {
         CompletableFuture<NotifyLakeTableOffsetResponse> response = new CompletableFuture<>();
         replicaManager.notifyLakeTableOffset(getNotifyLakeTableOffset(request), response::complete);
+        return response;
+    }
+
+    @Override
+    public CompletableFuture<FullScanResponse> fullScan(FullScanRequest request) {
+        authorizeTable(READ, request.getTableId());
+        CompletableFuture<FullScanResponse> response = new CompletableFuture<>();
+        try {
+            Long partitionId = request.hasPartitionId() ? request.getPartitionId() : null;
+            ReplicaManager.FullScanAggregate aggregate =
+                    replicaManager.fullScan(request.getTableId(), partitionId);
+            FullScanResponse resp = new FullScanResponse();
+            if (aggregate != null) {
+                org.apache.fluss.record.DefaultValueRecordBatch values = aggregate.getRecords();
+                if (values != null) {
+                    resp.setRecords(values.getSegment(), values.getPosition(), values.sizeInBytes());
+                }
+                resp.setEstimatedKeyCount(aggregate.getEstimatedKeys());
+                resp.setElapsedMs(aggregate.getElapsedMs());
+            }
+            response.complete(resp);
+        } catch (Exception e) {
+            ApiError apiError = Errors.forException(e).toApiError();
+            FullScanResponse err = new FullScanResponse();
+            err.setErrorCode(apiError.error().code());
+            if (apiError.message() != null) {
+                err.setErrorMessage(apiError.message());
+            }
+            response.complete(err);
+        }
         return response;
     }
 

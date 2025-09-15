@@ -997,6 +997,80 @@ public class ReplicaManager {
         responseCallback.accept(limitScanResultForBucket);
     }
 
+    /** Aggregate full KV scan across all leader replicas for the given table/partition. */
+    public FullScanAggregate fullScan(long tableId, @Nullable Long partitionId) {
+        long start = System.currentTimeMillis();
+        List<Replica> leaders =
+                getOnlineReplicaList().stream()
+                        .filter(Replica::isKvTable)
+                        .filter(Replica::isLeader)
+                        .filter(r -> r.getTableBucket().getTableId() == tableId)
+                        .filter(r -> (partitionId == null)
+                                ? r.getTableBucket().getPartitionId() == null
+                                : partitionId.equals(r.getTableBucket().getPartitionId()))
+                        .collect(Collectors.toList());
+
+        // Estimate total keys
+        long estimated = 0L;
+        for (Replica r : leaders) {
+            long est = r.estimateKvNumKeys();
+            if (est > 0) {
+                estimated += est;
+            }
+        }
+
+        try {
+            org.apache.fluss.record.DefaultValueRecordBatch.Builder builder =
+                    org.apache.fluss.record.DefaultValueRecordBatch.builder();
+            int bucketCount = 0;
+            int valueCount = 0;
+            for (Replica r : leaders) {
+                List<byte[]> vals = r.fullKvScanRaw();
+                for (byte[] v : vals) {
+                    builder.append(v);
+                }
+                valueCount += vals.size();
+                bucketCount++;
+            }
+            long elapsed = System.currentTimeMillis() - start;
+            if (bucketCount > 0) {
+                LOG.info(
+                        "Full-scan success: tableId={}, partitionId={}, buckets_scanned={}, values={}, estimated_keys={}, elapsed_ms={}",
+                        tableId, partitionId, bucketCount, valueCount, estimated, elapsed);
+            }
+            return new FullScanAggregate(builder.build(), estimated, elapsed);
+        } catch (Exception e) {
+            if (isUnexpectedException((e instanceof Exception) ? (Exception) e : new Exception(e))) {
+                LOG.error("Error during fullScan aggregation for table {}, partition {}", tableId, partitionId, e);
+            }
+            throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException(e);
+        }
+    }
+
+    public static class FullScanAggregate {
+        private final org.apache.fluss.record.DefaultValueRecordBatch records;
+        private final long estimatedKeys;
+        private final long elapsedMs;
+
+        public FullScanAggregate(org.apache.fluss.record.DefaultValueRecordBatch records, long estimatedKeys, long elapsedMs) {
+            this.records = records;
+            this.estimatedKeys = estimatedKeys;
+            this.elapsedMs = elapsedMs;
+        }
+
+        public org.apache.fluss.record.DefaultValueRecordBatch getRecords() {
+            return records;
+        }
+
+        public long getEstimatedKeys() {
+            return estimatedKeys;
+        }
+
+        public long getElapsedMs() {
+            return elapsedMs;
+        }
+    }
+
     public Map<TableBucket, LogReadResult> readFromLog(
             FetchParams fetchParams, Map<TableBucket, FetchReqInfo> bucketFetchInfo) {
         Map<TableBucket, LogReadResult> logReadResult = new HashMap<>();

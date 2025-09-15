@@ -106,6 +106,13 @@ import static org.apache.fluss.server.utils.ServerRpcMessageUtils.makeFetchLogRe
 /** A {@link TabletServerGateway} for test purpose. */
 public class TestTabletServerGateway implements TabletServerGateway {
 
+    // Queue of pre-programmed FullScan responses for tests
+    private final java.util.Queue<org.apache.fluss.rpc.messages.FullScanResponse> fullScanResponses = new java.util.concurrent.ConcurrentLinkedDeque<>();
+
+    public void enqueueFullScanResponse(org.apache.fluss.rpc.messages.FullScanResponse resp) {
+        fullScanResponses.add(resp);
+    }
+
     private final boolean alwaysFail;
     private final AtomicLong writerId = new AtomicLong(0);
 
@@ -316,6 +323,16 @@ public class TestTabletServerGateway implements TabletServerGateway {
     @Override
     public CompletableFuture<ListAclsResponse> listAcls(ListAclsRequest request) {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public java.util.concurrent.CompletableFuture<org.apache.fluss.rpc.messages.FullScanResponse> fullScan(org.apache.fluss.rpc.messages.FullScanRequest request) {
+        org.apache.fluss.rpc.messages.FullScanResponse resp = fullScanResponses.poll();
+        if (resp == null) {
+            resp = new org.apache.fluss.rpc.messages.FullScanResponse();
+            // default: empty success
+        }
+        return java.util.concurrent.CompletableFuture.completedFuture(resp);
     }
 
     public int pendingRequestSize() {

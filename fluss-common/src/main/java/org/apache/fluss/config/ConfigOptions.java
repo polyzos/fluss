@@ -1439,8 +1439,9 @@ public class ConfigOptions {
                     .memoryType()
                     .defaultValue(MemorySize.parse("2mb"))
                     .withDescription(
-                            "The max size of the consumed memory for RocksDB batch write, "
-                                    + "will flush just based on item count if this config set to 0.");
+                            "The size of write batch for RocksDB kv writes per bucket. Default 2 MB.");
+
+
 
     // --------------------------------------------------------------------------
     // Provided configurable ColumnFamilyOptions within Fluss

@@ -141,6 +141,44 @@ public class RocksDBKv implements AutoCloseable {
         return pkList;
     }
 
+    /** Estimate the number of keys in this RocksDB instance using 'rocksdb.estimate-num-keys'. */
+    public long estimateNumKeys() {
+        try {
+            return db.getLongProperty("rocksdb.estimate-num-keys");
+        } catch (RocksDBException e) {
+            // If RocksDB can't provide the property, treat as unknown but non-fatal; return -1.
+            return -1L;
+        }
+    }
+
+    /**
+     * Iterate the entire keyspace and return all values using a consistent snapshot.
+     * Intended for small KV tables; use with care on large datasets.
+     */
+    public List<byte[]> fullScan() {
+        List<byte[]> values = new ArrayList<>();
+        org.rocksdb.Snapshot snapshot = db.getSnapshot();
+        ReadOptions readOptions = new ReadOptions().setSnapshot(snapshot);
+        RocksIterator iterator = db.newIterator(defaultColumnFamilyHandle, readOptions);
+        try {
+            iterator.seekToFirst();
+            while (iterator.isValid()) {
+                values.add(iterator.value());
+                iterator.next();
+            }
+        } finally {
+            try {
+                readOptions.close();
+            } finally {
+                iterator.close();
+                if (snapshot != null) {
+                    db.releaseSnapshot(snapshot);
+                }
+            }
+        }
+        return values;
+    }
+
     public void put(byte[] key, byte[] value) throws IOException {
         try {
             db.put(writeOptions, key, value);

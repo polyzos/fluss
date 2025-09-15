@@ -172,4 +172,12 @@ public interface TabletServerGateway extends RpcGateway, AdminReadOnlyGateway {
     @RPC(api = ApiKeys.NOTIFY_LAKE_TABLE_OFFSET)
     CompletableFuture<NotifyLakeTableOffsetResponse> notifyLakeTableOffset(
             NotifyLakeTableOffsetRequest request);
+
+    /**
+     * Perform a bounded snapshot read over all values of a small KV table (optionally a partition).
+     * Returns a DefaultValueRecordBatch in the records field when successful.
+     */
+    @RPC(api = ApiKeys.FULL_SCAN)
+    CompletableFuture<org.apache.fluss.rpc.messages.FullScanResponse> fullScan(
+            org.apache.fluss.rpc.messages.FullScanRequest request);
 }

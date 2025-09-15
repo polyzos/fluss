@@ -241,4 +241,10 @@ public class TestingTabletGatewayService extends TestingGatewayService
     public CompletableFuture<ListAclsResponse> listAcls(ListAclsRequest request) {
         return null;
     }
+
+    @Override
+    public CompletableFuture<org.apache.fluss.rpc.messages.FullScanResponse> fullScan(
+            org.apache.fluss.rpc.messages.FullScanRequest request) {
+        return null;
+    }
 }
