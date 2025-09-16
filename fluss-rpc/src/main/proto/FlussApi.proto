@@ -256,6 +256,19 @@ message LimitScanResponse{
   optional bytes records = 4;
 }
 
+message FullScanRequest {
+  required int64 table_id = 1;
+  optional int64 partition_id = 2; // omit or unset for full table when non-partitioned
+}
+
+message FullScanResponse {
+  optional int32 error_code = 1;
+  optional string error_message = 2;
+  // flag to indicate the table type
+  optional bool is_log_table = 3;
+  // LogRecordBatch if is_log_table is true, otherwise KvRecordBatch
+  optional bytes records = 4;
+}
 
 // notify bucket leader and isr request
 message NotifyLeaderAndIsrRequest {

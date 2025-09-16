@@ -28,6 +28,8 @@ import org.apache.fluss.rpc.messages.DatabaseExistsRequest;
 import org.apache.fluss.rpc.messages.DatabaseExistsResponse;
 import org.apache.fluss.rpc.messages.FetchLogRequest;
 import org.apache.fluss.rpc.messages.FetchLogResponse;
+import org.apache.fluss.rpc.messages.FullScanRequest;
+import org.apache.fluss.rpc.messages.FullScanResponse;
 import org.apache.fluss.rpc.messages.GetDatabaseInfoRequest;
 import org.apache.fluss.rpc.messages.GetDatabaseInfoResponse;
 import org.apache.fluss.rpc.messages.GetFileSystemSecurityTokenRequest;
@@ -190,6 +192,11 @@ public class TestTabletServerGateway implements TabletServerGateway {
 
     @Override
     public CompletableFuture<LimitScanResponse> limitScan(LimitScanRequest request) {
+        return null;
+    }
+
+    @Override
+    public CompletableFuture<FullScanResponse> fullScan(FullScanRequest request) {
         return null;
     }
 

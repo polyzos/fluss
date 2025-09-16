@@ -32,6 +32,8 @@ import org.apache.fluss.rpc.entity.ResultForBucket;
 import org.apache.fluss.rpc.gateway.TabletServerGateway;
 import org.apache.fluss.rpc.messages.FetchLogRequest;
 import org.apache.fluss.rpc.messages.FetchLogResponse;
+import org.apache.fluss.rpc.messages.FullScanRequest;
+import org.apache.fluss.rpc.messages.FullScanResponse;
 import org.apache.fluss.rpc.messages.InitWriterRequest;
 import org.apache.fluss.rpc.messages.InitWriterResponse;
 import org.apache.fluss.rpc.messages.LimitScanRequest;
@@ -265,6 +267,11 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 request.getLimit(),
                 value -> response.complete(makeLimitScanResponse(value)));
         return response;
+    }
+
+    @Override
+    public CompletableFuture<FullScanResponse> fullScan(FullScanRequest request) {
+        return null;
     }
 
     @Override

@@ -36,6 +36,8 @@ import org.apache.fluss.row.decode.RowDecoder;
 import org.apache.fluss.row.encode.KeyEncoder;
 import org.apache.fluss.row.encode.ValueDecoder;
 import org.apache.fluss.rpc.gateway.TabletServerGateway;
+import org.apache.fluss.rpc.messages.FullScanRequest;
+import org.apache.fluss.rpc.messages.FullScanResponse;
 import org.apache.fluss.rpc.protocol.Errors;
 import org.apache.fluss.types.DataType;
 import org.apache.fluss.types.RowType;
