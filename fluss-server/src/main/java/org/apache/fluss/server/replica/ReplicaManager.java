@@ -1062,10 +1062,12 @@ public class ReplicaManager {
                 for (byte[] value : values) {
                     builder.append(value);
                 }
+
                 valueCount += values.size();
                 bucketCount++;
             }
             long elapsed = System.currentTimeMillis() - start;
+
             if (bucketCount > 0) {
                 LOG.info(
                         "Full-scan success: tableId={}, partitionId={}, buckets_scanned={}, values={}, elapsed_ms={}",
