@@ -35,6 +35,7 @@ import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.metrics.MetricNames;
 import org.apache.fluss.metrics.groups.MetricGroup;
+import org.apache.fluss.record.DefaultValueRecordBatch;
 import org.apache.fluss.record.KvRecordBatch;
 import org.apache.fluss.record.MemoryLogRecords;
 import org.apache.fluss.remote.RemoteLogFetchInfo;
@@ -1034,6 +1035,55 @@ public class ReplicaManager {
                     new LimitScanResultForBucket(tableBucket, ApiError.fromThrowable(e));
         }
         responseCallback.accept(limitScanResultForBucket);
+    }
+
+    public DefaultValueRecordBatch fullScan(long tableId, @Nullable Long partitionId) {
+        long start = System.currentTimeMillis();
+        List<Replica> leaderReplicas =
+                getOnlineReplicaList().stream()
+                        .filter(Replica::isKvTable)
+                        .filter(Replica::isLeader)
+                        .filter(r -> r.getTableBucket().getTableId() == tableId)
+                        .filter(
+                                r ->
+                                        (partitionId == null)
+                                                ? r.getTableBucket().getPartitionId() == null
+                                                : partitionId.equals(
+                                                        r.getTableBucket().getPartitionId()))
+                        .collect(Collectors.toList());
+
+        try {
+            DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
+            int bucketCount = 0;
+            int valueCount = 0;
+
+            for (Replica replica : leaderReplicas) {
+                List<byte[]> values = replica.fullKvScanRaw();
+                for (byte[] value : values) {
+                    builder.append(value);
+                }
+                valueCount += values.size();
+                bucketCount++;
+            }
+            long elapsed = System.currentTimeMillis() - start;
+            if (bucketCount > 0) {
+                LOG.info(
+                        "Full-scan success: tableId={}, partitionId={}, buckets_scanned={}, values={}, elapsed_ms={}",
+                        tableId,
+                        partitionId,
+                        bucketCount,
+                        valueCount,
+                        elapsed);
+            }
+            return builder.build();
+        } catch (IOException e) {
+            LOG.error(
+                    "Error during fullScan aggregation for table {}, partition {}",
+                    tableId,
+                    partitionId,
+                    e);
+            throw new RuntimeException(e);
+        }
     }
 
     public Map<TableBucket, LogReadResult> readFromLog(

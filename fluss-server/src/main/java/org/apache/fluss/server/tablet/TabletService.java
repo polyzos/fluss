@@ -23,6 +23,7 @@ import org.apache.fluss.exception.UnknownTableOrBucketException;
 import org.apache.fluss.fs.FileSystem;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TablePath;
+import org.apache.fluss.record.DefaultValueRecordBatch;
 import org.apache.fluss.record.KvRecordBatch;
 import org.apache.fluss.record.MemoryLogRecords;
 import org.apache.fluss.rpc.entity.FetchLogResultForBucket;
@@ -271,7 +272,34 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
 
     @Override
     public CompletableFuture<FullScanResponse> fullScan(FullScanRequest request) {
-        return null;
+        authorizeTable(READ, request.getTableId());
+
+        CompletableFuture<FullScanResponse> response = new CompletableFuture<>();
+
+        Long partitionId = request.hasPartitionId() ? request.getPartitionId() : null;
+
+        FullScanResponse fullScanResponse = new FullScanResponse();
+
+        DefaultValueRecordBatch values = replicaManager.fullScan(request.getTableId(), partitionId);
+
+        try {
+            if (values != null) {
+                fullScanResponse.setRecords(
+                        values.getSegment(), values.getPosition(), values.sizeInBytes());
+            }
+            response.complete(fullScanResponse);
+        } catch (Exception e) {
+            ApiError apiError = Errors.forException(e).toApiError();
+            FullScanResponse errResponse = new FullScanResponse();
+            errResponse.setErrorCode(apiError.error().code());
+
+            if (apiError.message() != null) {
+                errResponse.setErrorMessage(apiError.message());
+            }
+            response.complete(errResponse);
+        }
+
+        return response;
     }
 
     @Override

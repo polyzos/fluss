@@ -246,9 +246,7 @@ class PrimaryKeyLookuper implements Lookuper {
         for (CompletableFuture<FullScanResponse> responseFuture : responseFutures) {
             FullScanResponse response = responseFuture.join();
 
-            if (response.hasErrorCode()
-                    && response.getErrorCode()
-                            != org.apache.fluss.rpc.protocol.Errors.NONE.code()) {
+            if (response.hasErrorCode() && response.getErrorCode() != Errors.NONE.code()) {
                 Errors err = Errors.forCode(response.getErrorCode());
                 throw err.exception(
                         response.hasErrorMessage() ? response.getErrorMessage() : err.message());

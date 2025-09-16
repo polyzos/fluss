@@ -29,6 +29,7 @@ import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
+import org.rocksdb.Snapshot;
 import org.rocksdb.WriteOptions;
 
 import javax.annotation.Nullable;
@@ -139,6 +140,33 @@ public class RocksDBKv implements AutoCloseable {
         }
 
         return pkList;
+    }
+
+    public List<byte[]> fullScan() {
+        ArrayList<byte[]> values = new ArrayList<>();
+
+        // grab current snapshot
+        Snapshot snapshot = db.getSnapshot();
+        ReadOptions readOptions = new ReadOptions().setSnapshot(snapshot);
+
+        RocksIterator iterator = db.newIterator(defaultColumnFamilyHandle, readOptions);
+        try {
+            iterator.seekToFirst();
+            while (iterator.isValid()) {
+                values.add(iterator.value());
+                iterator.next();
+            }
+        } finally {
+            try {
+                readOptions.close();
+            } finally {
+                iterator.close();
+                if (snapshot != null) {
+                    snapshot.close();
+                }
+            }
+        }
+        return values;
     }
 
     public void put(byte[] key, byte[] value) throws IOException {
