@@ -74,16 +74,20 @@ public interface Scan {
     LogScanner createLogScanner();
 
     /**
-     * Creates a {@link BatchScanner} to read current data in the given table bucket for this scan.
+     * Creates a {@link BatchScanner} to read data for this scan over the whole table.
      *
-     * <p>Notes:
-     *
-     * <ul>
-     *   <li>Projection configured via {@link #project} is supported client-side.
-     *   <li>For full scans (when {@link #limit(int)} is not set), the provided {@link TableBucket}
-     *       is used only to identify the table (and optional partition); the bucket id is ignored.
-     * </ul>
+     * <p>For full scans (when {@link #limit(int)} is not set), the returned scanner reads a single
+     * snapshot of current values across all buckets. Use {@link BatchScanner#snapshotAll()} for
+     * non-partitioned tables or {@link BatchScanner#snapshotAllPartition(String)} for partitioned
+     * tables.
      */
+    BatchScanner createBatchScanner();
+
+    /**
+     * [Deprecated] Creates a {@link BatchScanner} to read current data in the given table bucket
+     * for this scan.
+     */
+    @Deprecated
     BatchScanner createBatchScanner(TableBucket tableBucket);
 
     /**

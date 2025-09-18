@@ -65,6 +65,24 @@ import java.util.concurrent.TimeoutException;
  */
 public class DefaultBatchScanner implements BatchScanner {
 
+    @Override
+    public BatchScanner snapshotAll() {
+        return this;
+    }
+
+    @Override
+    public BatchScanner snapshotAllPartition(String partitionName) {
+        if (!tableInfo.isPartitioned()) {
+            throw new UnsupportedOperationException(
+                    "Partition filter is only supported for partitioned tables");
+        }
+        return new DefaultBatchScanner(
+                tableInfo,
+                metadataUpdater,
+                projectedFields,
+                PartitionFilter.ofPartitionName(partitionName));
+    }
+
     private final TableInfo tableInfo;
     private final MetadataUpdater metadataUpdater;
     @Nullable private final int[] projectedFields;

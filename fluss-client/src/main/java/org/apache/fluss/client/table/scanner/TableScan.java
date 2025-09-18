@@ -115,15 +115,26 @@ public class TableScan implements Scan {
     }
 
     @Override
-    public BatchScanner createBatchScanner(TableBucket tableBucket) {
+    public BatchScanner createBatchScanner() {
         if (limit == null) {
             if (!tableInfo.hasPrimaryKey()) {
                 throw new UnsupportedOperationException(
                         "Full scan BatchScanner is only supported for primary key tables.");
             }
-            // Full scan semantics: one-shot snapshot of current values across all buckets.
             return new DefaultBatchScanner(
                     tableInfo, conn.getMetadataUpdater(), projectedColumns, partitionFilter);
+        }
+        // For limited scans, the legacy API requires a TableBucket to indicate which bucket.
+        // Keep behavior via deprecated overloads; here we throw to signal misuse.
+        throw new UnsupportedOperationException(
+                "Limit scan requires bucket specification; use createBatchScanner(TableBucket) instead.");
+    }
+
+    @Override
+    public BatchScanner createBatchScanner(TableBucket tableBucket) {
+        if (limit == null) {
+            // delegate to whole table scanner
+            return createBatchScanner();
         }
         return new LimitBatchScanner(
                 tableInfo, tableBucket, conn.getMetadataUpdater(), projectedColumns, limit);

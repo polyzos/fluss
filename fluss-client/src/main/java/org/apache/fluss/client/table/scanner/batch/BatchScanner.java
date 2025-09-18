@@ -39,6 +39,33 @@ import java.time.Duration;
 public interface BatchScanner extends Closeable {
 
     /**
+     * Configure the scanner to read a snapshot over the whole table (non-partitioned tables) or the
+     * whole (single) partition must be selected via {@link #snapshotAllPartition(String)} for
+     * partitioned tables.
+     *
+     * <p>For partitioned tables, calling this without specifying a partition name will cause the
+     * implementation to throw an IllegalArgumentException when polling.
+     *
+     * @return a scanner configured for a one-shot snapshot over the current data
+     */
+    default BatchScanner snapshotAll() {
+        return this;
+    }
+
+    /**
+     * Configure the scanner to read a snapshot from the specified partition. Only applicable to
+     * partitioned tables.
+     *
+     * @param partitionName the partition to scan
+     * @return a scanner configured for a one-shot snapshot over the given partition
+     * @throws UnsupportedOperationException if the table is not partitioned
+     */
+    default BatchScanner snapshotAllPartition(String partitionName) {
+        throw new UnsupportedOperationException(
+                "Partition filter is only supported for partitioned tables");
+    }
+
+    /**
      * Poll one batch records. The method should return null when reaching the end of the input.
      *
      * @param timeout The maximum time to block (must not be greater than {@link Long#MAX_VALUE}

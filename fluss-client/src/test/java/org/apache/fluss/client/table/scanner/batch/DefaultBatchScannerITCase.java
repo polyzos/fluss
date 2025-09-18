@@ -70,7 +70,7 @@ public class DefaultBatchScannerITCase extends ClientToServerITCaseBase {
             writer.flush();
 
             // Full scan via Scan API (limit == null)
-            BatchScanner scanner = table.newScan().createBatchScanner(new TableBucket(tableId, 0));
+            BatchScanner scanner = table.newScan().createBatchScanner().snapshotAll();
             List<InternalRow> actualRows = collectRows(scanner);
 
             // Assert count
@@ -104,7 +104,8 @@ public class DefaultBatchScannerITCase extends ClientToServerITCaseBase {
             BatchScanner scanner =
                     table.newScan()
                             .project(projected)
-                            .createBatchScanner(new TableBucket(tableId, 0));
+                            .createBatchScanner()
+                            .snapshotAll();
             List<InternalRow> actualRows = collectRows(scanner);
 
             assertThat(actualRows).hasSize(5);
@@ -127,7 +128,7 @@ public class DefaultBatchScannerITCase extends ClientToServerITCaseBase {
                             () ->
                                     table.newScan()
                                             .filter(PartitionFilter.ofPartitionName("p=1"))
-                                            .createBatchScanner(new TableBucket(tableId, 0)))
+                                            .createBatchScanner())
                     .isInstanceOf(UnsupportedOperationException.class)
                     .hasMessageContaining(
                             "Partition filter is only supported for partitioned tables");
@@ -170,7 +171,8 @@ public class DefaultBatchScannerITCase extends ClientToServerITCaseBase {
             assertThatThrownBy(
                             () ->
                                     table.newScan()
-                                            .createBatchScanner(new TableBucket(tableId, 0))
+                                            .createBatchScanner()
+                                            .snapshotAll()
                                             .pollBatch(java.time.Duration.ofMillis(1)))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("requires a PartitionFilter with a partition name");
@@ -179,7 +181,8 @@ public class DefaultBatchScannerITCase extends ClientToServerITCaseBase {
             BatchScanner scannerA =
                     table.newScan()
                             .filter(PartitionFilter.ofPartitionName("a"))
-                            .createBatchScanner(new TableBucket(tableId, 0));
+                            .createBatchScanner()
+                            .snapshotAllPartition("a");
             List<InternalRow> rowsA = collectRows(scannerA);
             assertThat(rowsA).hasSize(4);
             List<Object[]> valuesA = toValues(rowsA, schema.getRowType());
@@ -195,7 +198,8 @@ public class DefaultBatchScannerITCase extends ClientToServerITCaseBase {
             BatchScanner scannerB =
                     table.newScan()
                             .filter(PartitionFilter.ofPartitionName("b"))
-                            .createBatchScanner(new TableBucket(tableId, 0));
+                            .createBatchScanner()
+                            .snapshotAllPartition("b");
             List<InternalRow> rowsB = collectRows(scannerB);
             assertThat(rowsB).hasSize(4);
             List<Object[]> valuesB = toValues(rowsB, schema.getRowType());
@@ -224,7 +228,7 @@ public class DefaultBatchScannerITCase extends ClientToServerITCaseBase {
 
         try (Table table = conn.getTable(tablePath)) {
             assertThatThrownBy(
-                            () -> table.newScan().createBatchScanner(new TableBucket(tableId, 0)))
+                            () -> table.newScan().createBatchScanner())
                     .isInstanceOf(UnsupportedOperationException.class)
                     .hasMessageContaining(
                             "Full scan BatchScanner is only supported for primary key tables.");
