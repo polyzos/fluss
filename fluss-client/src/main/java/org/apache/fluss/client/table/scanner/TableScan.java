@@ -21,6 +21,7 @@ import org.apache.fluss.client.FlussConnection;
 import org.apache.fluss.client.admin.Admin;
 import org.apache.fluss.client.metadata.KvSnapshotMetadata;
 import org.apache.fluss.client.table.scanner.batch.BatchScanner;
+import org.apache.fluss.client.table.scanner.batch.DefaultBatchScanner;
 import org.apache.fluss.client.table.scanner.batch.KvSnapshotBatchScanner;
 import org.apache.fluss.client.table.scanner.batch.LimitBatchScanner;
 import org.apache.fluss.client.table.scanner.log.LogScanner;
@@ -43,27 +44,31 @@ public class TableScan implements Scan {
 
     /** The projected fields to do projection. No projection if is null. */
     @Nullable private final int[] projectedColumns;
+    /** Partition filter for partition pruning; null if none. */
+    @Nullable private final PartitionFilter partitionFilter;
     /** The limited row number to read. No limit if is null. */
     @Nullable private final Integer limit;
 
     public TableScan(FlussConnection conn, TableInfo tableInfo) {
-        this(conn, tableInfo, null, null);
+        this(conn, tableInfo, null, null, null);
     }
 
     private TableScan(
             FlussConnection conn,
             TableInfo tableInfo,
             @Nullable int[] projectedColumns,
+            @Nullable PartitionFilter partitionFilter,
             @Nullable Integer limit) {
         this.conn = conn;
         this.tableInfo = tableInfo;
         this.projectedColumns = projectedColumns;
+        this.partitionFilter = partitionFilter;
         this.limit = limit;
     }
 
     @Override
     public Scan project(@Nullable int[] projectedColumns) {
-        return new TableScan(conn, tableInfo, projectedColumns, limit);
+        return new TableScan(conn, tableInfo, projectedColumns, partitionFilter, limit);
     }
 
     @Override
@@ -78,12 +83,21 @@ public class TableScan implements Scan {
             }
             columnIndexes[i] = index;
         }
-        return new TableScan(conn, tableInfo, columnIndexes, limit);
+        return new TableScan(conn, tableInfo, columnIndexes, partitionFilter, limit);
+    }
+
+    @Override
+    public Scan filter(PartitionFilter partitionFilter) {
+        if (!tableInfo.isPartitioned()) {
+            throw new UnsupportedOperationException(
+                    "Partition filter is only supported for partitioned tables.");
+        }
+        return new TableScan(conn, tableInfo, projectedColumns, partitionFilter, limit);
     }
 
     @Override
     public Scan limit(int rowNumber) {
-        return new TableScan(conn, tableInfo, projectedColumns, rowNumber);
+        return new TableScan(conn, tableInfo, projectedColumns, partitionFilter, rowNumber);
     }
 
     @Override
@@ -103,8 +117,13 @@ public class TableScan implements Scan {
     @Override
     public BatchScanner createBatchScanner(TableBucket tableBucket) {
         if (limit == null) {
-            throw new UnsupportedOperationException(
-                    "Currently, BatchScanner is only available when limit is set.");
+            if (!tableInfo.hasPrimaryKey()) {
+                throw new UnsupportedOperationException(
+                        "Full scan BatchScanner is only supported for primary key tables.");
+            }
+            // Full scan semantics: one-shot snapshot of current values across all buckets.
+            return new DefaultBatchScanner(
+                    tableInfo, conn.getMetadataUpdater(), projectedColumns, partitionFilter);
         }
         return new LimitBatchScanner(
                 tableInfo, tableBucket, conn.getMetadataUpdater(), projectedColumns, limit);

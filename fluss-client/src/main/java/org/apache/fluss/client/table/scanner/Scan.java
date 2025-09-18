@@ -52,6 +52,14 @@ public interface Scan {
     Scan project(List<String> projectedColumnNames);
 
     /**
+     * Returns a new scan from this refined by a partition filter.
+     *
+     * <p>Currently, only equality predicates on partition columns are supported. Non-partitioned
+     * tables do not accept filters.
+     */
+    Scan filter(PartitionFilter partitionFilter);
+
+    /**
      * Returns a new scan from this that will read the given limited row number.
      *
      * @param rowNumber the limited row number to read
