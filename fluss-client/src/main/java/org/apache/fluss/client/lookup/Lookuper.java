@@ -20,16 +20,16 @@ package org.apache.fluss.client.lookup;
 import org.apache.fluss.annotation.PublicEvolving;
 import org.apache.fluss.row.InternalRow;
 
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * The lookuper is used to fetch rows from a table either by primary key or by a key prefix,
- * depending on how it is created.
+ * Lookuper performs point lookups by primary key or key prefix.
  *
  * <p>Instances are created via {@link Lookup} builders (e.g., {@code table.newLookup()}) and can
- * target primary-key lookups (exact match) or prefix-key lookups. Some operations are only
- * supported for primary-key tables and will throw {@link UnsupportedOperationException} otherwise.
+ * target primary-key lookups (exact match) or prefix-key lookups.
+ *
+ * <p>Note: Full scans are not part of the Lookuper API. Use the Scan API instead: {@code
+ * table.newScan().createBatchScanner(...)}.
  *
  * @since 0.6
  */
@@ -53,36 +53,4 @@ public interface Lookuper {
      *     empty if not found; the future may complete exceptionally on RPC or server errors
      */
     CompletableFuture<LookupResult> lookup(InternalRow lookupKey);
-
-    /**
-     * Returns all current values of a primary-key KV table using a point-in-time snapshot. This is
-     * not a streaming/cursor operation; it materializes the full result as a list.
-     *
-     * <p>For partitioned tables, prefer {@link #snapshotAllPartition(String)}.
-     *
-     * @return a future completing with an unordered list of {@link InternalRow} representing the
-     *     current values; the future may complete exceptionally if unsupported by the lookuper or
-     *     on RPC/server errors
-     * @throws UnsupportedOperationException if the implementation does not support snapshot reads
-     */
-    default CompletableFuture<List<InternalRow>> snapshotAll() {
-        throw new UnsupportedOperationException(
-                "snapshotAll() is only supported for primary key lookuper.");
-    }
-
-    /**
-     * Returns all current values for the specified partition of a partitioned primary-key table,
-     * using a point-in-time snapshot.
-     *
-     * @param partitionName the partition identifier (e.g., a date-based partition value)
-     * @return a future completing with an unordered list of {@link InternalRow} for that partition;
-     *     the future may complete exceptionally if unsupported by the lookuper or on RPC/server
-     *     errors
-     * @throws UnsupportedOperationException if the implementation does not support partition
-     *     snapshot reads
-     */
-    default CompletableFuture<List<InternalRow>> snapshotAllPartition(String partitionName) {
-        throw new UnsupportedOperationException(
-                "snapshotAllPartition() is not supported by this lookuper.");
-    }
 }

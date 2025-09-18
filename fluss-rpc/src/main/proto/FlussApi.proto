@@ -259,6 +259,8 @@ message LimitScanResponse{
 message FullScanRequest {
   required int64 table_id = 1;
   optional int64 partition_id = 2; // omit or unset for full table when non-partitioned
+  // Optional explicit bucket targeting; when omitted, server may scan all local buckets.
+  repeated int32 bucket_id = 3 [packed = true];
 }
 
 message FullScanResponse {
@@ -880,4 +882,50 @@ message PbHeartbeatReqForTable {
 message PbHeartbeatRespForTable {
   required int64 table_id = 1;
   optional ErrorResponse error = 2;
+}
+
+// Transient scan snapshot lifecycle (future, additive and optional)
+message CreateScanSnapshotRequest {
+  required int64 table_id = 1;
+  optional int64 partition_id = 2;
+  // Optional explicit buckets for scope narrowing
+  repeated int32 bucket_id = 3 [packed = true];
+  // Optional consistency fence to pin the view (semantics TBD)
+  optional int64 fence_epoch = 4;
+}
+
+message CreateScanSnapshotResponse {
+  optional int32 error_code = 1;
+  optional string error_message = 2;
+  required int64 snapshot_id = 3;
+  // Optional server hint on total rows/size if available
+  optional int64 approx_rows = 4;
+}
+
+message ScanWithSnapshotRequest {
+  required int64 table_id = 1;
+  required int64 snapshot_id = 2;
+  // Preferred maximum number of bytes in the response batch
+  optional int32 max_bytes = 3;
+  // Opaque resume token from previous response; empty for first page
+  optional bytes resume_token = 4;
+  // Optional projected columns by index (for potential server-side projection)
+  repeated int32 projected_columns = 5 [packed = true];
+}
+
+message ScanWithSnapshotResponse {
+  optional int32 error_code = 1;
+  optional string error_message = 2;
+  // KV value batch (or log batch if extended later)
+  optional bytes records = 3;
+  // Opaque token to request next page; absent means end-of-snapshot
+  optional bytes next_resume_token = 4;
+}
+
+message CloseScanSnapshotRequest {
+  required int64 table_id = 1;
+  required int64 snapshot_id = 2;
+}
+
+message CloseScanSnapshotResponse {
 }

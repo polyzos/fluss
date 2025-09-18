@@ -20,7 +20,6 @@ package org.apache.fluss.client.table.scanner.batch;
 import org.apache.fluss.client.metadata.MetadataUpdater;
 import org.apache.fluss.client.table.scanner.PartitionFilter;
 import org.apache.fluss.exception.LeaderNotAvailableException;
-import org.apache.fluss.exception.TableNotPartitionedException;
 import org.apache.fluss.metadata.PhysicalTablePath;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableInfo;
@@ -58,8 +57,8 @@ import java.util.concurrent.TimeoutException;
  * Default implementation of {@link BatchScanner} that performs a full scan against tablet servers.
  *
  * <p>This scanner issues FULL_SCAN RPCs to the leaders of all buckets and aggregates the results.
- * It returns all current values at a point in time for primary-key tables. The first call to
- * {@link #pollBatch(Duration)} returns the complete snapshot; subsequent calls return {@code null}.
+ * It returns all current values at a point in time for primary-key tables. The first call to {@link
+ * #pollBatch(Duration)} returns the complete snapshot; subsequent calls return {@code null}.
  *
  * <p>Note: For partitioned tables, callers may provide a {@link PartitionFilter} with a partition
  * name to restrict the scan to a single partition.
@@ -116,7 +115,11 @@ public class DefaultBatchScanner implements BatchScanner {
         } catch (TimeoutException e) {
             // try again in next poll
             return CloseableIterator.emptyIterator();
+        } catch (RuntimeException re) {
+            // propagate runtime exceptions (e.g., IllegalArgumentException) without wrapping
+            throw re;
         } catch (Exception e) {
+            // wrap checked exceptions into IOException as the API declares
             throw new IOException(e);
         }
     }
@@ -125,8 +128,8 @@ public class DefaultBatchScanner implements BatchScanner {
         Long partitionId = null;
         if (tableInfo.isPartitioned()) {
             if (partitionFilter == null || partitionFilter.getPartitionName() == null) {
-                throw new TableNotPartitionedException(
-                        "Partition filter is required for partitioned table full scan.");
+                throw new IllegalArgumentException(
+                        "Full scan on a partitioned table requires a PartitionFilter with a partition name.");
             }
             TablePath tablePath = tableInfo.getTablePath();
             PhysicalTablePath physicalTablePath =

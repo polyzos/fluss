@@ -76,7 +76,13 @@ public interface Scan {
     /**
      * Creates a {@link BatchScanner} to read current data in the given table bucket for this scan.
      *
-     * <p>Note: this API doesn't support pre-configured with {@link #project}.
+     * <p>Notes:
+     *
+     * <ul>
+     *   <li>Projection configured via {@link #project} is supported client-side.
+     *   <li>For full scans (when {@link #limit(int)} is not set), the provided {@link TableBucket}
+     *       is used only to identify the table (and optional partition); the bucket id is ignored.
+     * </ul>
      */
     BatchScanner createBatchScanner(TableBucket tableBucket);
 
@@ -84,8 +90,13 @@ public interface Scan {
      * Creates a {@link BatchScanner} to read given snapshot data in the given table bucket for this
      * scan.
      *
-     * <p>Note: this API doesn't support pre-configured with {@link #project} and {@link
-     * #limit(int)} and only support for Primary Key Tables.
+     * <p>Notes:
+     *
+     * <ul>
+     *   <li>Projection configured via {@link #project} is supported client-side.
+     *   <li>{@link #limit(int)} is not supported on snapshot scans.
+     *   <li>Only supported for primary-key tables.
+     * </ul>
      */
     BatchScanner createBatchScanner(TableBucket tableBucket, long snapshotId);
 }
