@@ -168,6 +168,18 @@ public class CoordinatorChannelManager {
                 responseConsumer);
     }
 
+    /** Send LimitScanRequest to the tablet server and handle the response. */
+    public void sendLimitScanRequest(
+            int receiveServerId,
+            org.apache.fluss.rpc.messages.LimitScanRequest limitScanRequest,
+            BiConsumer<org.apache.fluss.rpc.messages.LimitScanResponse, ? super Throwable> responseConsumer) {
+        sendRequest(
+                receiveServerId,
+                limitScanRequest,
+                TabletServerGateway::limitScan,
+                responseConsumer);
+    }
+
     @VisibleForTesting
     protected <Request extends ApiMessage, Response extends ApiMessage> void sendRequest(
             int targetServerId,

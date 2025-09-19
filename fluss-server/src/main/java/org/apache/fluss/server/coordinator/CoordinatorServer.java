@@ -184,6 +184,12 @@ public class CoordinatorServer extends ServerBase {
             this.lakeTableTieringManager = new LakeTableTieringManager();
 
             MetadataManager metadataManager = new MetadataManager(zkClient, conf);
+
+            // initialize RPC client and channel manager before coordinator service
+            this.clientMetricGroup = new ClientMetricGroup(metricRegistry, SERVER_NAME);
+            this.rpcClient = RpcClient.create(conf, clientMetricGroup, true);
+            this.coordinatorChannelManager = new CoordinatorChannelManager(rpcClient);
+
             this.coordinatorService =
                     new CoordinatorService(
                             conf,
@@ -194,7 +200,8 @@ public class CoordinatorServer extends ServerBase {
                             metadataManager,
                             authorizer,
                             createLakeCatalog(),
-                            lakeTableTieringManager);
+                            lakeTableTieringManager,
+                            coordinatorChannelManager);
 
             this.rpcServer =
                     RpcServer.create(
@@ -210,11 +217,6 @@ public class CoordinatorServer extends ServerBase {
             // when init session, register coordinator server again
             ZooKeeperUtils.registerZookeeperClientReInitSessionListener(
                     zkClient, this::registerCoordinatorLeader, this);
-
-            this.clientMetricGroup = new ClientMetricGroup(metricRegistry, SERVER_NAME);
-            this.rpcClient = RpcClient.create(conf, clientMetricGroup, true);
-
-            this.coordinatorChannelManager = new CoordinatorChannelManager(rpcClient);
 
             this.autoPartitionManager =
                     new AutoPartitionManager(metadataCache, metadataManager, conf);

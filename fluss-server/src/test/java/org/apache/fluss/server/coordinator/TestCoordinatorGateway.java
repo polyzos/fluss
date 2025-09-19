@@ -48,6 +48,8 @@ import org.apache.fluss.rpc.messages.DropPartitionRequest;
 import org.apache.fluss.rpc.messages.DropPartitionResponse;
 import org.apache.fluss.rpc.messages.DropTableRequest;
 import org.apache.fluss.rpc.messages.DropTableResponse;
+import org.apache.fluss.rpc.messages.FullScanRequest;
+import org.apache.fluss.rpc.messages.FullScanResponse;
 import org.apache.fluss.rpc.messages.GetDatabaseInfoRequest;
 import org.apache.fluss.rpc.messages.GetDatabaseInfoResponse;
 import org.apache.fluss.rpc.messages.GetFileSystemSecurityTokenRequest;
@@ -294,6 +296,14 @@ public class TestCoordinatorGateway implements CoordinatorGateway {
     public CompletableFuture<LakeTieringHeartbeatResponse> lakeTieringHeartbeat(
             LakeTieringHeartbeatRequest request) {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public CompletableFuture<FullScanResponse> fullScan(FullScanRequest request) {
+        FullScanResponse resp = new FullScanResponse();
+        // For tests, return a well-formed empty response
+        resp.setRowCount(0).setUncompressedSize(0).setCompressedSize(0).setRecords(new byte[0]);
+        return CompletableFuture.completedFuture(resp);
     }
 
     @Override

@@ -66,10 +66,18 @@ public interface Scan {
     LogScanner createLogScanner();
 
     /**
+     * Creates a {@link BatchScanner} to read data for this scan over the whole table.
+     * For partitioned tables, scope must be selected via
+     * {@link org.apache.fluss.client.table.scanner.batch.BatchScanner#snapshotAllPartition(String)}.
+     */
+    BatchScanner createBatchScanner();
+
+    /**
      * Creates a {@link BatchScanner} to read current data in the given table bucket for this scan.
      *
      * <p>Note: this API doesn't support pre-configured with {@link #project}.
      */
+    @Deprecated
     BatchScanner createBatchScanner(TableBucket tableBucket);
 
     /**

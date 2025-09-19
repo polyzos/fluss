@@ -1087,6 +1087,19 @@ public class ConfigOptions {
                             "Local directory that is used by client for"
                                     + " storing the data files (like kv snapshot, log segment files) to read temporarily");
 
+    /**
+     * Feature flag: prefer server-side FULL_SCAN for small PK tables, if available.
+     * When disabled, the client will gather per-bucket snapshots and merge them locally.
+     */
+    public static final ConfigOption<Boolean> CLIENT_SCANNER_USE_SERVER_FULL_SCAN =
+            key("client.scanner.use-server-full-scan")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "If true, the client will use the server-side FULL_SCAN RPC for full-table snapshots "
+                                    + "when scanning small primary key tables. If false (default), the client reads per-bucket "
+                                    + "snapshots and merges rows locally.");
+
     public static final ConfigOption<Integer> REMOTE_FILE_DOWNLOAD_THREAD_NUM =
             key("client.remote-file.download-thread-num")
                     .intType()

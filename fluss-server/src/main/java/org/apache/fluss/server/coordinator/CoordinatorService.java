@@ -71,6 +71,8 @@ import org.apache.fluss.rpc.messages.MetadataRequest;
 import org.apache.fluss.rpc.messages.MetadataResponse;
 import org.apache.fluss.rpc.messages.PbHeartbeatReqForTable;
 import org.apache.fluss.rpc.messages.PbHeartbeatRespForTable;
+import org.apache.fluss.rpc.messages.FullScanRequest;
+import org.apache.fluss.rpc.messages.FullScanResponse;
 import org.apache.fluss.rpc.netty.server.Session;
 import org.apache.fluss.rpc.protocol.ApiError;
 import org.apache.fluss.security.acl.AclBinding;
@@ -137,9 +139,181 @@ public final class CoordinatorService extends RpcServiceBase implements Coordina
     private final int defaultReplicationFactor;
     private final boolean logTableAllowCreation;
     private final boolean kvTableAllowCreation;
+
+    private static final int DEFAULT_MAX_BUCKET_LIMIT = Integer.MAX_VALUE;
+
+    private static final class FullScanContextData {
+        final TableInfo tableInfo;
+        final List<BucketMetadata> bucketMetadataList;
+        @Nullable final Long partitionId;
+        FullScanContextData(TableInfo tableInfo, List<BucketMetadata> bucketMetadataList, @Nullable Long partitionId) {
+            this.tableInfo = tableInfo;
+            this.bucketMetadataList = bucketMetadataList;
+            this.partitionId = partitionId;
+        }
+    }
+
+    @Override
+    public CompletableFuture<FullScanResponse> fullScan(FullScanRequest request) {
+        final FullScanResponse resp = new FullScanResponse();
+        try {
+            if (!request.hasTableId() || request.getTableId() <= 0) {
+                throw new IllegalArgumentException("Invalid table_id in FullScanRequest");
+            }
+            final long tableId = request.getTableId();
+            final @Nullable Long requestedPartitionId = request.hasPartitionId() ? request.getPartitionId() : null;
+
+            if (channelManager == null) {
+                throw new IllegalStateException("Coordinator channel manager not initialized");
+            }
+
+            // Access coordinator context to resolve table path/info and bucket metadata under event thread
+            CompletableFuture<FullScanContextData> ctxFuture = new CompletableFuture<>();
+            AccessContextEvent<FullScanContextData> ctxEvent =
+                    new AccessContextEvent<>(ctx -> {
+                        // resolve table path
+                        TablePath tablePath = ctx.getTablePathById(tableId);
+                        if (tablePath == null) {
+                            throw new InvalidTableException("Unknown table id " + tableId);
+                        }
+                        TableInfo tableInfo = ctx.getTableInfoById(tableId);
+                        if (!tableInfo.hasPrimaryKey()) {
+                            throw new InvalidTableException("FULL_SCAN is only supported for primary key tables");
+                        }
+                        @Nullable Long partitionId = requestedPartitionId;
+                        List<BucketMetadata> bucketMetadataList;
+                        if (partitionId == null) {
+                            // table-level buckets
+                            bucketMetadataList = getBucketMetadataFromContext(
+                                    ctx, tableId, null, ctx.getTableAssignment(tableId));
+                        } else {
+                            // partition-level buckets
+                            Map<Integer, List<Integer>> assignment = ctx.getPartitionAssignment(new TablePartition(tableId, partitionId));
+                            bucketMetadataList = getBucketMetadataFromContext(
+                                    ctx, tableId, partitionId, assignment);
+                        }
+                        return new FullScanContextData(tableInfo, bucketMetadataList, partitionId);
+                    });
+            eventManagerSupplier.get().put(ctxEvent);
+
+            return ctxEvent.getResultFuture()
+                    .thenCompose(data -> {
+                        // fan out limitScan to leaders
+                        List<CompletableFuture<org.apache.fluss.rpc.messages.LimitScanResponse>> futures = new ArrayList<>();
+                        for (BucketMetadata bm : data.bucketMetadataList) {
+                            Integer leader = bm.getLeaderId().isPresent() ? bm.getLeaderId().getAsInt() : null;
+                            if (leader == null) {
+                                continue; // skip buckets without leader
+                            }
+                            org.apache.fluss.rpc.messages.LimitScanRequest req = new org.apache.fluss.rpc.messages.LimitScanRequest()
+                                    .setTableId(tableId)
+                                    .setBucketId(bm.getBucketId())
+                                    .setLimit(DEFAULT_MAX_BUCKET_LIMIT);
+                            if (data.partitionId != null) {
+                                req.setPartitionId(data.partitionId);
+                            }
+                            CompletableFuture<org.apache.fluss.rpc.messages.LimitScanResponse> f = new CompletableFuture<>();
+                            channelManager.sendLimitScanRequest(
+                                    leader,
+                                    req,
+                                    (r, t) -> {
+                                        if (t != null) {
+                                            f.completeExceptionally(t);
+                                        } else {
+                                            f.complete(r);
+                                        }
+                                    });
+                            futures.add(f);
+                        }
+                        if (futures.isEmpty()) {
+                            // no data/buckets
+                            resp.setRowCount(0).setUncompressedSize(0).setCompressedSize(0).setRecords(new byte[0]);
+                            return CompletableFuture.completedFuture(resp);
+                        }
+                        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                                .handle((ignored, throwable) -> {
+                                    if (throwable != null) {
+                                        throw new RuntimeException(throwable);
+                                    }
+                                    return null;
+                                })
+                                .thenApply(ignored -> {
+                                    // aggregate
+                                    int totalBytes = 0;
+                                    int rowCount = 0;
+                                    List<byte[]> batches = new ArrayList<>();
+                                    for (CompletableFuture<org.apache.fluss.rpc.messages.LimitScanResponse> f : futures) {
+                                        org.apache.fluss.rpc.messages.LimitScanResponse lr = f.getNow(null);
+                                        ApiError err = ApiError.fromErrorMessage(lr);
+                                        if (err.isFailure()) {
+                                            throw err.exception();
+                                        }
+                                        // Only accept KV tables
+                                        if (lr.hasIsLogTable() && lr.isIsLogTable()) {
+                                            continue; // skip unexpected log buckets
+                                        }
+                                        if (lr.hasRecords()) {
+                                            byte[] bytes = lr.getRecords();
+                                            if (request.hasMaxResponseBytes()) {
+                                                int cap = request.getMaxResponseBytes();
+                                                if ((long) totalBytes + bytes.length > cap) {
+                                                    throw new IllegalArgumentException("FULL_SCAN exceeds max_response_bytes");
+                                                }
+                                            }
+                                            totalBytes += bytes.length;
+                                            batches.add(bytes);
+                                            // we don't have row count in response; leave as 0 for now or estimate later
+                                        }
+                                    }
+                                    byte[] payload;
+                                    if (batches.isEmpty()) {
+                                        payload = new byte[0];
+                                    } else if (batches.size() == 1) {
+                                        payload = batches.get(0);
+                                    } else {
+                                        // naive concatenation framing: [batchLen|batchBytes] * N
+                                        int size = 0;
+                                        for (byte[] b : batches) { size += 4 + b.length; }
+                                        java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(size);
+                                        for (byte[] b : batches) { buf.putInt(b.length).put(b); }
+                                        payload = buf.array();
+                                    }
+                                    resp.setRecords(payload)
+                                            .setRowCount(rowCount)
+                                            .setUncompressedSize(totalBytes)
+                                            .setCompressedSize(totalBytes);
+                                    return resp;
+                                })
+                                .exceptionally(t -> {
+                                    org.apache.fluss.rpc.messages.ErrorResponse err = ApiError.fromThrowable(t).toErrorResponse();
+                                    resp.setErrorCode(err.getErrorCode());
+                                    if (err.hasErrorMessage()) {
+                                        resp.setErrorMessage(err.getErrorMessage());
+                                    }
+                                    return resp;
+                                });
+                    })
+                    .exceptionally(t -> {
+                        org.apache.fluss.rpc.messages.ErrorResponse err = ApiError.fromThrowable(t).toErrorResponse();
+                        resp.setErrorCode(err.getErrorCode());
+                        if (err.hasErrorMessage()) {
+                            resp.setErrorMessage(err.getErrorMessage());
+                        }
+                        return resp;
+                    });
+        } catch (Throwable t) {
+            org.apache.fluss.rpc.messages.ErrorResponse err = ApiError.fromThrowable(t).toErrorResponse();
+            resp.setErrorCode(err.getErrorCode());
+            if (err.hasErrorMessage()) {
+                resp.setErrorMessage(err.getErrorMessage());
+            }
+            return CompletableFuture.completedFuture(resp);
+        }
+    }
     private final Supplier<EventManager> eventManagerSupplier;
     private final Supplier<Integer> coordinatorEpochSupplier;
     private final ServerMetadataCache metadataCache;
+    private final @Nullable CoordinatorChannelManager channelManager;
 
     // null if the cluster hasn't configured datalake format
     private final @Nullable DataLakeFormat dataLakeFormat;
@@ -155,7 +329,8 @@ public final class CoordinatorService extends RpcServiceBase implements Coordina
             MetadataManager metadataManager,
             @Nullable Authorizer authorizer,
             @Nullable LakeCatalog lakeCatalog,
-            LakeTableTieringManager lakeTableTieringManager) {
+            LakeTableTieringManager lakeTableTieringManager,
+            @Nullable CoordinatorChannelManager channelManager) {
         super(remoteFileSystem, ServerType.COORDINATOR, zkClient, metadataManager, authorizer);
         this.defaultBucketNumber = conf.getInt(ConfigOptions.DEFAULT_BUCKET_NUMBER);
         this.defaultReplicationFactor = conf.getInt(ConfigOptions.DEFAULT_REPLICATION_FACTOR);
@@ -169,6 +344,7 @@ public final class CoordinatorService extends RpcServiceBase implements Coordina
         this.lakeCatalog = lakeCatalog;
         this.lakeTableTieringManager = lakeTableTieringManager;
         this.metadataCache = metadataCache;
+        this.channelManager = channelManager;
         checkState(
                 (dataLakeFormat == null) == (lakeCatalog == null),
                 "dataLakeFormat and lakeCatalog must both be null or both non-null, but dataLakeFormat is %s, lakeCatalog is %s.",

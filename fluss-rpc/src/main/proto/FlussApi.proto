@@ -256,6 +256,28 @@ message LimitScanResponse{
   optional bytes records = 4;
 }
 
+// full scan request and response for small KV tables
+message FullScanRequest {
+  required int64 table_id = 1;
+  // present for partitioned tables; omit for non-partitioned
+  optional int64 partition_id = 2;
+  // compression hint for the response payload
+  optional int32 compression = 3; // 0=NONE,1=LZ4,2=ZSTD
+  // safety cap; server may return RESPONSE_TOO_LARGE-style error
+  optional int32 max_response_bytes = 4;
+}
+
+message FullScanResponse {
+  optional int32 error_code = 1;
+  optional string error_message = 2;
+  // payload with all current values for the requested scope
+  optional bytes records = 3;
+  // optional metrics
+  optional int32 row_count = 4;
+  optional int32 uncompressed_size = 5;
+  optional int32 compressed_size = 6;
+}
+
 
 // notify bucket leader and isr request
 message NotifyLeaderAndIsrRequest {
