@@ -27,6 +27,8 @@ import javax.annotation.Nullable;
 import java.io.Closeable;
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * The scanner that reads records form a table in a batch fashion. Compared to {@link LogScanner},
@@ -46,6 +48,23 @@ public interface BatchScanner extends Closeable {
      */
     @Nullable
     CloseableIterator<InternalRow> pollBatch(Duration timeout) throws IOException;
+
+    /**
+     * Perform a bounded snapshot and return all rows as a single collection.
+     * Default implementation is unsupported; only specific scanners (e.g., full-scan) support it.
+     */
+    default CompletableFuture<List<InternalRow>> snapshotAll() {
+        throw new UnsupportedOperationException("snapshotAll is not supported by this scanner.");
+    }
+
+    /**
+     * Perform a bounded snapshot for a specific partition and return all rows as a single collection.
+     * Default implementation is unsupported; only specific scanners (e.g., full-scan) support it.
+     */
+    default CompletableFuture<List<InternalRow>> snapshotAllPartition(String partitionName) {
+        throw new UnsupportedOperationException(
+                "snapshotAllPartition is not supported by this scanner.");
+    }
 
     /** Closes the scanner and should release all resources. */
     @Override

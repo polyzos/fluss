@@ -295,6 +295,9 @@ class PrimaryKeyLookuper implements Lookuper {
 
             FullScanRequest request = new FullScanRequest();
             request.setTableId(tableId);
+            // bucket_id is required by the protocol, even though servers currently
+            // ignore it for FULL_SCAN. Set a default bucket id to satisfy encoding.
+            request.setBucketId(0);
 
             if (partitionId != null) {
                 request.setPartitionId(partitionId);
