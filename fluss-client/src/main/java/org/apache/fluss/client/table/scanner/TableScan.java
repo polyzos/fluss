@@ -35,6 +35,7 @@ import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.types.RowType;
+import java.util.concurrent.ExecutionException;
 
 import javax.annotation.Nullable;
 
@@ -79,7 +80,7 @@ public class TableScan implements Scan {
             int index = rowType.getFieldIndex(projectedColumnNames.get(i));
             if (index < 0) {
                 throw new IllegalArgumentException(
-                        "Field " + projectedColumnNames.get(i) + " not found in table schema.");
+                        String.format("Field %s not found in table schema.", projectedColumnNames.get(i)));
             }
             columnIndexes[i] = index;
         }
@@ -119,7 +120,15 @@ public class TableScan implements Scan {
     public BatchScanner createBatchScanner(TableBucket tableBucket, long snapshotId) {
         if (limit != null) {
             throw new UnsupportedOperationException(
-                    "Currently, SnapshotBatchScanner doesn't support limit pushdown.");
+                    String.format(
+                            "SnapshotBatchScanner does not support limit pushdown. Received limit=%s. Remove limit() from the scan or use createBatchScanner(TableBucket) for limited reads.",
+                            limit));
+        }
+        if (!tableInfo.hasPrimaryKey()) {
+            throw new UnsupportedOperationException(
+                    String.format(
+                            "Snapshot-based batch scanning is only supported for Primary Key tables. Table %s does not have a primary key.",
+                            tableInfo.getTablePath()));
         }
         String scannerTmpDir =
                 conn.getConfiguration().getString(ConfigOptions.CLIENT_SCANNER_IO_TMP_DIR);
@@ -127,8 +136,26 @@ public class TableScan implements Scan {
         final KvSnapshotMetadata snapshotMeta;
         try {
             snapshotMeta = admin.getKvSnapshotMetadata(tableBucket, snapshotId).get();
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new FlussRuntimeException(
+                    String.format(
+                            "Interrupted while fetching snapshot metadata for table %s, %s, snapshotId=%d",
+                            tableInfo.getTablePath(), tableBucket, snapshotId),
+                    ie);
+        } catch (ExecutionException ee) {
+            Throwable cause = ee.getCause() == null ? ee : ee.getCause();
+            throw new FlussRuntimeException(
+                    String.format(
+                            "Failed to get snapshot metadata for table %s, %s, snapshotId=%d: %s",
+                            tableInfo.getTablePath(), tableBucket, snapshotId, cause.getMessage()),
+                    cause);
         } catch (Exception e) {
-            throw new FlussRuntimeException("Failed to get snapshot metadata", e);
+            throw new FlussRuntimeException(
+                    String.format(
+                            "Unexpected error while getting snapshot metadata for table %s, %s, snapshotId=%d",
+                            tableInfo.getTablePath(), tableBucket, snapshotId),
+                    e);
         }
 
         return new KvSnapshotBatchScanner(
@@ -170,7 +197,10 @@ public class TableScan implements Scan {
         }
         Long pid = conn.getMetadataUpdater().getPartitionId(physical).orElse(null);
         if (pid == null) {
-            throw new IllegalStateException("Partition id not found for " + partitionName);
+            throw new IllegalStateException(
+                    String.format(
+                            "Partition ID not found for partition '%s' in table %s. Metadata may be stale. Try refreshing metadata and ensure the partition exists.",
+                            partitionName, tableInfo.getTablePath()));
         }
         return new FullScanBatchScanner(tableInfo, conn.getMetadataUpdater(), pid);
     }
@@ -202,7 +232,7 @@ public class TableScan implements Scan {
         }
         Long pid = conn.getMetadataUpdater().getPartitionId(physical).orElse(null);
         if (pid == null) {
-            throw new IllegalStateException("Partition id not found for " + partitionName);
+            throw new IllegalStateException(String.format("Partition id not found for %s", partitionName));
         }
         return new FullScanBatchScanner(tableInfo, conn.getMetadataUpdater(), pid);
     }

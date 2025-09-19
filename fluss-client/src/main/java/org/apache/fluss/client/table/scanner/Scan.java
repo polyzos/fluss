@@ -66,6 +66,13 @@ public interface Scan {
     LogScanner createLogScanner();
 
     /**
+     * Creates a {@link BatchScanner} to read current data in the given table.
+     *
+     * <p>Note: this API doesn't support pre-configured with {@link #project}.
+     */
+    BatchScanner createBatchScanner();
+
+    /**
      * Creates a {@link BatchScanner} to read current data in the given table bucket for this scan.
      *
      * <p>Note: this API doesn't support pre-configured with {@link #project}.
