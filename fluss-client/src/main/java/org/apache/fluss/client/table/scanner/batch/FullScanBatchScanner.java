@@ -189,12 +189,12 @@ public class FullScanBatchScanner implements BatchScanner {
 
     // ---- New BatchScanner API implementations ----
     @Override
-    public java.util.concurrent.CompletableFuture<java.util.List<InternalRow>> snapshotAll() {
+    public CompletableFuture<List<InternalRow>> snapshotAll() {
         return rowsFuture;
     }
 
     @Override
-    public java.util.concurrent.CompletableFuture<java.util.List<InternalRow>> snapshotAllPartition(String partitionName) {
+    public CompletableFuture<List<InternalRow>> snapshotAllPartition(String partitionName) {
         throw new UnsupportedOperationException(
                 "This scanner is already bound to a specific scope; use TableScan#createBatchScanner(partitionName) then snapshotAll().");
     }

@@ -259,7 +259,7 @@ message LimitScanResponse{
 message FullScanRequest {
   required int64 table_id = 1;
   optional int64 partition_id = 2; // omit or unset for full table when non-partitioned
-  required int32 bucket_id = 3;
+//  required int32 bucket_id = 3;
 }
 
 message FullScanResponse {
