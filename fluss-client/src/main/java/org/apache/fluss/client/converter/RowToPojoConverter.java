@@ -184,13 +184,10 @@ public final class RowToPojoConverter<T> {
     private static Object convertTextValue(
             DataType fieldType, PojoType.Property prop, BinaryString s) {
         String v = s.toString();
-        String formattedMessage =
-                String.format(
-                        "Field %s expects exactly one character for CHAR type, got length %d.",
-                        prop.name, v.length());
         if (prop.type == String.class) {
             if (fieldType.getTypeRoot() == DataTypeRoot.CHAR && v.length() != 1) {
-                throw new IllegalArgumentException(formattedMessage);
+                throw new IllegalArgumentException(
+                        charLengthExceptionMessage(prop.name, v.length()));
             }
             return v;
         } else if (prop.type == Character.class) {
@@ -201,7 +198,8 @@ public final class RowToPojoConverter<T> {
                                 prop.name));
             }
             if (fieldType.getTypeRoot() == DataTypeRoot.CHAR && v.length() != 1) {
-                throw new IllegalArgumentException(formattedMessage);
+                throw new IllegalArgumentException(
+                        charLengthExceptionMessage(prop.name, v.length()));
             }
             return v.charAt(0);
         }
@@ -209,6 +207,12 @@ public final class RowToPojoConverter<T> {
                 String.format(
                         "Field %s is not a String or Character. Cannot convert from string.",
                         prop.name));
+    }
+
+    public static String charLengthExceptionMessage(String fieldName, int length) {
+        return String.format(
+                "Field %s expects exactly one character for CHAR type, got length %d.",
+                fieldName, length);
     }
 
     /**

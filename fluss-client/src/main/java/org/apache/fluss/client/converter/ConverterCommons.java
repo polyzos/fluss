@@ -29,6 +29,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import static org.apache.fluss.client.converter.RowToPojoConverter.charLengthExceptionMessage;
+
 /**
  * Internal shared utilities for POJO and Fluss InternalRow conversions.
  *
@@ -108,13 +110,9 @@ final class ConverterCommons {
     }
 
     static BinaryString toBinaryStringForText(Object v, String fieldName, DataTypeRoot root) {
-        final String s =
-                (v instanceof Character) ? String.valueOf((Character) v) : String.valueOf(v);
+        final String s = String.valueOf(v);
         if (root == DataTypeRoot.CHAR && s.length() != 1) {
-            throw new IllegalArgumentException(
-                    String.format(
-                            "Field %s expects exactly one character for CHAR type, got length %d.",
-                            fieldName, s.length()));
+            throw new IllegalArgumentException(charLengthExceptionMessage(fieldName, s.length()));
         }
         return BinaryString.fromString(s);
     }
