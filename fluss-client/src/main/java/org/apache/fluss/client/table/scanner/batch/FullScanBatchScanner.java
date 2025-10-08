@@ -40,7 +40,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -48,8 +47,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 /**
- * BatchScanner that performs a FULL_SCAN snapshot across all leaders of a KV table (or a
- * single partition) and exposes the result via pollBatch in a bounded fashion.
+ * BatchScanner that performs a FULL_SCAN snapshot across all leaders of a KV table (or a single
+ * partition) and exposes the result via pollBatch in a bounded fashion.
  */
 @Internal
 public class FullScanBatchScanner implements BatchScanner {
@@ -86,17 +85,13 @@ public class FullScanBatchScanner implements BatchScanner {
             long tableId = tableInfo.getTableId();
             int numBuckets = tableInfo.getNumBuckets();
 
-            // Find leader tablet/servers for this table/partition
-            HashSet<Integer> leaderServers = new HashSet<>();
+            // Send full scan request per bucket to its leader tablet/server
+            List<CompletableFuture<FullScanResponse>> responseFutures = new ArrayList<>();
             for (int bucketId = 0; bucketId < numBuckets; bucketId++) {
                 TableBucket tableBucket = new TableBucket(tableId, partitionId, bucketId);
                 metadataUpdater.checkAndUpdateMetadata(tableInfo.getTablePath(), tableBucket);
                 int leader = metadataUpdater.leaderFor(tableBucket);
-                leaderServers.add(leader);
-            }
 
-            List<CompletableFuture<FullScanResponse>> responseFutures = new ArrayList<>();
-            for (int leader : leaderServers) {
                 TabletServerGateway gateway = metadataUpdater.newTabletServerClientForNode(leader);
                 if (gateway == null) {
                     rowsFuture.completeExceptionally(
@@ -108,8 +103,7 @@ public class FullScanBatchScanner implements BatchScanner {
                 }
                 FullScanRequest request = new FullScanRequest();
                 request.setTableId(tableId);
-                request.setBucketId(0);
-
+                request.setBucketId(bucketId);
                 if (partitionId != null) {
                     request.setPartitionId(partitionId);
                 }

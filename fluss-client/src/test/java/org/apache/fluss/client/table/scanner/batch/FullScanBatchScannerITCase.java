@@ -57,9 +57,7 @@ import static org.apache.fluss.testutils.InternalRowAssert.assertThatRow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/**
- * End-to-end IT cases for FullScanBatchScanner functionality.
- */
+/** End-to-end IT cases for FullScanBatchScanner functionality. */
 class FullScanBatchScannerITCase {
 
     @RegisterExtension
