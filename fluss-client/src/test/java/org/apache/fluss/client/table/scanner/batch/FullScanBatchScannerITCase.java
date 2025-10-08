@@ -59,7 +59,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * End-to-end IT cases for FullScanBatchScanner functionality.
- * Mirrors PrimaryKeyLookuperITCase but uses the BatchScanner API.
  */
 class FullScanBatchScannerITCase {
 
@@ -155,7 +154,11 @@ class FullScanBatchScannerITCase {
             }
 
             // unhappy path: createBatchScanner with partition on non-partitioned table
-            assertThatThrownBy(() -> ((org.apache.fluss.client.table.scanner.TableScan) table.newScan()).createBatchScanner("p1"))
+            assertThatThrownBy(
+                            () ->
+                                    ((org.apache.fluss.client.table.scanner.TableScan)
+                                                    table.newScan())
+                                            .createBatchScanner("p1"))
                     .isInstanceOf(TableNotPartitionedException.class)
                     .hasMessageContaining("Table is not partitioned");
         }
@@ -210,8 +213,16 @@ class FullScanBatchScannerITCase {
             upsert.flush();
 
             // valid partition snapshots via BatchScanner
-            List<InternalRow> p1Rows = ((org.apache.fluss.client.table.scanner.TableScan) table.newScan()).createBatchScanner("20240101").snapshotAll().get();
-            List<InternalRow> p2Rows = ((org.apache.fluss.client.table.scanner.TableScan) table.newScan()).createBatchScanner("20240102").snapshotAll().get();
+            List<InternalRow> p1Rows =
+                    ((org.apache.fluss.client.table.scanner.TableScan) table.newScan())
+                            .createBatchScanner("20240101")
+                            .snapshotAll()
+                            .get();
+            List<InternalRow> p2Rows =
+                    ((org.apache.fluss.client.table.scanner.TableScan) table.newScan())
+                            .createBatchScanner("20240102")
+                            .snapshotAll()
+                            .get();
 
             RowType rowType = schema.getRowType();
             Comparator<InternalRow> byKey = Comparator.comparingInt(r -> r.getInt(0));
@@ -239,12 +250,20 @@ class FullScanBatchScannerITCase {
             }
 
             // unhappy path: invalid partition name
-            assertThatThrownBy(() -> ((org.apache.fluss.client.table.scanner.TableScan) table.newScan()).createBatchScanner("p=does_not_exist"))
+            assertThatThrownBy(
+                            () ->
+                                    ((org.apache.fluss.client.table.scanner.TableScan)
+                                                    table.newScan())
+                                            .createBatchScanner("p=does_not_exist"))
                     .isInstanceOf(PartitionNotExistException.class)
                     .hasMessageContaining("does not exist");
 
             // unhappy path: snapshotAll on partitioned table without specifying partition
-            assertThatThrownBy(() -> ((org.apache.fluss.client.table.scanner.TableScan) table.newScan()).createBatchScanner())
+            assertThatThrownBy(
+                            () ->
+                                    ((org.apache.fluss.client.table.scanner.TableScan)
+                                                    table.newScan())
+                                            .createBatchScanner())
                     .isInstanceOf(TableNotPartitionedException.class)
                     .hasMessageContaining("Table is partitioned");
         }
@@ -281,7 +300,11 @@ class FullScanBatchScannerITCase {
             upsert.flush();
 
             // run snapshotAll via BatchScanner
-            List<InternalRow> rows = ((org.apache.fluss.client.table.scanner.TableScan) table.newScan()).createBatchScanner().snapshotAll().get();
+            List<InternalRow> rows =
+                    ((org.apache.fluss.client.table.scanner.TableScan) table.newScan())
+                            .createBatchScanner()
+                            .snapshotAll()
+                            .get();
 
             // verify size and key coverage
             assertThat(rows).hasSize(total);

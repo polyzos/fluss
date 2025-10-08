@@ -48,11 +48,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 /**
- * BatchScanner that performs a FULL_SCAN snapshot across all leaders of a KV table (optionally a
+ * BatchScanner that performs a FULL_SCAN snapshot across all leaders of a KV table (or a
  * single partition) and exposes the result via pollBatch in a bounded fashion.
- *
- * <p>This moves the snapshotAll/snapshotAllPartition functionality previously implemented in
- * PrimaryKeyLookuper into a batch scanner form.
  */
 @Internal
 public class FullScanBatchScanner implements BatchScanner {
@@ -104,30 +101,31 @@ public class FullScanBatchScanner implements BatchScanner {
                 if (gateway == null) {
                     rowsFuture.completeExceptionally(
                             new IllegalStateException(
-                                    "Leader server " + leader + " is not found in metadata cache."));
+                                    "Leader server "
+                                            + leader
+                                            + " is not found in metadata cache."));
                     return;
                 }
                 FullScanRequest request = new FullScanRequest();
                 request.setTableId(tableId);
-                // bucket_id is required by the protocol, ignored by server for FULL_SCAN
                 request.setBucketId(0);
+
                 if (partitionId != null) {
                     request.setPartitionId(partitionId);
                 }
                 responseFutures.add(gateway.fullScan(request));
             }
 
-            CompletableFuture
-                            .allOf(responseFutures.toArray(new CompletableFuture[0]))
-                            .thenApply(v -> decodeFullScanResponses(responseFutures))
-                            .whenComplete(
-                                    (rows, err) -> {
-                                        if (err != null) {
-                                            rowsFuture.completeExceptionally(err);
-                                        } else {
-                                            rowsFuture.complete(rows);
-                                        }
-                                    });
+            CompletableFuture.allOf(responseFutures.toArray(new CompletableFuture[0]))
+                    .thenApply(v -> decodeFullScanResponses(responseFutures))
+                    .whenComplete(
+                            (rows, err) -> {
+                                if (err != null) {
+                                    rowsFuture.completeExceptionally(err);
+                                } else {
+                                    rowsFuture.complete(rows);
+                                }
+                            });
         } catch (Throwable t) {
             rowsFuture.completeExceptionally(t);
         }
@@ -177,7 +175,6 @@ public class FullScanBatchScanner implements BatchScanner {
             }
             throw new IOException("Failed to perform full scan", cause);
         } catch (Exception te) {
-            // timeout or interruption -> return empty iterator to indicate no data yet
             return CloseableIterator.emptyIterator();
         }
     }
@@ -187,7 +184,6 @@ public class FullScanBatchScanner implements BatchScanner {
         // nothing to close
     }
 
-    // ---- New BatchScanner API implementations ----
     @Override
     public CompletableFuture<List<InternalRow>> snapshotAll() {
         return rowsFuture;

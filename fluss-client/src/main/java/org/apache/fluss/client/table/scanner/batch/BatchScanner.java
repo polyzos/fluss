@@ -50,16 +50,17 @@ public interface BatchScanner extends Closeable {
     CloseableIterator<InternalRow> pollBatch(Duration timeout) throws IOException;
 
     /**
-     * Perform a bounded snapshot and return all rows as a single collection.
-     * Default implementation is unsupported; only specific scanners (e.g., full-scan) support it.
+     * Perform a bounded snapshot and return all rows as a single collection. Default implementation
+     * is unsupported; only specific scanners (e.g., full-scan) support it.
      */
     default CompletableFuture<List<InternalRow>> snapshotAll() {
         throw new UnsupportedOperationException("snapshotAll is not supported by this scanner.");
     }
 
     /**
-     * Perform a bounded snapshot for a specific partition and return all rows as a single collection.
-     * Default implementation is unsupported; only specific scanners (e.g., full-scan) support it.
+     * Perform a bounded snapshot for a specific partition and return all rows as a single
+     * collection. Default implementation is unsupported; only specific scanners (e.g., full-scan)
+     * support it.
      */
     default CompletableFuture<List<InternalRow>> snapshotAllPartition(String partitionName) {
         throw new UnsupportedOperationException(

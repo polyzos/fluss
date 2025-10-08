@@ -21,25 +21,24 @@ import org.apache.fluss.client.FlussConnection;
 import org.apache.fluss.client.admin.Admin;
 import org.apache.fluss.client.metadata.KvSnapshotMetadata;
 import org.apache.fluss.client.table.scanner.batch.BatchScanner;
+import org.apache.fluss.client.table.scanner.batch.FullScanBatchScanner;
 import org.apache.fluss.client.table.scanner.batch.KvSnapshotBatchScanner;
 import org.apache.fluss.client.table.scanner.batch.LimitBatchScanner;
-import org.apache.fluss.client.table.scanner.batch.FullScanBatchScanner;
 import org.apache.fluss.client.table.scanner.log.LogScanner;
 import org.apache.fluss.client.table.scanner.log.LogScannerImpl;
 import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.exception.FlussRuntimeException;
-import org.apache.fluss.exception.TableNotPartitionedException;
 import org.apache.fluss.exception.PartitionNotExistException;
+import org.apache.fluss.exception.TableNotPartitionedException;
 import org.apache.fluss.metadata.PhysicalTablePath;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableInfo;
-import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.types.RowType;
-import java.util.concurrent.ExecutionException;
 
 import javax.annotation.Nullable;
 
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 /** API for configuring and creating {@link LogScanner} and {@link BatchScanner}. */
 public class TableScan implements Scan {
@@ -80,7 +79,9 @@ public class TableScan implements Scan {
             int index = rowType.getFieldIndex(projectedColumnNames.get(i));
             if (index < 0) {
                 throw new IllegalArgumentException(
-                        String.format("Field %s not found in table schema.", projectedColumnNames.get(i)));
+                        String.format(
+                                "Field %s not found in table schema.",
+                                projectedColumnNames.get(i)));
             }
             columnIndexes[i] = index;
         }
@@ -205,9 +206,7 @@ public class TableScan implements Scan {
         return new FullScanBatchScanner(tableInfo, conn.getMetadataUpdater(), pid);
     }
 
-    /**
-     * Create a BatchScanner that performs a FULL_SCAN over the entire (non-partitioned) table.
-     */
+    /** Create a BatchScanner that performs a FULL_SCAN over the entire (non-partitioned) table. */
     public BatchScanner createFullScanBatchScanner() {
         if (tableInfo.isPartitioned()) {
             throw new TableNotPartitionedException(
@@ -216,9 +215,7 @@ public class TableScan implements Scan {
         return new FullScanBatchScanner(tableInfo, conn.getMetadataUpdater(), null);
     }
 
-    /**
-     * Create a BatchScanner that performs a FULL_SCAN over a specific partition of the table.
-     */
+    /** Create a BatchScanner that performs a FULL_SCAN over a specific partition of the table. */
     public BatchScanner createFullScanBatchScanner(String partitionName) {
         if (!tableInfo.isPartitioned()) {
             throw new TableNotPartitionedException(
@@ -232,7 +229,8 @@ public class TableScan implements Scan {
         }
         Long pid = conn.getMetadataUpdater().getPartitionId(physical).orElse(null);
         if (pid == null) {
-            throw new IllegalStateException(String.format("Partition id not found for %s", partitionName));
+            throw new IllegalStateException(
+                    String.format("Partition id not found for %s", partitionName));
         }
         return new FullScanBatchScanner(tableInfo, conn.getMetadataUpdater(), pid);
     }
