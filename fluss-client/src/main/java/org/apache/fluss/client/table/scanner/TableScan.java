@@ -110,6 +110,15 @@ public class TableScan implements Scan {
                 tableInfo, tableBucket, conn.getMetadataUpdater(), projectedColumns, limit);
     }
 
+    /**
+     * Creates a BatchScanner that streams the entire KV RocksDB for the given bucket.
+     * This method is intended for full-table snapshot style reads of KV tables.
+     */
+    public BatchScanner createKvFullBatchScanner(TableBucket tableBucket) {
+        return new org.apache.fluss.client.table.scanner.batch.KvFullScanBatchScanner(
+                tableInfo, tableBucket, conn.getMetadataUpdater(), projectedColumns);
+    }
+
     @Override
     public BatchScanner createBatchScanner(TableBucket tableBucket, long snapshotId) {
         if (limit != null) {
@@ -135,4 +144,27 @@ public class TableScan implements Scan {
                 tableInfo.getTableConfig().getKvFormat(),
                 conn.getOrCreateRemoteFileDownloader());
     }
+
+    /**
+     * Creates a LogScanner that streams the entire KV RocksDB for the given bucket.
+     * This is useful for full-table snapshot style reads with streaming semantics.
+     */
+    public LogScanner createKvFullLogScanner(TableBucket tableBucket) {
+        org.apache.fluss.client.table.scanner.log.KvFullScanLogScanner scanner =
+                new org.apache.fluss.client.table.scanner.log.KvFullScanLogScanner(
+                        tableInfo, conn.getMetadataUpdater(), projectedColumns);
+        if (tableBucket.getPartitionId() != null) {
+            scanner.subscribe(tableBucket.getPartitionId(), tableBucket.getBucket(), LogScanner.EARLIEST_OFFSET);
+        } else {
+            scanner.subscribe(tableBucket.getBucket(), LogScanner.EARLIEST_OFFSET);
+        }
+        return scanner;
+    }
+
+    @Override
+    public LogScanner createKvValueScanner(TableBucket tableBucket) {
+        return createKvFullLogScanner(tableBucket);
+    }
 }
+
+

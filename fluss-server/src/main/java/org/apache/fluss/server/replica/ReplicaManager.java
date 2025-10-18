@@ -133,6 +133,7 @@ import static org.apache.fluss.utils.concurrent.LockUtils.inLock;
 public class ReplicaManager {
     private static final Logger LOG = LoggerFactory.getLogger(ReplicaManager.class);
 
+
     public static final String HIGH_WATERMARK_CHECKPOINT_FILE_NAME = "high-watermark-checkpoint";
     private final Configuration conf;
     private final Scheduler scheduler;
@@ -334,6 +335,14 @@ public class ReplicaManager {
                         })
                 .filter(Optional::isPresent)
                 .map(t -> (Replica) t.get());
+    }
+
+    public java.util.Optional<Replica> findOnlineReplicaByBucket(int bucketId, @javax.annotation.Nullable Long partitionId) {
+        return onlineReplicas()
+                .filter(r -> r.getTableBucket().getBucket() == bucketId
+                        && ((partitionId == null && r.getTableBucket().getPartitionId() == null)
+                        || (partitionId != null && partitionId.equals(r.getTableBucket().getPartitionId()))))
+                .findFirst();
     }
 
     private long underReplicatedCount() {

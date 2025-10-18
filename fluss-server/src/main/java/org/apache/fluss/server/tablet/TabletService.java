@@ -23,6 +23,7 @@ import org.apache.fluss.exception.UnknownTableOrBucketException;
 import org.apache.fluss.fs.FileSystem;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TablePath;
+import org.apache.fluss.record.DefaultValueRecordBatch;
 import org.apache.fluss.record.KvRecordBatch;
 import org.apache.fluss.record.MemoryLogRecords;
 import org.apache.fluss.rpc.entity.FetchLogResultForBucket;
@@ -42,6 +43,7 @@ import org.apache.fluss.rpc.messages.LookupRequest;
 import org.apache.fluss.rpc.messages.LookupResponse;
 import org.apache.fluss.rpc.messages.MetadataRequest;
 import org.apache.fluss.rpc.messages.MetadataResponse;
+import org.apache.fluss.rpc.messages.NewScanRequestPB;
 import org.apache.fluss.rpc.messages.NotifyKvSnapshotOffsetRequest;
 import org.apache.fluss.rpc.messages.NotifyKvSnapshotOffsetResponse;
 import org.apache.fluss.rpc.messages.NotifyLakeTableOffsetRequest;
@@ -56,6 +58,8 @@ import org.apache.fluss.rpc.messages.ProduceLogRequest;
 import org.apache.fluss.rpc.messages.ProduceLogResponse;
 import org.apache.fluss.rpc.messages.PutKvRequest;
 import org.apache.fluss.rpc.messages.PutKvResponse;
+import org.apache.fluss.rpc.messages.ScanRequest;
+import org.apache.fluss.rpc.messages.ScanResponse;
 import org.apache.fluss.rpc.messages.StopReplicaRequest;
 import org.apache.fluss.rpc.messages.StopReplicaResponse;
 import org.apache.fluss.rpc.messages.UpdateMetadataRequest;
@@ -74,16 +78,21 @@ import org.apache.fluss.server.log.FetchParams;
 import org.apache.fluss.server.log.ListOffsetsParam;
 import org.apache.fluss.server.metadata.TabletServerMetadataCache;
 import org.apache.fluss.server.metadata.TabletServerMetadataProvider;
+import org.apache.fluss.server.replica.Replica;
 import org.apache.fluss.server.replica.ReplicaManager;
 import org.apache.fluss.server.utils.ServerRpcMessageUtils;
 import org.apache.fluss.server.zk.ZooKeeperClient;
+import org.rocksdb.ReadOptions;
+import org.rocksdb.RocksIterator;
 
 import javax.annotation.Nullable;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -120,6 +129,30 @@ import static org.apache.fluss.server.utils.ServerRpcMessageUtils.toPrefixLookup
 
 /** An RPC Gateway service for tablet server. */
 public final class TabletService extends RpcServiceBase implements TabletServerGateway {
+
+    // Simple in-memory registry for KV full-scan scanners
+    private static final long KV_SCANNER_TTL_MS = 60_000L;
+    private static final java.util.concurrent.ConcurrentHashMap<String, KvScannerCtx> KV_SCANNERS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final class KvScannerCtx {
+        final TableBucket tableBucket;
+        final org.rocksdb.ReadOptions readOptions;
+        final org.rocksdb.RocksIterator iterator;
+        volatile long lastAccessMs;
+        KvScannerCtx(TableBucket tb, org.rocksdb.ReadOptions ro, org.rocksdb.RocksIterator it, long now) {
+            this.tableBucket = tb;
+            this.readOptions = ro;
+            this.iterator = it;
+            this.lastAccessMs = now;
+        }
+        boolean isExpired(long now) { return now - lastAccessMs > KV_SCANNER_TTL_MS; }
+        void touch(long now) { lastAccessMs = now; }
+        void close() {
+            try { readOptions.close(); } catch (Throwable ignore) {}
+            try { iterator.close(); } catch (Throwable ignore) {}
+        }
+    }
 
     private final String serviceName;
     private final ReplicaManager replicaManager;
@@ -277,6 +310,136 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 request.getLimit(),
                 value -> response.complete(makeLimitScanResponse(value)));
         return response;
+    }
+
+    @Override
+    public CompletableFuture<ScanResponse> scan(ScanRequest request) {
+        long now = System.currentTimeMillis();
+        ScanResponse resp = new ScanResponse();
+        try {
+            int batchSizeBytes = request.hasBatchSizeBytes() ? request.getBatchSizeBytes() : (1 << 20);
+            if (request.hasNewScanRequest()) {
+                NewScanRequestPB ns = request.getNewScanRequest();
+                int bucketId = ns.getBucketId();
+                Long partitionId = ns.hasPartitionId() ? ns.getPartitionId() : null;
+                // find replica by bucket and optional partition
+                Optional<Replica> optReplica =
+                        replicaManager.findOnlineReplicaByBucket(bucketId, partitionId);
+                if (optReplica.isEmpty()) {
+                    return CompletableFuture.completedFuture(
+                            resp.setHasMoreResults(false).setErrorCode(Errors.UNKNOWN_TABLE_OR_BUCKET_EXCEPTION.code()));
+                }
+                Replica replica = optReplica.get();
+
+                // authorize
+                authorizeTable(READ, replica.getTableBucket().getTableId());
+
+                // create RocksDB iterator and start from first
+                ReadOptions ro = new ReadOptions();
+                RocksIterator it =
+                        Objects.requireNonNull(replica.getKvTablet()).getRocksDBKv().newIterator(ro);
+                it.seekToFirst();
+
+                // read a batch up to the requested byte size
+                DefaultValueRecordBatch batch = readBatchFromIterator(it, batchSizeBytes);
+                boolean hasMore = it.isValid();
+
+                String id = java.util.UUID.randomUUID().toString();
+                KV_SCANNERS.put(id, new KvScannerCtx(replica.getTableBucket(), ro, it, now));
+
+                resp.setScannerId(id.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                if (batch != null) {
+                    resp.setRecords(batch.getSegment(), batch.getPosition(), batch.sizeInBytes());
+                }
+                resp.setHasMoreResults(hasMore);
+                if (!hasMore) {
+                    // cleanup immediately if already exhausted
+                    KvScannerCtx ctx = KV_SCANNERS.remove(id);
+                    if (ctx != null) ctx.close();
+                }
+                return CompletableFuture.completedFuture(resp);
+            } else if (request.hasScannerId()) {
+                String id = new String(request.getScannerId(), StandardCharsets.UTF_8);
+                KvScannerCtx ctx = KV_SCANNERS.get(id);
+                if (ctx == null || ctx.isExpired(now)) {
+                    if (ctx != null) {
+                        KV_SCANNERS.remove(id);
+                        ctx.close();
+                    }
+                    return CompletableFuture.completedFuture(
+                            resp.setHasMoreResults(false).setErrorCode(Errors.UNKNOWN_SERVER_ERROR.code()).setErrorMessage("scanner expired or unknown"));
+                }
+                ctx.touch(now);
+                DefaultValueRecordBatch batch = readBatchFromIterator(ctx.iterator, batchSizeBytes);
+                boolean hasMore = ctx.iterator.isValid();
+                if (request.hasCloseScanner() && request.isCloseScanner()) {
+                    KvScannerCtx removed = KV_SCANNERS.remove(id);
+                    if (removed != null) removed.close();
+                    hasMore = false;
+                } else if (!hasMore) {
+                    KvScannerCtx removed = KV_SCANNERS.remove(id);
+                    if (removed != null) removed.close();
+                }
+                if (batch != null) {
+                    resp.setRecords(batch.getSegment(), batch.getPosition(), batch.sizeInBytes());
+                }
+                resp.setHasMoreResults(hasMore);
+                return CompletableFuture.completedFuture(resp);
+            } else {
+                return CompletableFuture.completedFuture(
+                        resp.setHasMoreResults(false).setErrorCode(Errors.UNKNOWN_SERVER_ERROR.code()).setErrorMessage("invalid scan request"));
+            }
+        } catch (Exception e) {
+            return CompletableFuture.completedFuture(
+                    resp.setHasMoreResults(false).setErrorCode(Errors.UNKNOWN_SERVER_ERROR.code()).setErrorMessage(e.getMessage()));
+        }
+    }
+
+
+
+    /**
+     * Read a batch of values from the given RocksIterator, up to batchSizeBytes.
+     * The iterator will be advanced to the position after the last returned record.
+     */
+    private static org.apache.fluss.record.DefaultValueRecordBatch readBatchFromIterator(
+            org.rocksdb.RocksIterator iterator, int batchSizeBytes) throws Exception {
+        if (!iterator.isValid()) {
+            return null;
+        }
+        org.apache.fluss.record.DefaultValueRecordBatch.Builder builder =
+                org.apache.fluss.record.DefaultValueRecordBatch.builder();
+        int approxSize = 64;
+        final int lengthPrefix = 4;
+        boolean addedAny = false;
+        while (iterator.isValid()) {
+            byte[] v = iterator.value();
+            int next = approxSize + lengthPrefix + (v == null ? 0 : v.length);
+            if (batchSizeBytes > 0 && next > batchSizeBytes && addedAny) {
+                break;
+            }
+            builder.append(v == null ? new byte[0] : v);
+            approxSize = next;
+            addedAny = true;
+            iterator.next();
+        }
+        return builder.build();
+    }
+
+    @Override
+    public java.util.concurrent.CompletableFuture<org.apache.fluss.rpc.messages.ScannerKeepAliveResponse> scannerKeepAlive(
+            org.apache.fluss.rpc.messages.ScannerKeepAliveRequest request) {
+        long now = System.currentTimeMillis();
+        org.apache.fluss.rpc.messages.ScannerKeepAliveResponse resp = new org.apache.fluss.rpc.messages.ScannerKeepAliveResponse();
+        try {
+            String id = new String(request.getScannerId(), java.nio.charset.StandardCharsets.UTF_8);
+            KvScannerCtx ctx = KV_SCANNERS.get(id);
+            if (ctx != null) {
+                ctx.touch(now);
+            }
+            return java.util.concurrent.CompletableFuture.completedFuture(resp);
+        } catch (Exception e) {
+            return java.util.concurrent.CompletableFuture.completedFuture(resp);
+        }
     }
 
     @Override

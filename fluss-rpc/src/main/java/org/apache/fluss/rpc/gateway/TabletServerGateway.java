@@ -38,6 +38,10 @@ import org.apache.fluss.rpc.messages.NotifyRemoteLogOffsetsRequest;
 import org.apache.fluss.rpc.messages.NotifyRemoteLogOffsetsResponse;
 import org.apache.fluss.rpc.messages.PrefixLookupRequest;
 import org.apache.fluss.rpc.messages.PrefixLookupResponse;
+import org.apache.fluss.rpc.messages.ScanRequest;
+import org.apache.fluss.rpc.messages.ScanResponse;
+import org.apache.fluss.rpc.messages.ScannerKeepAliveRequest;
+import org.apache.fluss.rpc.messages.ScannerKeepAliveResponse;
 import org.apache.fluss.rpc.messages.ProduceLogRequest;
 import org.apache.fluss.rpc.messages.ProduceLogResponse;
 import org.apache.fluss.rpc.messages.PutKvRequest;
@@ -172,4 +176,16 @@ public interface TabletServerGateway extends RpcGateway, AdminReadOnlyGateway {
     @RPC(api = ApiKeys.NOTIFY_LAKE_TABLE_OFFSET)
     CompletableFuture<NotifyLakeTableOffsetResponse> notifyLakeTableOffset(
             NotifyLakeTableOffsetRequest request);
+
+    /**
+     * KV scan using the scanner-based API.
+     */
+    @RPC(api = ApiKeys.KV_SCAN)
+    CompletableFuture<ScanResponse> scan(ScanRequest request);
+
+    /**
+     * Keep a scanner alive.
+     */
+    @RPC(api = ApiKeys.KV_SCAN_HEARTBEAT)
+    CompletableFuture<ScannerKeepAliveResponse> scannerKeepAlive(ScannerKeepAliveRequest request);
 }

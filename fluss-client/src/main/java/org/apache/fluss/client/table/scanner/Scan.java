@@ -80,4 +80,10 @@ public interface Scan {
      * #limit(int)} and only support for Primary Key Tables.
      */
     BatchScanner createBatchScanner(TableBucket tableBucket, long snapshotId);
+
+    /**
+     * Creates a LogScanner that streams KV values for the given table bucket using the
+     * scanner-based KV scan API. This is intended for full KV value scans.
+     */
+    LogScanner createKvValueScanner(TableBucket tableBucket);
 }

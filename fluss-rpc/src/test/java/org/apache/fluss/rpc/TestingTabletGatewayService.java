@@ -67,6 +67,10 @@ import org.apache.fluss.rpc.messages.NotifyRemoteLogOffsetsRequest;
 import org.apache.fluss.rpc.messages.NotifyRemoteLogOffsetsResponse;
 import org.apache.fluss.rpc.messages.PrefixLookupRequest;
 import org.apache.fluss.rpc.messages.PrefixLookupResponse;
+import org.apache.fluss.rpc.messages.ScanRequest;
+import org.apache.fluss.rpc.messages.ScanResponse;
+import org.apache.fluss.rpc.messages.ScannerKeepAliveRequest;
+import org.apache.fluss.rpc.messages.ScannerKeepAliveResponse;
 import org.apache.fluss.rpc.messages.ProduceLogRequest;
 import org.apache.fluss.rpc.messages.ProduceLogResponse;
 import org.apache.fluss.rpc.messages.PutKvRequest;
@@ -248,5 +252,16 @@ public class TestingTabletGatewayService extends TestingGatewayService
     public CompletableFuture<DescribeClusterConfigsResponse> describeClusterConfigs(
             DescribeClusterConfigsRequest request) {
         return null;
+    }
+
+    @Override
+    public CompletableFuture<ScanResponse> scan(ScanRequest request) {
+        // default test stub: return empty response
+        return CompletableFuture.completedFuture(new ScanResponse().setHasMoreResults(false));
+    }
+
+    @Override
+    public CompletableFuture<ScannerKeepAliveResponse> scannerKeepAlive(ScannerKeepAliveRequest request) {
+        return CompletableFuture.completedFuture(new ScannerKeepAliveResponse());
     }
 }

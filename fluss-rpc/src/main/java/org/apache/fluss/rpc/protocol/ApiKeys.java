@@ -75,8 +75,8 @@ public enum ApiKeys {
     ALTER_TABLE(1044, 0, 0, PUBLIC),
     DESCRIBE_CLUSTER_CONFIGS(1045, 0, 0, PUBLIC),
     ALTER_CLUSTER_CONFIGS(1046, 0, 0, PUBLIC),
-    KV_SCAN(1046, 0, 0, PUBLIC),
-    KV_SCAN_HEARTBEAT(1046, 0, 0, PUBLIC);
+    KV_SCAN(1047, 0, 0, PUBLIC),
+    KV_SCAN_HEARTBEAT(1048, 0, 0, PUBLIC);
 
     private static final Map<Integer, ApiKeys> ID_TO_TYPE =
             Arrays.stream(ApiKeys.values())

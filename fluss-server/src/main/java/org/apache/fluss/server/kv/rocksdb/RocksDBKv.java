@@ -141,6 +141,14 @@ public class RocksDBKv implements AutoCloseable {
         return pkList;
     }
 
+    /**
+     * Create a new iterator over the default column family using the provided ReadOptions.
+     * Caller is responsible for closing both the returned RocksIterator and the ReadOptions.
+     */
+    public RocksIterator newIterator(ReadOptions readOptions) {
+        return db.newIterator(defaultColumnFamilyHandle, readOptions);
+    }
+
     public void put(byte[] key, byte[] value) throws IOException {
         try {
             db.put(writeOptions, key, value);
