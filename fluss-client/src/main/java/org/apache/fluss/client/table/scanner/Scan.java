@@ -63,7 +63,14 @@ public interface Scan {
      *
      * <p>Note: this API doesn't support pre-configured with {@link #limit(int)}.
      */
-    LogScanner createLogScanner();
+    org.apache.fluss.client.table.scanner.log.LogScanner<org.apache.fluss.row.InternalRow> createLogScanner();
+
+    /**
+     * Creates a typed LogScanner to continuously read log data as POJOs of the given class.
+     *
+     * <p>Note: this API doesn't support pre-configured with {@link #limit(int)}.
+     */
+    <T> org.apache.fluss.client.table.scanner.log.LogScanner<T> createLogScanner(Class<T> pojoClass);
 
     /**
      * Creates a {@link BatchScanner} to read current data in the given table bucket for this scan.

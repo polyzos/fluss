@@ -63,4 +63,10 @@ public class TableLookup implements Lookup {
                     tableInfo, metadataUpdater, lookupClient, lookupColumnNames);
         }
     }
+
+    @Override
+    public <K, R> TypedLookuper<K, R> createLookuper(Class<K> keyClass, Class<R> resultClass) {
+        Lookuper base = createLookuper();
+        return new ConvertingLookuper<>(base, keyClass, resultClass, tableInfo, lookupColumnNames);
+    }
 }

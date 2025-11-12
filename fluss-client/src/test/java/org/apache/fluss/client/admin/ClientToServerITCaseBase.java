@@ -137,7 +137,7 @@ public abstract class ClientToServerITCaseBase {
         return table.newScan().project(projectFields).createLogScanner();
     }
 
-    protected static void subscribeFromBeginning(LogScanner logScanner, Table table) {
+    protected static void subscribeFromBeginning(org.apache.fluss.client.table.scanner.log.LogScanner<?> logScanner, Table table) {
         int bucketCount = table.getTableInfo().getNumBuckets();
         for (int i = 0; i < bucketCount; i++) {
             logScanner.subscribeFromBeginning(i);
@@ -216,10 +216,10 @@ public abstract class ClientToServerITCaseBase {
                 logScanner.subscribeFromBeginning(partitionId, 0);
             }
             while (scanRecordCount < totalRecords) {
-                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
                 for (TableBucket scanBucket : scanRecords.buckets()) {
-                    List<ScanRecord> records = scanRecords.records(scanBucket);
-                    for (ScanRecord scanRecord : records) {
+                    List<ScanRecord<InternalRow>> records = scanRecords.records(scanBucket);
+                    for (ScanRecord<InternalRow> scanRecord : records) {
                         actualRows
                                 .computeIfAbsent(
                                         scanBucket.getPartitionId(), k -> new ArrayList<>())

@@ -54,7 +54,8 @@ public final class PojoToRowConverter<T> {
         this.tableSchema = tableSchema;
         this.projection = projection;
         this.projectionFieldNames = projection.getFieldNames();
-        ConverterCommons.validatePojoMatchesTable(pojoType, tableSchema);
+        // For writer path, allow POJO to be a superset of the projection. It must contain all projected fields.
+        ConverterCommons.validatePojoMatchesProjection(pojoType, projection);
         ConverterCommons.validateProjectionSubset(projection, tableSchema);
         this.fieldConverters = createFieldConverters();
     }

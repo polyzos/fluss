@@ -73,12 +73,8 @@ final class PojoType<T> {
         for (Map.Entry<String, Field> e : allFields.entrySet()) {
             String name = e.getKey();
             Field field = e.getValue();
-            if (field.getType().isPrimitive()) {
-                throw new IllegalArgumentException(
-                        String.format(
-                                "POJO class %s has primitive field '%s' of type %s. Primitive types are not allowed; all fields must be nullable (use wrapper types).",
-                                pojoClass.getName(), name, field.getType().getName()));
-            }
+            // Allow primitive types by treating them as their boxed counterparts for compatibility
+            Class<?> effectiveType = boxIfPrimitive(field.getType());
             boolean publicField = Modifier.isPublic(field.getModifiers());
             Method getter = getters.get(name);
             Method setter = setters.get(name);
@@ -95,7 +91,7 @@ final class PojoType<T> {
             props.put(
                     name,
                     new Property(
-                            name, field.getType(), publicField ? field : null, getter, setter));
+                            name, effectiveType, publicField ? field : null, getter, setter));
         }
 
         return new PojoType<>(pojoClass, ctor, props);
@@ -233,6 +229,41 @@ final class PojoType<T> {
             return s;
         }
         return s.substring(0, 1).toLowerCase(Locale.ROOT) + s.substring(1);
+    }
+
+    private static Class<?> boxIfPrimitive(Class<?> type) {
+        if (!type.isPrimitive()) {
+            return type;
+        }
+        if (type == boolean.class) {
+            return Boolean.class;
+        }
+        if (type == byte.class) {
+            return Byte.class;
+        }
+        if (type == short.class) {
+            return Short.class;
+        }
+        if (type == int.class) {
+            return Integer.class;
+        }
+        if (type == long.class) {
+            return Long.class;
+        }
+        if (type == float.class) {
+            return Float.class;
+        }
+        if (type == double.class) {
+            return Double.class;
+        }
+        if (type == char.class) {
+            return Character.class;
+        }
+        // void shouldn't appear as a field type, but handle defensively
+        if (type == void.class) {
+            return Void.class;
+        }
+        return type;
     }
 
     static final class Property {

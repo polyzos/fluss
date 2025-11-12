@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.fluss.client.table.scanner;
+package org.apache.fluss.client.table.scanner.log;
 
 import org.apache.fluss.annotation.Internal;
 import org.apache.fluss.record.ChangeType;
 
 import java.util.Objects;
 
-/** one scan record. */
-// TODO: replace this with GenericRecord in the future
+/** One typed scan record carrying a POJO value. */
 @Internal
-public class ScanRecord<T> {
+public class TypedScanRecord<T> {
     private static final long INVALID = -1L;
 
     private final long offset;
@@ -33,18 +32,17 @@ public class ScanRecord<T> {
     private final ChangeType changeType;
     private final T value;
 
-    public ScanRecord(T value) {
+    public TypedScanRecord(T value) {
         this(INVALID, INVALID, ChangeType.INSERT, value);
     }
 
-    public ScanRecord(long offset, long timestamp, ChangeType changeType, T value) {
+    public TypedScanRecord(long offset, long timestamp, ChangeType changeType, T value) {
         this.offset = offset;
         this.timestamp = timestamp;
         this.changeType = changeType;
         this.value = value;
     }
 
-    /** The position of this record in the corresponding fluss table bucket. */
     public long logOffset() {
         return offset;
     }
@@ -57,12 +55,6 @@ public class ScanRecord<T> {
         return changeType;
     }
 
-    /** Returns the carried record as InternalRow for backward compatibility. */
-    public org.apache.fluss.row.InternalRow getRow() {
-        return (org.apache.fluss.row.InternalRow) value;
-    }
-
-    /** Returns the carried record value. */
     public T getValue() {
         return value;
     }
@@ -75,10 +67,8 @@ public class ScanRecord<T> {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        ScanRecord<?> that = (ScanRecord<?>) o;
-        return offset == that.offset
-                && changeType == that.changeType
-                && Objects.equals(value, that.value);
+        TypedScanRecord<?> that = (TypedScanRecord<?>) o;
+        return offset == that.offset && changeType == that.changeType && Objects.equals(value, that.value);
     }
 
     @Override

@@ -96,4 +96,9 @@ public interface Lookup {
      * @return the lookuper
      */
     Lookuper createLookuper();
+
+    /**
+     * Creates a typed lookuper that accepts a POJO key and returns POJO result(s).
+     */
+    <K, R> TypedLookuper<K, R> createLookuper(Class<K> keyClass, Class<R> resultClass);
 }

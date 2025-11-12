@@ -25,6 +25,7 @@ import org.apache.fluss.client.table.scanner.batch.KvSnapshotBatchScanner;
 import org.apache.fluss.client.table.scanner.batch.LimitBatchScanner;
 import org.apache.fluss.client.table.scanner.log.LogScanner;
 import org.apache.fluss.client.table.scanner.log.LogScannerImpl;
+import org.apache.fluss.client.table.scanner.log.ConvertingLogScanner;
 import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.exception.FlussRuntimeException;
 import org.apache.fluss.metadata.TableBucket;
@@ -105,6 +106,12 @@ public class TableScan implements Scan {
                 conn.getClientMetricGroup(),
                 conn.getOrCreateRemoteFileDownloader(),
                 projectedColumns);
+    }
+
+    @Override
+    public <T> LogScanner<T> createLogScanner(Class<T> pojoClass) {
+        LogScanner<org.apache.fluss.row.InternalRow> base = createLogScanner();
+        return new ConvertingLogScanner<>(base, pojoClass, tableInfo, projectedColumns);
     }
 
     @Override
