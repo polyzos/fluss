@@ -129,11 +129,11 @@ public abstract class ClientToServerITCaseBase {
         return conf;
     }
 
-    protected static LogScanner createLogScanner(Table table) {
+    protected static LogScanner<InternalRow> createLogScanner(Table table) {
         return table.newScan().createLogScanner();
     }
 
-    protected static LogScanner createLogScanner(Table table, int[] projectFields) {
+    protected static LogScanner<InternalRow> createLogScanner(Table table, int[] projectFields) {
         return table.newScan().project(projectFields).createLogScanner();
     }
 
@@ -268,13 +268,13 @@ public abstract class ClientToServerITCaseBase {
         upsertWriter.upsert(row);
         upsertWriter.flush();
         // lookup this key.
-        Lookuper lookuper = table.newLookup().createLookuper();
+        Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
         ProjectedRow keyRow = ProjectedRow.from(schema.getPrimaryKeyIndexes());
         keyRow.replaceRow(row);
         assertThatRow(lookupRow(lookuper, keyRow)).withSchema(schema.getRowType()).isEqualTo(row);
     }
 
-    protected static InternalRow lookupRow(Lookuper lookuper, InternalRow keyRow) throws Exception {
+    protected static InternalRow lookupRow(Lookuper<InternalRow> lookuper, InternalRow keyRow) throws Exception {
         // lookup this key.
         return lookuper.lookup(keyRow).get().getSingletonRow();
     }

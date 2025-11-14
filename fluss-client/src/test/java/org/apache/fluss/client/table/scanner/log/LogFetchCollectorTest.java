@@ -95,7 +95,7 @@ public class LogFetchCollectorTest {
         assertThat(completedFetch.isInitialized()).isFalse();
 
         // Fetch the data and validate that we get all the records we want back.
-        Map<TableBucket, List<ScanRecord>> bucketAndRecords =
+        Map<TableBucket, List<ScanRecord<org.apache.fluss.row.InternalRow>>> bucketAndRecords =
                 logFetchCollector.collectFetch(logFetchBuffer);
         assertThat(bucketAndRecords.size()).isEqualTo(1);
         assertThat(bucketAndRecords.get(tb)).size().isEqualTo(10);
@@ -145,7 +145,7 @@ public class LogFetchCollectorTest {
         // unassign bucket 2
         logScannerStatus.unassignScanBuckets(Collections.singletonList(tb2));
 
-        Map<TableBucket, List<ScanRecord>> bucketAndRecords =
+        Map<TableBucket, List<ScanRecord<org.apache.fluss.row.InternalRow>>> bucketAndRecords =
                 logFetchCollector.collectFetch(logFetchBuffer);
         // should only contain records for bucket 1
         assertThat(bucketAndRecords.keySet()).containsExactly(tb1);

@@ -23,6 +23,8 @@ import org.apache.fluss.client.lookup.LookupResult;
 import org.apache.fluss.client.converter.PojoToRowConverter;
 import org.apache.fluss.client.converter.RowToPojoConverter;
 import org.apache.fluss.types.RowType;
+import org.apache.fluss.row.GenericRow;
+import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.client.table.scanner.Scan;
 import org.apache.fluss.client.table.scanner.ScanRecord;
 import org.apache.fluss.client.table.scanner.log.LogScanner;
@@ -309,6 +311,40 @@ public class PojoE2EITCase extends ClientToServerITCaseBase {
             LookupResult lr = lookuper.lookup(new FullPojoKey(1)).get();
             FullPojo one = rowConv.fromRow(lr.getSingletonRow());
             assertThat(one.str).isEqualTo("s1");
+        }
+    }
+
+    @Test
+    void testInternalRowLookupAlsoWorks() throws Exception {
+        Schema schema = fullPkSchema();
+        TablePath path = TablePath.of("pojo_db", "lookup_internalrow");
+        TableDescriptor td =
+                TableDescriptor.builder().schema(schema).distributedBy(2, "a").build();
+        createTable(path, td, true);
+
+        try (Table table = conn.getTable(path)) {
+            // write a couple of rows via POJO writer
+            UpsertWriter<FullPojo> writer = table.newUpsert().createWriter(FullPojo.class);
+            writer.upsert(newFullPojo(101)).get();
+            writer.upsert(newFullPojo(202)).get();
+            writer.flush();
+
+            // now perform lookup using the raw InternalRow path to ensure it's still supported
+            Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
+            RowType tableSchema = table.getTableInfo().getRowType();
+            RowType keyProjection = tableSchema.project(table.getTableInfo().getPrimaryKeys());
+
+            // Build the key row directly using GenericRow to avoid any POJO conversion
+            GenericRow keyRow = new GenericRow(keyProjection.getFieldCount());
+            keyRow.setField(0, 101); // primary key field 'a'
+
+            LookupResult lr = lookuper.lookup(keyRow).get();
+            RowToPojoConverter<FullPojo> rowConv =
+                    RowToPojoConverter.of(FullPojo.class, tableSchema, tableSchema);
+            FullPojo pojo = rowConv.fromRow(lr.getSingletonRow());
+            assertThat(pojo).isNotNull();
+            assertThat(pojo.a).isEqualTo(101);
+            assertThat(pojo.str).isEqualTo("s101");
         }
     }
 
