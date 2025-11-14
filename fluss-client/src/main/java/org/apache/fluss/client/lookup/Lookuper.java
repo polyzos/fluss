@@ -28,7 +28,7 @@ import java.util.concurrent.CompletableFuture;
  * @since 0.6
  */
 @PublicEvolving
-public interface Lookuper {
+public interface Lookuper<T> {
 
     /**
      * Lookups certain row from the given lookup key.
@@ -37,8 +37,12 @@ public interface Lookuper {
      * {@code table.newLookup().createLookuper()}), or be the prefix key if the lookuper is a Prefix
      * Key Lookuper (created by {@code table.newLookup().lookupBy(prefixKeys).createLookuper()}).
      *
-     * @param lookupKey the lookup key.
+     * <p>The key can be either an {@link org.apache.fluss.row.InternalRow} or a POJO representing
+     * the lookup key. Client-provided implementations returned by the Fluss client will handle POJO
+     * to row conversion internally when necessary.
+     *
+     * @param key the lookup key (InternalRow or POJO)
      * @return the result of lookup.
      */
-    CompletableFuture<LookupResult> lookup(InternalRow lookupKey);
+    CompletableFuture<LookupResult> lookup(T key);
 }

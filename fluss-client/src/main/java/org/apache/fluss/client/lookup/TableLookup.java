@@ -19,6 +19,7 @@ package org.apache.fluss.client.lookup;
 
 import org.apache.fluss.client.metadata.MetadataUpdater;
 import org.apache.fluss.metadata.TableInfo;
+import org.apache.fluss.row.InternalRow;
 
 import javax.annotation.Nullable;
 
@@ -55,18 +56,17 @@ public class TableLookup implements Lookup {
     }
 
     @Override
-    public Lookuper createLookuper() {
+    public <K> Lookuper<K> createLookuper() {
+        Lookuper<InternalRow> base;
         if (lookupColumnNames == null) {
-            return new PrimaryKeyLookuper(tableInfo, metadataUpdater, lookupClient);
+            base = new PrimaryKeyLookuper(tableInfo, metadataUpdater, lookupClient);
         } else {
-            return new PrefixKeyLookuper(
+            base = new PrefixKeyLookuper(
                     tableInfo, metadataUpdater, lookupClient, lookupColumnNames);
         }
-    }
-
-    @Override
-    public <K, R> TypedLookuper<K, R> createLookuper(Class<K> keyClass, Class<R> resultClass) {
-        Lookuper base = createLookuper();
-        return new ConvertingLookuper<>(base, keyClass, resultClass, tableInfo, lookupColumnNames);
+        // Wrap with a POJO-converting decorator so callers can use lookup(K) with POJOs as well.
+        @SuppressWarnings("unchecked")
+        Lookuper<K> decorated = (Lookuper<K>) new PojoConvertingLookuper<>(base, tableInfo, lookupColumnNames);
+        return decorated;
     }
 }

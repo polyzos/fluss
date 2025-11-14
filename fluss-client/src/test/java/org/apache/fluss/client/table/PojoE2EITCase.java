@@ -18,8 +18,11 @@
 package org.apache.fluss.client.table;
 
 import org.apache.fluss.client.admin.ClientToServerITCaseBase;
-import org.apache.fluss.client.lookup.TypedLookuper;
-import org.apache.fluss.client.lookup.TypedLookupResult;
+import org.apache.fluss.client.lookup.Lookuper;
+import org.apache.fluss.client.lookup.LookupResult;
+import org.apache.fluss.client.converter.PojoToRowConverter;
+import org.apache.fluss.client.converter.RowToPojoConverter;
+import org.apache.fluss.types.RowType;
 import org.apache.fluss.client.table.scanner.Scan;
 import org.apache.fluss.client.table.scanner.ScanRecord;
 import org.apache.fluss.client.table.scanner.log.LogScanner;
@@ -297,10 +300,15 @@ public class PojoE2EITCase extends ClientToServerITCaseBase {
             writer.upsert(newFullPojo(2)).get();
             writer.flush();
 
-            // primary key lookup
-            TypedLookuper<FullPojoKey, FullPojo> lookuper = table.newLookup().createLookuper(FullPojoKey.class, FullPojo.class);
-            TypedLookupResult<FullPojo> one = lookuper.lookup(new FullPojoKey(1)).get();
-            assertThat(one.getSingletonValue().str).isEqualTo("s1");
+            // primary key lookup using Lookuper API with POJO key
+            Lookuper<FullPojoKey> lookuper = table.newLookup().createLookuper();
+            RowType tableSchema = table.getTableInfo().getRowType();
+            RowToPojoConverter<FullPojo> rowConv =
+                    RowToPojoConverter.of(FullPojo.class, tableSchema, tableSchema);
+
+            LookupResult lr = lookuper.lookup(new FullPojoKey(1)).get();
+            FullPojo one = rowConv.fromRow(lr.getSingletonRow());
+            assertThat(one.str).isEqualTo("s1");
         }
     }
 
@@ -360,9 +368,13 @@ public class PojoE2EITCase extends ClientToServerITCaseBase {
             writer.upsert(patch).get();
             writer.flush();
 
-            // verify via lookup and scan
-            TypedLookuper<FullPojoKey, FullPojo> lookuper = table.newLookup().createLookuper(FullPojoKey.class, FullPojo.class);
-            FullPojo lookedUp = lookuper.lookup(new FullPojoKey(1)).get().getSingletonValue();
+            // verify via lookup and scan using Lookuper + POJO key
+            Lookuper<FullPojoKey> lookuper = table.newLookup().createLookuper();
+            RowType tableSchema = table.getTableInfo().getRowType();
+            RowToPojoConverter<FullPojo> rowConv =
+                    RowToPojoConverter.of(FullPojo.class, tableSchema, tableSchema);
+            FullPojo lookedUp = rowConv.fromRow(
+                    lookuper.lookup(new FullPojoKey(1)).get().getSingletonRow());
             assertThat(lookedUp.str).isEqualTo("second");
             assertThat(lookedUp.dec).isEqualByComparingTo("99.99");
 
