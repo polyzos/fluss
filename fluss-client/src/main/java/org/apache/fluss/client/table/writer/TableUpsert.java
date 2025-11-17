@@ -98,8 +98,7 @@ public class TableUpsert implements Upsert {
 
     @Override
     public <T> UpsertWriter<T> createWriter(Class<T> pojoClass) {
-        UpsertWriterImpl delegate =
-                new UpsertWriterImpl(tablePath, tableInfo, targetColumns, writerClient);
+        UpsertWriterImpl delegate = new UpsertWriterImpl(tablePath, tableInfo, targetColumns, writerClient);
         return new TypedUpsertWriter<>(delegate, pojoClass, tableInfo, targetColumns);
     }
 }

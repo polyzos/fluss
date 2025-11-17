@@ -23,8 +23,6 @@ import org.apache.fluss.row.GenericRow;
 import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.types.RowType;
 
-import javax.annotation.Nullable;
-
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -44,36 +42,12 @@ class TypedUpsertWriter<T> implements UpsertWriter<T> {
     private final RowType tableSchema;
     private final int[] targetColumns; // may be null
 
-    private final RowType pkProjection;
-    @Nullable private final RowType targetProjection;
-
-    private final PojoToRowConverter<T> pojoToRowConverter;
-    private final PojoToRowConverter<T> pkConverter;
-    @Nullable private final PojoToRowConverter<T> targetConverter;
-
-    TypedUpsertWriter(
-            UpsertWriterImpl delegate,
-            Class<T> pojoClass,
-            TableInfo tableInfo,
-            int[] targetColumns) {
+    TypedUpsertWriter(UpsertWriterImpl delegate, Class<T> pojoClass, TableInfo tableInfo, int[] targetColumns) {
         this.delegate = delegate;
         this.pojoClass = pojoClass;
         this.tableInfo = tableInfo;
         this.tableSchema = tableInfo.getRowType();
         this.targetColumns = targetColumns;
-
-        // Precompute projections
-        this.pkProjection = this.tableSchema.project(tableInfo.getPhysicalPrimaryKeys());
-        this.targetProjection =
-                (targetColumns == null) ? null : this.tableSchema.project(targetColumns);
-
-        // Initialize reusable converters
-        this.pojoToRowConverter = PojoToRowConverter.of(pojoClass, tableSchema, tableSchema);
-        this.pkConverter = PojoToRowConverter.of(pojoClass, tableSchema, pkProjection);
-        this.targetConverter =
-                (targetProjection == null)
-                        ? null
-                        : PojoToRowConverter.of(pojoClass, tableSchema, targetProjection);
     }
 
     @Override
@@ -81,7 +55,7 @@ class TypedUpsertWriter<T> implements UpsertWriter<T> {
         if (record instanceof InternalRow) {
             return delegate.upsert((InternalRow) record);
         }
-        InternalRow row = convertPojo(record, /*forDelete=*/ false);
+        InternalRow row = convertPojo(record, /*forDelete=*/false);
         return delegate.upsert(row);
     }
 
@@ -90,24 +64,23 @@ class TypedUpsertWriter<T> implements UpsertWriter<T> {
         if (record instanceof InternalRow) {
             return delegate.delete((InternalRow) record);
         }
-        InternalRow pkOnly = convertPojo(record, /*forDelete=*/ true);
+        InternalRow pkOnly = convertPojo(record, /*forDelete=*/true);
         return delegate.delete(pkOnly);
     }
 
     private InternalRow convertPojo(T pojo, boolean forDelete) {
-        final RowType projection;
-        final PojoToRowConverter<T> converter;
+        RowType projection;
         if (forDelete) {
-            projection = pkProjection;
-            converter = pkConverter;
-        } else if (targetProjection != null && targetConverter != null) {
-            projection = targetProjection;
-            converter = targetConverter;
+            // for delete we only need primary key columns
+            projection = tableSchema.project(tableInfo.getPhysicalPrimaryKeys());
+        } else if (targetColumns != null) {
+            projection = tableSchema.project(targetColumns);
         } else {
             projection = tableSchema;
-            converter = pojoToRowConverter;
         }
 
+        // TODO: initialize this on the constructor and reuse
+        PojoToRowConverter<T> converter = PojoToRowConverter.of(pojoClass, tableSchema, projection);
         GenericRow projected = converter.toRow(pojo);
         if (projection == tableSchema) {
             return projected;
