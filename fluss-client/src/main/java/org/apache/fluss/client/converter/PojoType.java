@@ -37,6 +37,7 @@ final class PojoType<T> {
     private final Class<T> pojoClass;
     private final Constructor<T> defaultConstructor;
     private final Map<String, Property> properties; // property name -> property
+    // Mapping of primitive types to their boxed counterparts to avoid long if-chains
     private static final Map<Class<?>, Class<?>> PRIMITIVE_TO_BOXED = createPrimitiveToBoxedMap();
 
     private PojoType(Class<T> pojoClass, Constructor<T> ctor, Map<String, Property> props) {
@@ -74,12 +75,7 @@ final class PojoType<T> {
         for (Map.Entry<String, Field> e : allFields.entrySet()) {
             String name = e.getKey();
             Field field = e.getValue();
-            // Enforce nullable fields: primitives are not allowed in POJO definitions.
-            if (field.getType().isPrimitive()) {
-                throw new IllegalArgumentException(
-                        "Primitive types are not allowed; all fields must be nullable (use wrapper types).");
-            }
-            // use boxed type as effective type
+            // Allow primitive types by treating them as their boxed counterparts for compatibility
             Class<?> effectiveType = boxIfPrimitive(field.getType());
             boolean publicField = Modifier.isPublic(field.getModifiers());
             Method getter = getters.get(name);
