@@ -176,7 +176,8 @@ class RemoteCompletedFetchTest {
         RemoteCompletedFetch completedFetch =
                 makeCompletedFetch(tableBucket, fileLogRecords, fetchOffset, null);
 
-        List<ScanRecord<InternalRow>> scanRecords = completedFetch.fetchRecords(-10);
+        List<ScanRecord<InternalRow>> scanRecords =
+                completedFetch.fetchRecords(-10);
         assertThat(scanRecords.size()).isEqualTo(0);
     }
 
@@ -193,7 +194,8 @@ class RemoteCompletedFetchTest {
         RemoteCompletedFetch completedFetch =
                 makeCompletedFetch(tableBucket, fileLogRecords, fetchOffset, null);
 
-        List<ScanRecord<InternalRow>> scanRecords = completedFetch.fetchRecords(10);
+        List<ScanRecord<InternalRow>> scanRecords =
+                completedFetch.fetchRecords(10);
         assertThat(scanRecords.size()).isEqualTo(0);
     }
 
@@ -233,7 +235,8 @@ class RemoteCompletedFetchTest {
                         fetchOffset,
                         Projection.of(new int[] {0, 2}, schema));
 
-        List<ScanRecord<InternalRow>> scanRecords = completedFetch.fetchRecords(8);
+        List<ScanRecord<InternalRow>> scanRecords =
+                completedFetch.fetchRecords(8);
         List<Object[]> expectedObjects =
                 Arrays.asList(
                         new Object[] {1, "hello"},
