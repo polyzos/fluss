@@ -77,7 +77,9 @@ final class PojoType<T> {
             // Enforce nullable fields: primitives are not allowed in POJO definitions.
             if (field.getType().isPrimitive()) {
                 throw new IllegalArgumentException(
-                        "Primitive types are not allowed; all fields must be nullable (use wrapper types).");
+                        String.format(
+                                "POJO class %s has primitive field '%s' of type %s. Primitive types are not allowed; all fields must be nullable (use wrapper types).",
+                                pojoClass.getName(), name, field.getType().getName()));
             }
             // use boxed type as effective type
             Class<?> effectiveType = boxIfPrimitive(field.getType());
