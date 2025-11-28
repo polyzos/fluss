@@ -20,6 +20,7 @@ package org.apache.fluss.client.lookup;
 import org.apache.fluss.annotation.PublicEvolving;
 
 import javax.annotation.concurrent.NotThreadSafe;
+
 import java.util.concurrent.CompletableFuture;
 
 /**
