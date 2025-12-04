@@ -233,7 +233,6 @@ public class DefaultLogRecordBatch implements LogRecordBatch {
             case INDEXED:
                 return rowRecordIterator(
                         rowType, context.getOutputProjectedRow(schemaId), timestamp);
-                return rowRecordIterator(rowType, timestamp);
             case COMPACTED:
                 return compactedRowRecordIterator(rowType, timestamp);
             default:

@@ -110,7 +110,7 @@ public class LogRecordReadContext implements LogRecordBatch.ReadContext, AutoClo
             int[] selectedFields = projection.getProjectionPositions();
             return createIndexedReadContext(rowType, schemaId, selectedFields, schemaGetter);
         } else if (logFormat == LogFormat.COMPACTED) {
-            int[] selectedFields = projection.getProjection();
+            int[] selectedFields = projection.getProjectionPositions();
             return createCompactedRowReadContext(rowType, schemaId, selectedFields);
         } else {
             throw new IllegalArgumentException("Unsupported log format: " + logFormat);
@@ -200,7 +200,7 @@ public class LogRecordReadContext implements LogRecordBatch.ReadContext, AutoClo
         FieldGetter[] fieldGetters = buildProjectedFieldGetters(rowType, selectedFields);
         // for COMPACTED log format, the projection is NEVER push downed to the server side
         return new LogRecordReadContext(
-                LogFormat.COMPACTED, rowType, schemaId, null, null, fieldGetters, false);
+                LogFormat.COMPACTED, rowType, schemaId, null, fieldGetters, false, null);
     }
 
     private LogRecordReadContext(
