@@ -227,7 +227,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
         try (Table table = conn.getTable(path)) {
             // write
             TypedAppendWriter<AllTypesPojo> writer =
-                    table.newAppend().createWriter(AllTypesPojo.class);
+                    table.newAppend().createTypedWriter(AllTypesPojo.class);
             List<AllTypesPojo> expected = new ArrayList<>();
             for (int i = 0; i < 5; i++) {
                 AllTypesPojo u = newAllTypesPojo(i);
@@ -265,7 +265,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
 
         try (Table table = conn.getTable(path)) {
             Upsert upsert = table.newUpsert();
-            TypedUpsertWriter<AllTypesPojo> writer = upsert.createWriter(AllTypesPojo.class);
+            TypedUpsertWriter<AllTypesPojo> writer = upsert.createTypedWriter(AllTypesPojo.class);
 
             AllTypesPojo p1 = newAllTypesPojo(1);
             AllTypesPojo p2 = newAllTypesPojo(2);
@@ -310,7 +310,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
 
         try (Table table = conn.getTable(path)) {
             TypedUpsertWriter<AllTypesPojo> writer =
-                    table.newUpsert().createWriter(AllTypesPojo.class);
+                    table.newUpsert().createTypedWriter(AllTypesPojo.class);
             writer.upsert(newAllTypesPojo(1)).get();
             writer.upsert(newAllTypesPojo(2)).get();
             writer.close();
@@ -338,7 +338,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
         try (Table table = conn.getTable(path)) {
             // write a couple of rows via POJO writer
             TypedUpsertWriter<AllTypesPojo> writer =
-                    table.newUpsert().createWriter(AllTypesPojo.class);
+                    table.newUpsert().createTypedWriter(AllTypesPojo.class);
             writer.upsert(newAllTypesPojo(101)).get();
             writer.upsert(newAllTypesPojo(202)).get();
             writer.close();
@@ -371,7 +371,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
 
         try (Table table = conn.getTable(path)) {
             TypedAppendWriter<AllTypesPojo> writer =
-                    table.newAppend().createWriter(AllTypesPojo.class);
+                    table.newAppend().createTypedWriter(AllTypesPojo.class);
             writer.append(newAllTypesPojo(10)).get();
             writer.append(newAllTypesPojo(11)).get();
             writer.flush();
@@ -410,7 +410,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
 
         try (Table table = conn.getTable(path)) {
             Upsert upsert = table.newUpsert().partialUpdate("a", "str", "dec");
-            TypedUpsertWriter<AllTypesPojo> writer = upsert.createWriter(AllTypesPojo.class);
+            TypedUpsertWriter<AllTypesPojo> writer = upsert.createTypedWriter(AllTypesPojo.class);
 
             // initial full row
             writer.upsert(newAllTypesPojo(1)).get();

@@ -36,5 +36,5 @@ public interface Append {
     AppendWriter createWriter();
 
     /** Create a new typed {@link AppendWriter} to write POJOs directly. */
-    <T> TypedAppendWriter<T> createWriter(Class<T> pojoClass);
+    <T> TypedAppendWriter<T> createTypedWriter(Class<T> pojoClass);
 }

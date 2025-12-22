@@ -63,5 +63,5 @@ public interface Upsert {
     UpsertWriter createWriter();
 
     /** Create a new typed {@link UpsertWriter} to write POJOs directly. */
-    <T> TypedUpsertWriter<T> createWriter(Class<T> pojoClass);
+    <T> TypedUpsertWriter<T> createTypedWriter(Class<T> pojoClass);
 }
