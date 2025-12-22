@@ -1217,9 +1217,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             List<ScanRecord> actualLogRecords = new ArrayList<>(0);
             while (actualLogRecords.size() < rows) {
                 ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord rec : scanRecords) {
-                    actualLogRecords.add(rec);
-                }
+                scanRecords.forEach(actualLogRecords::add);
             }
             logScanner.close();
             assertThat(actualLogRecords).hasSize(rows);
@@ -1388,9 +1386,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             List<ScanRecord> actualLogRecords = new ArrayList<>(rows);
             while (actualLogRecords.size() < rows) {
                 ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord rec : scanRecords) {
-                    actualLogRecords.add(rec);
-                }
+                scanRecords.forEach(actualLogRecords::add);
             }
             logScanner.close();
 

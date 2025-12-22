@@ -218,7 +218,6 @@ public class TestingMetadataUpdater extends MetadataUpdater {
                         coordinatorServer,
                         tablePathToBucketLocations,
                         tableIdByPath,
-                        Collections.emptyMap(),
-                        tableInfos);
+                        Collections.emptyMap());
     }
 }

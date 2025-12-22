@@ -569,8 +569,7 @@ class RecordAccumulatorTest {
                 new ServerNode(0, "localhost", 89, ServerType.COORDINATOR),
                 bucketsByPath,
                 tableIdByPath,
-                Collections.emptyMap(),
-                tableInfoByPath);
+                Collections.emptyMap());
     }
 
     private void delayedInterrupt(final Thread thread, final long delayMs) {

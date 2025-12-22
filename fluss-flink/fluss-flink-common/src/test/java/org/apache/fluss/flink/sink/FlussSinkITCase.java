@@ -159,9 +159,9 @@ public class FlussSinkITCase extends FlinkTestBase {
         List<RowData> rows = new ArrayList<>();
 
         while (rows.size() < inputRows.size()) {
-            ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+            ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
             for (TableBucket bucket : scanRecords.buckets()) {
-                for (ScanRecord<InternalRow> record : scanRecords.records(bucket)) {
+                for (ScanRecord record : scanRecords.records(bucket)) {
                     RowData row = converter.toFlinkRowData(record.getRow());
                     row.setRowKind(toFlinkRowKind(record.getChangeType()));
                     rows.add(row);
@@ -232,9 +232,9 @@ public class FlussSinkITCase extends FlinkTestBase {
         List<RowData> rows = new ArrayList<>();
 
         while (rows.size() < inputRows.size()) {
-            ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+            ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
             for (TableBucket bucket : scanRecords.buckets()) {
-                for (ScanRecord<InternalRow> record : scanRecords.records(bucket)) {
+                for (ScanRecord record : scanRecords.records(bucket)) {
                     RowData row = converter.toFlinkRowData(record.getRow());
                     row.setRowKind(toFlinkRowKind(record.getChangeType()));
                     rows.add(row);
@@ -288,9 +288,9 @@ public class FlussSinkITCase extends FlinkTestBase {
 
         List<TestOrder> rows = new ArrayList<>();
         while (rows.size() < orders.size()) {
-            ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+            ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
             for (TableBucket bucket : scanRecords.buckets()) {
-                for (ScanRecord<InternalRow> record : scanRecords.records(bucket)) {
+                for (ScanRecord record : scanRecords.records(bucket)) {
                     InternalRow row = record.getRow();
                     TestOrder order =
                             new TestOrder(

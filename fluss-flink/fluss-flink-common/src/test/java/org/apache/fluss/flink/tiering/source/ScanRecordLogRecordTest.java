@@ -21,7 +21,6 @@ import org.apache.fluss.client.table.scanner.ScanRecord;
 import org.apache.fluss.record.ChangeType;
 import org.apache.fluss.record.LogRecord;
 import org.apache.fluss.row.GenericRow;
-import org.apache.fluss.row.InternalRow;
 
 import org.junit.jupiter.api.Test;
 
@@ -41,7 +40,7 @@ class ScanRecordLogRecordTest {
         long offset = 1234L;
         long timestamp = 987654321L;
         ChangeType changeType = ChangeType.UPDATE_AFTER;
-        ScanRecord<InternalRow> scanRecord = new ScanRecord<>(offset, timestamp, changeType, row);
+        ScanRecord scanRecord = new ScanRecord(offset, timestamp, changeType, row);
 
         // Reflectively construct the private static inner class
         Class<?> clazz =

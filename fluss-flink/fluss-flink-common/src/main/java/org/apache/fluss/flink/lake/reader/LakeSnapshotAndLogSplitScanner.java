@@ -219,8 +219,8 @@ public class LakeSnapshotAndLogSplitScanner implements BatchScanner {
     }
 
     private void pollLogRecords(Duration timeout) {
-        ScanRecords<InternalRow> scanRecords = logScanner.poll(timeout);
-        for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+        ScanRecords scanRecords = logScanner.poll(timeout);
+        for (ScanRecord scanRecord : scanRecords) {
             boolean isDelete =
                     scanRecord.getChangeType() == ChangeType.DELETE
                             || scanRecord.getChangeType() == ChangeType.UPDATE_BEFORE;

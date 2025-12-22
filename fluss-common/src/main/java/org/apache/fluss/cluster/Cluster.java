@@ -21,7 +21,6 @@ import org.apache.fluss.annotation.Internal;
 import org.apache.fluss.exception.PartitionNotExistException;
 import org.apache.fluss.metadata.PhysicalTablePath;
 import org.apache.fluss.metadata.TableBucket;
-import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.metadata.TablePath;
 
 import javax.annotation.Nullable;
@@ -53,22 +52,19 @@ public final class Cluster {
     private final Map<Long, TablePath> pathByTableId;
     private final Map<PhysicalTablePath, Long> partitionsIdByPath;
     private final Map<Long, String> partitionNameById;
-    private final Map<TablePath, TableInfo> tableInfoByPath;
 
     public Cluster(
             Map<Integer, ServerNode> aliveTabletServersById,
             @Nullable ServerNode coordinatorServer,
             Map<PhysicalTablePath, List<BucketLocation>> bucketLocationsByPath,
             Map<TablePath, Long> tableIdByPath,
-            Map<PhysicalTablePath, Long> partitionsIdByPath,
-            Map<TablePath, TableInfo> tableInfoByPath) {
+            Map<PhysicalTablePath, Long> partitionsIdByPath) {
         this.coordinatorServer = coordinatorServer;
         this.aliveTabletServersById = Collections.unmodifiableMap(aliveTabletServersById);
         this.aliveTabletServers =
                 Collections.unmodifiableList(new ArrayList<>(aliveTabletServersById.values()));
         this.tableIdByPath = Collections.unmodifiableMap(tableIdByPath);
         this.partitionsIdByPath = Collections.unmodifiableMap(partitionsIdByPath);
-        this.tableInfoByPath = Collections.unmodifiableMap(tableInfoByPath);
 
         // Index the bucket locations by table path, and index bucket location by bucket.
         // Note that this code is performance sensitive if there are a large number of buckets,
@@ -136,8 +132,7 @@ public final class Cluster {
                 coordinatorServer,
                 newBucketLocationsByPath,
                 new HashMap<>(tableIdByPath),
-                new HashMap<>(partitionsIdByPath),
-                new HashMap<>(tableInfoByPath));
+                new HashMap<>(partitionsIdByPath));
     }
 
     @Nullable
@@ -168,21 +163,6 @@ public final class Cluster {
                                 new IllegalArgumentException(
                                         "table path not found for tableId "
                                                 + tableId
-                                                + " in cluster"));
-    }
-
-    /** Get the table info for this table path. */
-    public Optional<TableInfo> getTableInfo(TablePath tablePath) {
-        return Optional.ofNullable(tableInfoByPath.get(tablePath));
-    }
-
-    public TableInfo getTableInfoOrElseThrow(TablePath tablePath) {
-        return getTableInfo(tablePath)
-                .orElseThrow(
-                        () ->
-                                new IllegalArgumentException(
-                                        "table info not found for tablePath "
-                                                + tablePath
                                                 + " in cluster"));
     }
 
@@ -278,16 +258,11 @@ public final class Cluster {
         return partitionsIdByPath;
     }
 
-    public Map<TablePath, TableInfo> getTableInfoByPath() {
-        return tableInfoByPath;
-    }
-
     /** Create an empty cluster instance with no nodes and no table-buckets. */
     public static Cluster empty() {
         return new Cluster(
                 Collections.emptyMap(),
                 null,
-                Collections.emptyMap(),
                 Collections.emptyMap(),
                 Collections.emptyMap(),
                 Collections.emptyMap());

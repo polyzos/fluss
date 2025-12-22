@@ -21,11 +21,9 @@ import org.apache.fluss.client.table.scanner.ScanRecord;
 import org.apache.fluss.flink.source.testutils.Order;
 import org.apache.fluss.flink.source.testutils.OrderDeserializationSchema;
 import org.apache.fluss.record.ChangeType;
-import org.apache.fluss.record.LogRecord;
 import org.apache.fluss.row.BinaryString;
 import org.apache.fluss.row.Decimal;
 import org.apache.fluss.row.GenericRow;
-import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.row.TimestampLtz;
 import org.apache.fluss.row.TimestampNtz;
 import org.apache.fluss.types.DataField;
@@ -52,36 +50,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * conversion from Fluss records to various target formats.
  */
 public class FlussDeserializationSchemaTest {
-
-    /** Lightweight adapter to view a {@code ScanRecord} as a {@link LogRecord}. */
-    private static final class ScanRecordLogRecord implements LogRecord {
-        private final ScanRecord delegate;
-
-        private ScanRecordLogRecord(ScanRecord delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public long logOffset() {
-            return delegate.logOffset();
-        }
-
-        @Override
-        public long timestamp() {
-            return delegate.timestamp();
-        }
-
-        @Override
-        public ChangeType getChangeType() {
-            return delegate.getChangeType();
-        }
-
-        @Override
-        public InternalRow getRow() {
-            return delegate.getRow();
-        }
-    }
-
     @Test
     public void testDeserialize() throws Exception {
         // Create GenericRow with proper types
@@ -94,7 +62,7 @@ public class FlussDeserializationSchemaTest {
         ScanRecord scanRecord = new ScanRecord(row);
         OrderDeserializationSchema deserializer = new OrderDeserializationSchema();
 
-        Order result = deserializer.deserialize(new ScanRecordLogRecord(scanRecord));
+        Order result = deserializer.deserialize(scanRecord);
 
         assertThat(result.getOrderId()).isEqualTo(1001L);
         assertThat(result.getItemId()).isEqualTo(5001L);
@@ -113,7 +81,7 @@ public class FlussDeserializationSchemaTest {
         ScanRecord scanRecord = new ScanRecord(row);
         OrderDeserializationSchema schema = new OrderDeserializationSchema();
 
-        Order result = schema.deserialize(new ScanRecordLogRecord(scanRecord));
+        Order result = schema.deserialize(scanRecord);
 
         assertThat(result.getOrderId()).isEqualTo(1002L);
         assertThat(result.getItemId()).isEqualTo(5002L);
@@ -132,7 +100,7 @@ public class FlussDeserializationSchemaTest {
         ScanRecord scanRecord = new ScanRecord(row);
         OrderDeserializationSchema schema = new OrderDeserializationSchema();
 
-        Order result = schema.deserialize(new ScanRecordLogRecord(scanRecord));
+        Order result = schema.deserialize(scanRecord);
 
         assertThat(result.getOrderId()).isEqualTo(1003L);
         assertThat(result.getItemId()).isEqualTo(5003L);
@@ -213,8 +181,8 @@ public class FlussDeserializationSchemaTest {
         // Create deserializer
         JsonStringDeserializationSchema deserializer = new JsonStringDeserializationSchema();
         // Test deserialization
-        deserializer.open(new DeserializerInitContextImpl(null, null, rowType));
-        String result = deserializer.deserialize(new ScanRecordLogRecord(scanRecord));
+        deserializer.open(new DeserializerInitContextImpl(null, null, sourceRowType));
+        String result = deserializer.deserialize(scanRecord);
 
         String rowJson =
                 "{"
@@ -246,7 +214,7 @@ public class FlussDeserializationSchemaTest {
 
         // Verify with offset and timestamp
         ScanRecord scanRecord2 = new ScanRecord(1001, 1743261788400L, ChangeType.DELETE, row);
-        String result2 = deserializer.deserialize(new ScanRecordLogRecord(scanRecord2));
+        String result2 = deserializer.deserialize(scanRecord2);
         assertThat(result2).isNotNull();
         assertThat(result2)
                 .isEqualTo(
@@ -260,7 +228,7 @@ public class FlussDeserializationSchemaTest {
         row.setField(8, 512);
         row.setField(13, 72000000);
         ScanRecord changedRecord = new ScanRecord(row);
-        String changedResult = deserializer.deserialize(new ScanRecordLogRecord(changedRecord));
+        String changedResult = deserializer.deserialize(changedRecord);
         String changedRowJson =
                 "{"
                         + "\"char\":\"b\","
