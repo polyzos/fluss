@@ -224,10 +224,10 @@ public abstract class ClientToServerITCaseBase {
                 logScanner.subscribeFromBeginning(partitionId, 0);
             }
             while (scanRecordCount < totalRecords) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
                 for (TableBucket scanBucket : scanRecords.buckets()) {
-                    List<ScanRecord<InternalRow>> records = scanRecords.records(scanBucket);
-                    for (ScanRecord<InternalRow> scanRecord : records) {
+                    List<ScanRecord> records = scanRecords.records(scanBucket);
+                    for (ScanRecord scanRecord : records) {
                         actualRows
                                 .computeIfAbsent(
                                         scanBucket.getPartitionId(), k -> new ArrayList<>())

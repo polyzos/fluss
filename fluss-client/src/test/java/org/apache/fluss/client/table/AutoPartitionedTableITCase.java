@@ -289,10 +289,10 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
         int scanRecordCount = 0;
         Map<Long, List<InternalRow>> actualRows = new HashMap<>();
         while (scanRecordCount < expectRecordsCount) {
-            ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+            ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
             for (TableBucket scanBucket : scanRecords.buckets()) {
-                List<ScanRecord<InternalRow>> records = scanRecords.records(scanBucket);
-                for (ScanRecord<InternalRow> scanRecord : records) {
+                List<ScanRecord> records = scanRecords.records(scanBucket);
+                for (ScanRecord scanRecord : records) {
                     actualRows
                             .computeIfAbsent(scanBucket.getPartitionId(), k -> new ArrayList<>())
                             .add(scanRecord.getRow());

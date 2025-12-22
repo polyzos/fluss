@@ -18,7 +18,6 @@
 package org.apache.fluss.client.table.scanner.log;
 
 import org.apache.fluss.annotation.PublicEvolving;
-import org.apache.fluss.row.InternalRow;
 
 import java.time.Duration;
 
@@ -49,7 +48,7 @@ public interface LogScanner extends AutoCloseable {
      * @throws java.lang.IllegalStateException if the scanner is not subscribed to any buckets to
      *     read from.
      */
-    ScanRecords<InternalRow> poll(Duration timeout);
+    ScanRecords poll(Duration timeout);
 
     /**
      * Subscribe to the given table bucket in given offset dynamically. If the table bucket is

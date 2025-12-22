@@ -74,8 +74,8 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
             subscribeFromBeginning(logScanner, table);
             List<GenericRow> rowList = new ArrayList<>();
             while (rowList.size() < recordSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     rowList.add(row(row.getInt(0), row.getString(1)));
@@ -109,8 +109,8 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
             subscribeFromBeginning(logScanner, table);
             List<GenericRow> rowList = new ArrayList<>();
             while (rowList.size() < recordSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     rowList.add(row(row.getInt(0), row.getString(1)));
@@ -148,8 +148,8 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
             // should be able to poll data from all buckets
             List<GenericRow> rowList = new ArrayList<>();
             while (rowList.size() < recordSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     rowList.add(row(row.getInt(0), row.getString(1)));
@@ -201,8 +201,8 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
             long scanned = 0;
             long total = 0;
             while (scanned < recordSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     assertThat(scanRecord.getRow().getString(0).getSizeInBytes()).isEqualTo(10);
                     assertThat(scanRecord.getRow().getLong(1)).isEqualTo(scanned);
@@ -257,8 +257,8 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
             long scanned = 0;
             long total = 0;
             while (scanned < recordSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.INSERT);
                     assertThat(scanRecord.getRow().getString(0).getSizeInBytes()).isEqualTo(10);
                     assertThat(scanRecord.getRow().getLong(1)).isEqualTo(scanned);
@@ -333,8 +333,8 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
                     firstStartTimestamp);
             List<GenericRow> rowList = new ArrayList<>();
             while (rowList.size() < batchRecordSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     rowList.add(row(row.getInt(0), row.getString(1)));
@@ -363,8 +363,8 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
                     secondStartTimestamp);
             rowList = new ArrayList<>();
             while (rowList.size() < batchRecordSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     rowList.add(row(row.getInt(0), row.getString(1)));
@@ -424,8 +424,8 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
 
             List<InternalRow> rowList = new ArrayList<>();
             while (rowList.size() < batchRecordSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     rowList.add(row(row.getInt(0), row.getString(1)));

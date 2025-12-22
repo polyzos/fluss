@@ -23,9 +23,9 @@ import org.apache.fluss.client.lookup.LookupResult;
 import org.apache.fluss.client.lookup.Lookuper;
 import org.apache.fluss.client.lookup.TypedLookuper;
 import org.apache.fluss.client.table.scanner.Scan;
-import org.apache.fluss.client.table.scanner.ScanRecord;
-import org.apache.fluss.client.table.scanner.log.ScanRecords;
+import org.apache.fluss.client.table.scanner.TypedScanRecord;
 import org.apache.fluss.client.table.scanner.log.TypedLogScanner;
+import org.apache.fluss.client.table.scanner.log.TypedScanRecords;
 import org.apache.fluss.client.table.writer.TypedAppendWriter;
 import org.apache.fluss.client.table.writer.TypedUpsertWriter;
 import org.apache.fluss.client.table.writer.Upsert;
@@ -243,8 +243,8 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
 
             List<AllTypesPojo> actual = new ArrayList<>();
             while (actual.size() < expected.size()) {
-                ScanRecords<AllTypesPojo> recs = scanner.poll(Duration.ofSeconds(2));
-                for (ScanRecord<AllTypesPojo> r : recs) {
+                TypedScanRecords<AllTypesPojo> recs = scanner.poll(Duration.ofSeconds(2));
+                for (TypedScanRecord<AllTypesPojo> r : recs) {
                     assertThat(r.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     actual.add(r.getValue());
                 }
@@ -287,8 +287,8 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
             List<ChangeType> changes = new ArrayList<>();
             List<AllTypesPojo> values = new ArrayList<>();
             while (values.size() < 4) { // INSERT 1, INSERT 2, UPDATE_BEFORE 1, UPDATE_AFTER 1
-                ScanRecords<AllTypesPojo> recs = scanner.poll(Duration.ofSeconds(2));
-                for (ScanRecord<AllTypesPojo> r : recs) {
+                TypedScanRecords<AllTypesPojo> recs = scanner.poll(Duration.ofSeconds(2));
+                for (TypedScanRecord<AllTypesPojo> r : recs) {
                     changes.add(r.getChangeType());
                     values.add(r.getValue());
                 }
@@ -382,8 +382,8 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
                             .project(Arrays.asList("a", "str"))
                             .createTypedLogScanner(AllTypesPojo.class);
             subscribeFromBeginning(scanner, table);
-            ScanRecords<AllTypesPojo> recs = scanner.poll(Duration.ofSeconds(2));
-            for (ScanRecord<AllTypesPojo> r : recs) {
+            TypedScanRecords<AllTypesPojo> recs = scanner.poll(Duration.ofSeconds(2));
+            for (TypedScanRecord<AllTypesPojo> r : recs) {
                 AllTypesPojo u = r.getValue();
                 assertThat(u.a).isNotNull();
                 assertThat(u.str).isNotNull();
@@ -419,7 +419,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
             AllTypesPojo patch = new AllTypesPojo();
             patch.a = 1;
             patch.str = "second";
-            patch.dec = new java.math.BigDecimal("99.99");
+            patch.dec = new BigDecimal("99.99");
             writer.upsert(patch).get();
             writer.close();
 
@@ -439,8 +439,8 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
             subscribeFromBeginning(scanner, table);
             boolean sawUpdateAfter = false;
             while (!sawUpdateAfter) {
-                ScanRecords<AllTypesPojo> recs = scanner.poll(Duration.ofSeconds(2));
-                for (ScanRecord<AllTypesPojo> r : recs) {
+                TypedScanRecords<AllTypesPojo> recs = scanner.poll(Duration.ofSeconds(2));
+                for (TypedScanRecord<AllTypesPojo> r : recs) {
                     if (r.getChangeType() == ChangeType.UPDATE_AFTER) {
                         assertThat(r.getValue().str).isEqualTo("second");
                         sawUpdateAfter = true;

@@ -53,11 +53,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class FlussDeserializationSchemaTest {
 
-    /** Lightweight adapter to view a {@code ScanRecord<InternalRow>} as a {@link LogRecord}. */
+    /** Lightweight adapter to view a {@code ScanRecord} as a {@link LogRecord}. */
     private static final class ScanRecordLogRecord implements LogRecord {
-        private final ScanRecord<InternalRow> delegate;
+        private final ScanRecord delegate;
 
-        private ScanRecordLogRecord(ScanRecord<InternalRow> delegate) {
+        private ScanRecordLogRecord(ScanRecord delegate) {
             this.delegate = delegate;
         }
 
@@ -91,7 +91,7 @@ public class FlussDeserializationSchemaTest {
         row.setField(2, 3);
         row.setField(3, BinaryString.fromString("123 Main St"));
 
-        ScanRecord<InternalRow> scanRecord = new ScanRecord<>(row);
+        ScanRecord scanRecord = new ScanRecord(row);
         OrderDeserializationSchema deserializer = new OrderDeserializationSchema();
 
         Order result = deserializer.deserialize(new ScanRecordLogRecord(scanRecord));
@@ -110,7 +110,7 @@ public class FlussDeserializationSchemaTest {
         row.setField(2, 4);
         row.setField(3, BinaryString.fromString("456 Oak Ave"));
 
-        ScanRecord<InternalRow> scanRecord = new ScanRecord<>(row);
+        ScanRecord scanRecord = new ScanRecord(row);
         OrderDeserializationSchema schema = new OrderDeserializationSchema();
 
         Order result = schema.deserialize(new ScanRecordLogRecord(scanRecord));
@@ -129,7 +129,7 @@ public class FlussDeserializationSchemaTest {
         row.setField(2, 5);
         row.setField(3, null);
 
-        ScanRecord<InternalRow> scanRecord = new ScanRecord<>(row);
+        ScanRecord scanRecord = new ScanRecord(row);
         OrderDeserializationSchema schema = new OrderDeserializationSchema();
 
         Order result = schema.deserialize(new ScanRecordLogRecord(scanRecord));
@@ -208,7 +208,7 @@ public class FlussDeserializationSchemaTest {
         row.setField(14, TimestampNtz.fromMillis(testTimestampInSeconds * 1000));
         row.setField(15, TimestampLtz.fromEpochMillis(testTimestampInSeconds * 1000));
         row.setField(16, null);
-        ScanRecord<InternalRow> scanRecord = new ScanRecord<>(row);
+        ScanRecord scanRecord = new ScanRecord(row);
 
         // Create deserializer
         JsonStringDeserializationSchema deserializer = new JsonStringDeserializationSchema();
@@ -245,8 +245,7 @@ public class FlussDeserializationSchemaTest {
                                 + "}");
 
         // Verify with offset and timestamp
-        ScanRecord<InternalRow> scanRecord2 =
-                new ScanRecord<>(1001, 1743261788400L, ChangeType.DELETE, row);
+        ScanRecord scanRecord2 = new ScanRecord(1001, 1743261788400L, ChangeType.DELETE, row);
         String result2 = deserializer.deserialize(new ScanRecordLogRecord(scanRecord2));
         assertThat(result2).isNotNull();
         assertThat(result2)
@@ -260,7 +259,7 @@ public class FlussDeserializationSchemaTest {
         row.setField(2, true);
         row.setField(8, 512);
         row.setField(13, 72000000);
-        ScanRecord<InternalRow> changedRecord = new ScanRecord<>(row);
+        ScanRecord changedRecord = new ScanRecord(row);
         String changedResult = deserializer.deserialize(new ScanRecordLogRecord(changedRecord));
         String changedRowJson =
                 "{"

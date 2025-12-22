@@ -19,6 +19,7 @@ package org.apache.fluss.client.table.scanner.log;
 
 import org.apache.fluss.client.converter.RowToPojoConverter;
 import org.apache.fluss.client.table.scanner.ScanRecord;
+import org.apache.fluss.client.table.scanner.TypedScanRecord;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.row.InternalRow;
@@ -48,24 +49,23 @@ public class TypedLogScannerImpl<T> implements TypedLogScanner<T> {
     }
 
     @Override
-    public ScanRecords<T> poll(Duration timeout) {
-        ScanRecords<InternalRow> records = delegate.poll(timeout);
+    public TypedScanRecords<T> poll(Duration timeout) {
+        ScanRecords records = delegate.poll(timeout);
         if (records == null || records.isEmpty()) {
-            return ScanRecords.empty();
+            return TypedScanRecords.empty();
         }
-        Map<TableBucket, List<ScanRecord<T>>> out = new HashMap<>();
+        Map<TableBucket, List<TypedScanRecord<T>>> out = new HashMap<>();
         for (TableBucket bucket : records.buckets()) {
-            List<ScanRecord<InternalRow>> list = records.records(bucket);
-            List<ScanRecord<T>> converted = new ArrayList<>(list.size());
-            for (ScanRecord<InternalRow> r : list) {
-                InternalRow row = r.getValue();
+            List<ScanRecord> list = records.records(bucket);
+            List<TypedScanRecord<T>> converted = new ArrayList<>(list.size());
+            for (ScanRecord r : list) {
+                InternalRow row = r.getRow();
                 T pojo = converter.fromRow(row);
-                converted.add(
-                        new ScanRecord<>(r.logOffset(), r.timestamp(), r.getChangeType(), pojo));
+                converted.add(new TypedScanRecord<>(r, pojo));
             }
             out.put(bucket, converted);
         }
-        return new ScanRecords<>(out);
+        return new TypedScanRecords<>(out);
     }
 
     @Override

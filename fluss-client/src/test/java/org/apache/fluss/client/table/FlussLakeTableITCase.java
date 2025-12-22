@@ -328,13 +328,13 @@ class FlussLakeTableITCase {
                 }
             }
             while (scanCount < totalRows) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
                 for (TableBucket tableBucket : scanRecords.buckets()) {
                     actualRows
                             .computeIfAbsent(tableBucket, (k) -> new ArrayList<>())
                             .addAll(
                                     scanRecords.records(tableBucket).stream()
-                                            .map(ScanRecord<InternalRow>::getRow)
+                                            .map(ScanRecord::getRow)
                                             .collect(Collectors.toList()));
                 }
                 scanCount += scanRecords.count();

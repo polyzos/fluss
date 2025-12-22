@@ -103,8 +103,8 @@ public class RemoteLogScannerITCase {
         logScanner.subscribeFromBeginning(0);
         List<GenericRow> rowList = new ArrayList<>();
         while (rowList.size() < recordSize) {
-            ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-            for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+            ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+            for (ScanRecord scanRecord : scanRecords) {
                 assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                 InternalRow row = scanRecord.getRow();
                 rowList.add(row(row.getInt(0), row.getString(1)));
@@ -154,8 +154,8 @@ public class RemoteLogScannerITCase {
         logScanner.subscribeFromBeginning(0);
         int count = 0;
         while (count < expectedSize) {
-            ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-            for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+            ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+            for (ScanRecord scanRecord : scanRecords) {
                 assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                 assertThat(scanRecord.getRow().getFieldCount()).isEqualTo(2);
                 assertThat(scanRecord.getRow().getInt(0)).isEqualTo(count);
@@ -177,8 +177,8 @@ public class RemoteLogScannerITCase {
         logScanner.subscribeFromBeginning(0);
         count = 0;
         while (count < expectedSize) {
-            ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-            for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+            ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+            for (ScanRecord scanRecord : scanRecords) {
                 assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                 assertThat(scanRecord.getRow().getFieldCount()).isEqualTo(2);
                 assertThat(scanRecord.getRow().getInt(1)).isEqualTo(count);

@@ -36,7 +36,7 @@ public interface TypedLogScanner<T> extends AutoCloseable {
      * @param timeout the timeout to poll.
      * @return the result of poll.
      */
-    ScanRecords<T> poll(Duration timeout);
+    TypedScanRecords<T> poll(Duration timeout);
 
     /**
      * Subscribe to the given table bucket from beginning dynamically. If the table bucket is

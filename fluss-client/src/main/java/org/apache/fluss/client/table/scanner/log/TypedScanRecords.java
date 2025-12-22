@@ -18,7 +18,7 @@
 package org.apache.fluss.client.table.scanner.log;
 
 import org.apache.fluss.annotation.PublicEvolving;
-import org.apache.fluss.client.table.scanner.ScanRecord;
+import org.apache.fluss.client.table.scanner.TypedScanRecord;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.utils.AbstractIterator;
 
@@ -29,21 +29,23 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * A container that holds the list {@link ScanRecord} per bucket for a particular table. There is
- * one {@link ScanRecord} list for every bucket returned by a {@link
- * LogScanner#poll(java.time.Duration)} operation.
+ * A container that holds the list {@link TypedScanRecord} per bucket for a particular table. There
+ * is one {@link TypedScanRecord} list for every bucket returned by a {@link
+ * TypedLogScanner#poll(java.time.Duration)} operation.
  *
- * @since 0.1
+ * @param <T> the type of the POJO
+ * @since 0.6
  */
 @PublicEvolving
-public class ScanRecords implements Iterable<ScanRecord> {
-    public static final ScanRecords empty() {
-        return new ScanRecords(Collections.emptyMap());
+public class TypedScanRecords<T> implements Iterable<TypedScanRecord<T>> {
+
+    public static <T> TypedScanRecords<T> empty() {
+        return new TypedScanRecords<>(Collections.emptyMap());
     }
 
-    private final Map<TableBucket, List<ScanRecord>> records;
+    private final Map<TableBucket, List<TypedScanRecord<T>>> records;
 
-    public ScanRecords(Map<TableBucket, List<ScanRecord>> records) {
+    public TypedScanRecords(Map<TableBucket, List<TypedScanRecord<T>>> records) {
         this.records = records;
     }
 
@@ -52,8 +54,8 @@ public class ScanRecords implements Iterable<ScanRecord> {
      *
      * @param scanBucket The bucket to get records for
      */
-    public List<ScanRecord> records(TableBucket scanBucket) {
-        List<ScanRecord> recs = records.get(scanBucket);
+    public List<TypedScanRecord<T>> records(TableBucket scanBucket) {
+        List<TypedScanRecord<T>> recs = records.get(scanBucket);
         if (recs == null) {
             return Collections.emptyList();
         }
@@ -73,7 +75,7 @@ public class ScanRecords implements Iterable<ScanRecord> {
     /** The number of records for all buckets. */
     public int count() {
         int count = 0;
-        for (List<ScanRecord> recs : records.values()) {
+        for (List<TypedScanRecord<T>> recs : records.values()) {
             count += recs.size();
         }
         return count;
@@ -84,25 +86,25 @@ public class ScanRecords implements Iterable<ScanRecord> {
     }
 
     @Override
-    public Iterator<ScanRecord> iterator() {
-        return new ConcatenatedIterable(records.values()).iterator();
+    public Iterator<TypedScanRecord<T>> iterator() {
+        return new ConcatenatedIterable<>(records.values()).iterator();
     }
 
-    private static class ConcatenatedIterable implements Iterable<ScanRecord> {
+    private static class ConcatenatedIterable<T> implements Iterable<TypedScanRecord<T>> {
 
-        private final Iterable<? extends Iterable<ScanRecord>> iterables;
+        private final Iterable<? extends Iterable<TypedScanRecord<T>>> iterables;
 
-        public ConcatenatedIterable(Iterable<? extends Iterable<ScanRecord>> iterables) {
+        public ConcatenatedIterable(Iterable<? extends Iterable<TypedScanRecord<T>>> iterables) {
             this.iterables = iterables;
         }
 
         @Override
-        public Iterator<ScanRecord> iterator() {
-            return new AbstractIterator<ScanRecord>() {
-                final Iterator<? extends Iterable<ScanRecord>> iters = iterables.iterator();
-                Iterator<ScanRecord> current;
+        public Iterator<TypedScanRecord<T>> iterator() {
+            return new AbstractIterator<TypedScanRecord<T>>() {
+                final Iterator<? extends Iterable<TypedScanRecord<T>>> iters = iterables.iterator();
+                Iterator<TypedScanRecord<T>> current;
 
-                public ScanRecord makeNext() {
+                public TypedScanRecord<T> makeNext() {
                     while (current == null || !current.hasNext()) {
                         if (iters.hasNext()) {
                             current = iters.next().iterator();

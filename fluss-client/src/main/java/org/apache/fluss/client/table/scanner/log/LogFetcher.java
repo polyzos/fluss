@@ -42,7 +42,6 @@ import org.apache.fluss.record.LogRecords;
 import org.apache.fluss.record.MemoryLogRecords;
 import org.apache.fluss.remote.RemoteLogFetchInfo;
 import org.apache.fluss.remote.RemoteLogSegment;
-import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.rpc.entity.FetchLogResultForBucket;
 import org.apache.fluss.rpc.gateway.TabletServerGateway;
 import org.apache.fluss.rpc.messages.FetchLogRequest;
@@ -162,7 +161,7 @@ public class LogFetcher implements Closeable {
         return !logFetchBuffer.isEmpty();
     }
 
-    public Map<TableBucket, List<ScanRecord<InternalRow>>> collectFetch() {
+    public Map<TableBucket, List<ScanRecord>> collectFetch() {
         return logFetchCollector.collectFetch(logFetchBuffer);
     }
 

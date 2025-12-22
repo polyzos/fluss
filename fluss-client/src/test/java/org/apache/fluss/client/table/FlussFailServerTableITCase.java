@@ -115,7 +115,7 @@ class FlussFailServerTableITCase extends ClientToServerITCaseBase {
             appendWriter.append(row).get();
 
             // poll data util we get one record
-            ScanRecords<InternalRow> scanRecords;
+            ScanRecords scanRecords;
             do {
                 scanRecords = logScanner.poll(Duration.ofSeconds(1));
             } while (scanRecords.isEmpty());
@@ -147,9 +147,9 @@ class FlussFailServerTableITCase extends ClientToServerITCaseBase {
         }
     }
 
-    private List<InternalRow> toRows(ScanRecords<InternalRow> scanRecords) {
+    private List<InternalRow> toRows(ScanRecords scanRecords) {
         List<InternalRow> rows = new ArrayList<>();
-        for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+        for (ScanRecord scanRecord : scanRecords) {
             rows.add(scanRecord.getRow());
         }
         return rows;

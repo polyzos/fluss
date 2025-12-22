@@ -148,8 +148,8 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             subscribeFromBeginning(logScanner, table);
             int count = 0;
             while (count < expectedSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     assertThat(row.getInt(0)).isEqualTo(1);
@@ -182,9 +182,9 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             subscribeFromBeginning(logScanner, table);
             int count = 0;
             while (count < expectedSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
                 assertThat(scanRecords.isEmpty()).isFalse();
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     InternalRow row = scanRecord.getRow();
                     assertThat(row.getInt(0)).isEqualTo(1);
@@ -222,8 +222,8 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             subscribeFromBeginning(logScanner, table);
             int count = 0;
             while (count < expectedSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.INSERT);
                     InternalRow row = scanRecord.getRow();
                     assertThat(row.getInt(0)).isEqualTo(count);
@@ -731,8 +731,8 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             subscribeFromBeginning(logScanner, table);
             InternalRow result = null;
             while (result == null) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     result = scanRecord.getRow();
                 }
@@ -812,8 +812,8 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             subscribeFromBeginning(logScanner, table);
             int count = 0;
             while (count < expectedSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     if (append) {
                         assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     } else {
@@ -873,8 +873,8 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             subscribeFromBeginning(logScanner, table);
             int count = 0;
             while (count < expectedSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     assertThat(scanRecord.getRow().getFieldCount()).isEqualTo(2);
                     assertThat(scanRecord.getRow().getInt(0)).isEqualTo(count);
@@ -896,8 +896,8 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             subscribeFromBeginning(logScanner, table);
             count = 0;
             while (count < expectedSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     assertThat(scanRecord.getRow().getFieldCount()).isEqualTo(2);
                     assertThat(scanRecord.getRow().getInt(1)).isEqualTo(count);
@@ -1214,17 +1214,17 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             LogScanner logScanner = scan.createLogScanner();
 
             logScanner.subscribeFromBeginning(0);
-            List<ScanRecord<InternalRow>> actualLogRecords = new ArrayList<>(0);
+            List<ScanRecord> actualLogRecords = new ArrayList<>(0);
             while (actualLogRecords.size() < rows) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> rec : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord rec : scanRecords) {
                     actualLogRecords.add(rec);
                 }
             }
             logScanner.close();
             assertThat(actualLogRecords).hasSize(rows);
             for (int i = 0; i < actualLogRecords.size(); i++) {
-                ScanRecord<InternalRow> scanRecord = actualLogRecords.get(i);
+                ScanRecord scanRecord = actualLogRecords.get(i);
                 assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.INSERT);
                 assertThatRow(scanRecord.getRow())
                         .withSchema(doProjection ? rowType.project(new int[] {0}) : rowType)
@@ -1271,8 +1271,8 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             subscribeFromBeginning(logScanner, table);
             int count = 0;
             while (count < expectedSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
 
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     assertThat(scanRecord.getRow().getInt(0)).isEqualTo(count);
@@ -1295,8 +1295,8 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             subscribeFromBeginning(logScanner, table);
             count = 0;
             while (count < expectedSize) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> scanRecord : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord scanRecord : scanRecords) {
                     assertThat(scanRecord.getChangeType()).isEqualTo(ChangeType.APPEND_ONLY);
                     assertThat(scanRecord.getRow().getFieldCount()).isEqualTo(2);
                     assertThat(scanRecord.getRow().getInt(0)).isEqualTo(count);
@@ -1385,10 +1385,10 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             }
             LogScanner logScanner = scan.createLogScanner();
             logScanner.subscribeFromBeginning(0);
-            List<ScanRecord<InternalRow>> actualLogRecords = new ArrayList<>(rows);
+            List<ScanRecord> actualLogRecords = new ArrayList<>(rows);
             while (actualLogRecords.size() < rows) {
-                ScanRecords<InternalRow> scanRecords = logScanner.poll(Duration.ofSeconds(1));
-                for (ScanRecord<InternalRow> rec : scanRecords) {
+                ScanRecords scanRecords = logScanner.poll(Duration.ofSeconds(1));
+                for (ScanRecord rec : scanRecords) {
                     actualLogRecords.add(rec);
                 }
             }

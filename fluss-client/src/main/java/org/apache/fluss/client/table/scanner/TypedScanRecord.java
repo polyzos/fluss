@@ -17,54 +17,51 @@
 
 package org.apache.fluss.client.table.scanner;
 
-import org.apache.fluss.annotation.Internal;
+import org.apache.fluss.annotation.PublicEvolving;
 import org.apache.fluss.record.ChangeType;
-import org.apache.fluss.record.LogRecord;
 import org.apache.fluss.row.InternalRow;
 
 import java.util.Objects;
 
-/** one scan record. */
-// TODO: replace this with GenericRecord in the future
-@Internal
-public class ScanRecord implements LogRecord {
-    private static final long INVALID = -1L;
+/**
+ * A record produced by a table scanner which contains a typed value.
+ *
+ * @param <T> The type of the value.
+ */
+@PublicEvolving
+public class TypedScanRecord<T> {
 
-    private final long offset;
-    private final long timestamp;
-    private final ChangeType changeType;
-    private final InternalRow row;
+    private final ScanRecord scanRecord;
+    private final T value;
 
-    public ScanRecord(InternalRow row) {
-        this(INVALID, INVALID, ChangeType.INSERT, row);
-    }
-
-    public ScanRecord(long offset, long timestamp, ChangeType changeType, InternalRow row) {
-        this.offset = offset;
-        this.timestamp = timestamp;
-        this.changeType = changeType;
-        this.row = row;
+    public TypedScanRecord(ScanRecord scanRecord, T value) {
+        this.scanRecord = scanRecord;
+        this.value = value;
     }
 
     /** The position of this record in the corresponding fluss table bucket. */
-    @Override
     public long logOffset() {
-        return offset;
+        return scanRecord.logOffset();
     }
 
-    @Override
+    /** The timestamp of this record. */
     public long timestamp() {
-        return timestamp;
+        return scanRecord.timestamp();
     }
 
-    @Override
+    /** The change type of this record. */
     public ChangeType getChangeType() {
-        return changeType;
+        return scanRecord.getChangeType();
     }
 
-    @Override
+    /** Returns the record value. */
+    public T getValue() {
+        return value;
+    }
+
+    /** Returns the internal row of this record. */
     public InternalRow getRow() {
-        return row;
+        return scanRecord.getRow();
     }
 
     @Override
@@ -75,19 +72,17 @@ public class ScanRecord implements LogRecord {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        ScanRecord that = (ScanRecord) o;
-        return offset == that.offset
-                && changeType == that.changeType
-                && Objects.equals(row, that.row);
+        TypedScanRecord<?> that = (TypedScanRecord<?>) o;
+        return Objects.equals(scanRecord, that.scanRecord) && Objects.equals(value, that.value);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(offset, changeType, row);
+        return Objects.hash(scanRecord, value);
     }
 
     @Override
     public String toString() {
-        return changeType.shortString() + row.toString() + "@" + offset;
+        return scanRecord.getChangeType().shortString() + value + "@" + scanRecord.logOffset();
     }
 }
