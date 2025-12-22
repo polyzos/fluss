@@ -93,7 +93,7 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
         }
         upsertWriter.flush();
 
-        Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
+        Lookuper lookuper = table.newLookup().createLookuper();
         // now, let's lookup the written data by look up
         for (String partition : partitionIdByNames.keySet()) {
             for (int i = 0; i < recordsPerPartition; i++) {
@@ -285,7 +285,7 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
     }
 
     private Map<Long, List<InternalRow>> pollRecords(
-            LogScanner<InternalRow> logScanner, int expectRecordsCount) {
+            LogScanner logScanner, int expectRecordsCount) {
         int scanRecordCount = 0;
         Map<Long, List<InternalRow>> actualRows = new HashMap<>();
         while (scanRecordCount < expectRecordsCount) {
@@ -308,7 +308,7 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
         createPartitionedTable(DATA1_TABLE_PATH_PK, true);
         Table table = conn.getTable(DATA1_TABLE_PATH_PK);
         String partitionName = "notExistPartition";
-        Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
+        Lookuper lookuper = table.newLookup().createLookuper();
 
         // lookup a not exist partition will return null.
         assertThat(lookuper.lookup(row(1, partitionName)).get().getSingletonRow()).isEqualTo(null);
@@ -324,7 +324,7 @@ class AutoPartitionedTableITCase extends ClientToServerITCaseBase {
                         PhysicalTablePath.of(DATA1_TABLE_PATH_PK, partitionName));
 
         // test scan a not exist partition's log
-        LogScanner<InternalRow> logScanner = table.newScan().createLogScanner();
+        LogScanner logScanner = table.newScan().createLogScanner();
         assertThatThrownBy(() -> logScanner.subscribe(100L, 0, 0))
                 .isInstanceOf(PartitionNotExistException.class)
                 .hasMessageContaining("The partition id '100' does not exist");

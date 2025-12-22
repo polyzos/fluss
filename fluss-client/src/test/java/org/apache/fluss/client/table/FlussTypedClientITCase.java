@@ -21,19 +21,19 @@ import org.apache.fluss.client.admin.ClientToServerITCaseBase;
 import org.apache.fluss.client.converter.RowToPojoConverter;
 import org.apache.fluss.client.lookup.LookupResult;
 import org.apache.fluss.client.lookup.Lookuper;
+import org.apache.fluss.client.lookup.TypedLookuper;
 import org.apache.fluss.client.table.scanner.Scan;
 import org.apache.fluss.client.table.scanner.ScanRecord;
-import org.apache.fluss.client.table.scanner.log.LogScanner;
 import org.apache.fluss.client.table.scanner.log.ScanRecords;
-import org.apache.fluss.client.table.writer.AppendWriter;
+import org.apache.fluss.client.table.scanner.log.TypedLogScanner;
+import org.apache.fluss.client.table.writer.TypedAppendWriter;
+import org.apache.fluss.client.table.writer.TypedUpsertWriter;
 import org.apache.fluss.client.table.writer.Upsert;
-import org.apache.fluss.client.table.writer.UpsertWriter;
 import org.apache.fluss.metadata.Schema;
 import org.apache.fluss.metadata.TableDescriptor;
 import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.record.ChangeType;
 import org.apache.fluss.row.GenericRow;
-import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.types.DataTypes;
 import org.apache.fluss.types.RowType;
 
@@ -71,11 +71,11 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
         public String str;
         public byte[] bin;
         public byte[] bytes;
-        public java.math.BigDecimal dec;
-        public java.time.LocalDate dt;
-        public java.time.LocalTime tm;
-        public java.time.LocalDateTime tsNtz;
-        public java.time.Instant tsLtz;
+        public BigDecimal dec;
+        public LocalDate dt;
+        public LocalTime tm;
+        public LocalDateTime tsNtz;
+        public Instant tsLtz;
 
         public AllTypesPojo() {}
 
@@ -92,11 +92,11 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
                 String str,
                 byte[] bin,
                 byte[] bytes,
-                java.math.BigDecimal dec,
-                java.time.LocalDate dt,
-                java.time.LocalTime tm,
-                java.time.LocalDateTime tsNtz,
-                java.time.Instant tsLtz) {
+                BigDecimal dec,
+                LocalDate dt,
+                LocalTime tm,
+                LocalDateTime tsNtz,
+                Instant tsLtz) {
             this.a = a;
             this.bool1 = bool1;
             this.tiny = tiny;
@@ -226,7 +226,8 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
 
         try (Table table = conn.getTable(path)) {
             // write
-            AppendWriter<AllTypesPojo> writer = table.newAppend().createWriter(AllTypesPojo.class);
+            TypedAppendWriter<AllTypesPojo> writer =
+                    table.newAppend().createWriter(AllTypesPojo.class);
             List<AllTypesPojo> expected = new ArrayList<>();
             for (int i = 0; i < 5; i++) {
                 AllTypesPojo u = newAllTypesPojo(i);
@@ -237,7 +238,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
 
             // read
             Scan scan = table.newScan();
-            LogScanner<AllTypesPojo> scanner = scan.createLogScanner(AllTypesPojo.class);
+            TypedLogScanner<AllTypesPojo> scanner = scan.createTypedLogScanner(AllTypesPojo.class);
             subscribeFromBeginning(scanner, table);
 
             List<AllTypesPojo> actual = new ArrayList<>();
@@ -264,7 +265,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
 
         try (Table table = conn.getTable(path)) {
             Upsert upsert = table.newUpsert();
-            UpsertWriter<AllTypesPojo> writer = upsert.createWriter(AllTypesPojo.class);
+            TypedUpsertWriter<AllTypesPojo> writer = upsert.createWriter(AllTypesPojo.class);
 
             AllTypesPojo p1 = newAllTypesPojo(1);
             AllTypesPojo p2 = newAllTypesPojo(2);
@@ -279,7 +280,8 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
             writer.flush();
 
             // scan as POJOs and verify change types and values
-            LogScanner<AllTypesPojo> scanner = table.newScan().createLogScanner(AllTypesPojo.class);
+            TypedLogScanner<AllTypesPojo> scanner =
+                    table.newScan().createTypedLogScanner(AllTypesPojo.class);
             subscribeFromBeginning(scanner, table);
 
             List<ChangeType> changes = new ArrayList<>();
@@ -307,13 +309,15 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
         createTable(path, td, true);
 
         try (Table table = conn.getTable(path)) {
-            UpsertWriter<AllTypesPojo> writer = table.newUpsert().createWriter(AllTypesPojo.class);
+            TypedUpsertWriter<AllTypesPojo> writer =
+                    table.newUpsert().createWriter(AllTypesPojo.class);
             writer.upsert(newAllTypesPojo(1)).get();
             writer.upsert(newAllTypesPojo(2)).get();
-            writer.flush();
+            writer.close();
 
             // primary key lookup using Lookuper API with POJO key
-            Lookuper<PLookupKey> lookuper = table.newLookup().createLookuper();
+            TypedLookuper<PLookupKey> lookuper =
+                    table.newLookup().createTypedLookuper(PLookupKey.class);
             RowType tableSchema = table.getTableInfo().getRowType();
             RowToPojoConverter<AllTypesPojo> rowConv =
                     RowToPojoConverter.of(AllTypesPojo.class, tableSchema, tableSchema);
@@ -333,13 +337,14 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
 
         try (Table table = conn.getTable(path)) {
             // write a couple of rows via POJO writer
-            UpsertWriter<AllTypesPojo> writer = table.newUpsert().createWriter(AllTypesPojo.class);
+            TypedUpsertWriter<AllTypesPojo> writer =
+                    table.newUpsert().createWriter(AllTypesPojo.class);
             writer.upsert(newAllTypesPojo(101)).get();
             writer.upsert(newAllTypesPojo(202)).get();
-            writer.flush();
+            writer.close();
 
             // now perform lookup using the raw InternalRow path to ensure it's still supported
-            Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
+            Lookuper lookuper = table.newLookup().createLookuper();
             RowType tableSchema = table.getTableInfo().getRowType();
             RowType keyProjection = tableSchema.project(table.getTableInfo().getPrimaryKeys());
 
@@ -365,16 +370,17 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
         createTable(path, td, true);
 
         try (Table table = conn.getTable(path)) {
-            AppendWriter<AllTypesPojo> writer = table.newAppend().createWriter(AllTypesPojo.class);
+            TypedAppendWriter<AllTypesPojo> writer =
+                    table.newAppend().createWriter(AllTypesPojo.class);
             writer.append(newAllTypesPojo(10)).get();
             writer.append(newAllTypesPojo(11)).get();
             writer.flush();
 
             // Project only a subset of fields
-            LogScanner<AllTypesPojo> scanner =
+            TypedLogScanner<AllTypesPojo> scanner =
                     table.newScan()
                             .project(Arrays.asList("a", "str"))
-                            .createLogScanner(AllTypesPojo.class);
+                            .createTypedLogScanner(AllTypesPojo.class);
             subscribeFromBeginning(scanner, table);
             ScanRecords<AllTypesPojo> recs = scanner.poll(Duration.ofSeconds(2));
             for (ScanRecord<AllTypesPojo> r : recs) {
@@ -404,7 +410,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
 
         try (Table table = conn.getTable(path)) {
             Upsert upsert = table.newUpsert().partialUpdate("a", "str", "dec");
-            UpsertWriter<AllTypesPojo> writer = upsert.createWriter(AllTypesPojo.class);
+            TypedUpsertWriter<AllTypesPojo> writer = upsert.createWriter(AllTypesPojo.class);
 
             // initial full row
             writer.upsert(newAllTypesPojo(1)).get();
@@ -415,10 +421,11 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
             patch.str = "second";
             patch.dec = new java.math.BigDecimal("99.99");
             writer.upsert(patch).get();
-            writer.flush();
+            writer.close();
 
             // verify via lookup and scan using Lookuper + POJO key
-            Lookuper<PLookupKey> lookuper = table.newLookup().createLookuper();
+            TypedLookuper<PLookupKey> lookuper =
+                    table.newLookup().createTypedLookuper(PLookupKey.class);
             RowType tableSchema = table.getTableInfo().getRowType();
             RowToPojoConverter<AllTypesPojo> rowConv =
                     RowToPojoConverter.of(AllTypesPojo.class, tableSchema, tableSchema);
@@ -427,7 +434,8 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
             assertThat(lookedUp.str).isEqualTo("second");
             assertThat(lookedUp.dec).isEqualByComparingTo("99.99");
 
-            LogScanner<AllTypesPojo> scanner = table.newScan().createLogScanner(AllTypesPojo.class);
+            TypedLogScanner<AllTypesPojo> scanner =
+                    table.newScan().createTypedLogScanner(AllTypesPojo.class);
             subscribeFromBeginning(scanner, table);
             boolean sawUpdateAfter = false;
             while (!sawUpdateAfter) {

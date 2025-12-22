@@ -20,7 +20,6 @@ package org.apache.fluss.client.lookup;
 import org.apache.fluss.client.metadata.MetadataUpdater;
 import org.apache.fluss.metadata.SchemaGetter;
 import org.apache.fluss.metadata.TableInfo;
-import org.apache.fluss.row.InternalRow;
 
 import javax.annotation.Nullable;
 
@@ -64,14 +63,17 @@ public class TableLookup implements Lookup {
     }
 
     @Override
-    public <K> Lookuper<K> createLookuper() {
-        Lookuper<InternalRow> lookuper;
+    public Lookuper createLookuper() {
         if (lookupColumnNames == null) {
             return new PrimaryKeyLookuper(tableInfo, schemaGetter, metadataUpdater, lookupClient);
         } else {
             return new PrefixKeyLookuper(
                     tableInfo, schemaGetter, metadataUpdater, lookupClient, lookupColumnNames);
         }
-        return new TypedLookuper<K>(lookuper, tableInfo, lookupColumnNames);
+    }
+
+    @Override
+    public <T> TypedLookuper<T> createTypedLookuper(Class<T> pojoClass) {
+        return new TypedLookuperImpl<>(createLookuper(), tableInfo, lookupColumnNames);
     }
 }

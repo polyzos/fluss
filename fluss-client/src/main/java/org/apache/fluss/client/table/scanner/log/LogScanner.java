@@ -18,6 +18,7 @@
 package org.apache.fluss.client.table.scanner.log;
 
 import org.apache.fluss.annotation.PublicEvolving;
+import org.apache.fluss.row.InternalRow;
 
 import java.time.Duration;
 
@@ -27,7 +28,7 @@ import java.time.Duration;
  * @since 0.1
  */
 @PublicEvolving
-public interface LogScanner<T> extends AutoCloseable {
+public interface LogScanner extends AutoCloseable {
 
     /**
      * The earliest offset to fetch from. Fluss uses "-2" to indicate fetching from log start
@@ -48,7 +49,7 @@ public interface LogScanner<T> extends AutoCloseable {
      * @throws java.lang.IllegalStateException if the scanner is not subscribed to any buckets to
      *     read from.
      */
-    ScanRecords<T> poll(Duration timeout);
+    ScanRecords<InternalRow> poll(Duration timeout);
 
     /**
      * Subscribe to the given table bucket in given offset dynamically. If the table bucket is

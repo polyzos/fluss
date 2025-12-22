@@ -17,86 +17,74 @@
 
 package org.apache.fluss.client.table.scanner.log;
 
-import org.apache.fluss.client.converter.RowToPojoConverter;
-import org.apache.fluss.client.table.scanner.ScanRecord;
-import org.apache.fluss.metadata.TableBucket;
-import org.apache.fluss.metadata.TableInfo;
-import org.apache.fluss.row.InternalRow;
-import org.apache.fluss.types.RowType;
+import org.apache.fluss.annotation.PublicEvolving;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
- * Adapter that converts {@link InternalRow} records from a {@link LogScanner} into POJOs of type T.
+ * A typed scanner is used to scan log data as POJOs of specify table from Fluss.
+ *
+ * @param <T> the type of the POJO
+ * @since 0.6
  */
-public class TypedLogScanner<T> implements LogScanner<T> {
+@PublicEvolving
+public interface TypedLogScanner<T> extends AutoCloseable {
 
-    private final LogScanner<InternalRow> delegate;
-    private final RowToPojoConverter<T> converter;
+    /**
+     * Poll log data from tablet server.
+     *
+     * @param timeout the timeout to poll.
+     * @return the result of poll.
+     */
+    ScanRecords<T> poll(Duration timeout);
 
-    public TypedLogScanner(
-            LogScanner<InternalRow> delegate,
-            Class<T> pojoClass,
-            TableInfo tableInfo,
-            int[] projectedColumns) {
-        this.delegate = delegate;
-        RowType tableSchema = tableInfo.getRowType();
-        RowType projection =
-                projectedColumns == null ? tableSchema : tableSchema.project(projectedColumns);
-        this.converter = RowToPojoConverter.of(pojoClass, tableSchema, projection);
-    }
+    /**
+     * Subscribe to the given table bucket from beginning dynamically. If the table bucket is
+     * already subscribed, the start offset will be updated.
+     *
+     * @param bucket the table bucket to subscribe.
+     */
+    void subscribeFromBeginning(int bucket);
 
-    @Override
-    public ScanRecords<T> poll(Duration timeout) {
-        ScanRecords<InternalRow> records = delegate.poll(timeout);
-        if (records == null || records.isEmpty()) {
-            return ScanRecords.empty();
-        }
-        Map<TableBucket, List<ScanRecord<T>>> out = new HashMap<>();
-        for (TableBucket bucket : records.buckets()) {
-            List<ScanRecord<InternalRow>> list = records.records(bucket);
-            List<ScanRecord<T>> converted = new ArrayList<>(list.size());
-            for (ScanRecord<InternalRow> r : list) {
-                InternalRow row = r.getValue();
-                T pojo = converter.fromRow(row);
-                converted.add(
-                        new ScanRecord<>(r.logOffset(), r.timestamp(), r.getChangeType(), pojo));
-            }
-            out.put(bucket, converted);
-        }
-        return new ScanRecords<>(out);
-    }
+    /**
+     * Subscribe to the given partitioned table bucket from beginning dynamically. If the table
+     * bucket is already subscribed, the start offset will be updated.
+     *
+     * @param partitionId the partition id of the table partition to subscribe.
+     * @param bucket the table bucket to subscribe.
+     */
+    void subscribeFromBeginning(long partitionId, int bucket);
 
-    @Override
-    public void subscribe(int bucket, long offset) {
-        delegate.subscribe(bucket, offset);
-    }
+    /**
+     * Subscribe to the given table bucket in given offset dynamically. If the table bucket is
+     * already subscribed, the offset will be updated.
+     *
+     * @param bucket the table bucket to subscribe.
+     * @param offset the offset to start from.
+     */
+    void subscribe(int bucket, long offset);
 
-    @Override
-    public void subscribe(long partitionId, int bucket, long offset) {
-        delegate.subscribe(partitionId, bucket, offset);
-    }
+    /**
+     * Subscribe to the given partitioned table bucket in given offset dynamically. If the table
+     * bucket is already subscribed, the offset will be updated.
+     *
+     * @param partitionId the partition id of the table partition to subscribe.
+     * @param bucket the table bucket to subscribe.
+     * @param offset the offset to start from.
+     */
+    void subscribe(long partitionId, int bucket, long offset);
 
-    @Override
-    public void unsubscribe(long partitionId, int bucket) {
-        delegate.unsubscribe(partitionId, bucket);
-    }
+    /**
+     * Unsubscribe from the given bucket of given partition dynamically.
+     *
+     * @param partitionId the partition id of the table partition to unsubscribe.
+     * @param bucket the table bucket to unsubscribe.
+     */
+    void unsubscribe(long partitionId, int bucket);
 
-    @Override
-    public void wakeup() {
-        delegate.wakeup();
-    }
-
-    @Override
-    public void close() {
-        try {
-            delegate.close();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
+    /**
+     * Wake up the log scanner in case the fetcher thread in log scanner is blocking in {@link
+     * #poll(Duration timeout)}.
+     */
+    void wakeup();
 }

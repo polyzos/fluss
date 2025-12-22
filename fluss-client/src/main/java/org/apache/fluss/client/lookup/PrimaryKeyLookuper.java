@@ -40,13 +40,7 @@ import static org.apache.fluss.utils.Preconditions.checkArgument;
 
 /** An implementation of {@link Lookuper} that lookups by primary key. */
 @NotThreadSafe
-class PrimaryKeyLookuper implements Lookuper<InternalRow> {
-
-    private final TableInfo tableInfo;
-
-    private final MetadataUpdater metadataUpdater;
-
-    private final LookupClient lookupClient;
+class PrimaryKeyLookuper extends AbstractLookuper implements Lookuper {
 
     private final KeyEncoder primaryKeyEncoder;
 

@@ -28,27 +28,21 @@ import java.util.concurrent.CompletableFuture;
  * @since 0.2
  */
 @PublicEvolving
-public interface UpsertWriter<T> extends TableWriter {
+public interface UpsertWriter extends TableWriter {
 
     /**
      * Inserts a record into Fluss table if it does not already exist, or updates it if it does.
      *
-     * <p>If {@code T} is {@link InternalRow}, the row will be written directly. Otherwise, the
-     * client will convert the POJO into an {@link InternalRow} using the configured converters.
-     *
      * @param record the record to upsert.
      * @return A {@link CompletableFuture} that always returns upsert result when complete normally.
      */
-    CompletableFuture<UpsertResult> upsert(T record);
+    CompletableFuture<UpsertResult> upsert(InternalRow record);
 
     /**
      * Delete a certain record from the Fluss table. The input must contain the primary key fields.
      *
-     * <p>If {@code T} is {@link InternalRow}, the row will be used directly. Otherwise, the client
-     * will extract primary key fields from the POJO using the configured converters.
-     *
      * @param record the record to delete.
      * @return A {@link CompletableFuture} that always delete result when complete normally.
      */
-    CompletableFuture<DeleteResult> delete(T record);
+    CompletableFuture<DeleteResult> delete(InternalRow record);
 }

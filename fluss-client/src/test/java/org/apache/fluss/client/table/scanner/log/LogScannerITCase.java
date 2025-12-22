@@ -70,7 +70,7 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
                 appendWriter.append(row).get();
             }
 
-            LogScanner<InternalRow> logScanner = createLogScanner(table);
+            LogScanner logScanner = createLogScanner(table);
             subscribeFromBeginning(logScanner, table);
             List<GenericRow> rowList = new ArrayList<>();
             while (rowList.size() < recordSize) {
@@ -105,7 +105,7 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
                 appendWriter.append(row).get();
             }
 
-            LogScanner<InternalRow> logScanner = createLogScanner(table);
+            LogScanner logScanner = createLogScanner(table);
             subscribeFromBeginning(logScanner, table);
             List<GenericRow> rowList = new ArrayList<>();
             while (rowList.size() < recordSize) {
@@ -136,7 +136,7 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
                 appendWriter.append(row).get();
             }
 
-            LogScanner<InternalRow> logScanner = table.newScan().createLogScanner();
+            LogScanner logScanner = table.newScan().createLogScanner();
             ExecutorService executor = Executors.newSingleThreadExecutor();
             // subscribe in thread1
             executor.submit(() -> logScanner.subscribe(0, LogScanner.EARLIEST_OFFSET)).get();
@@ -196,7 +196,7 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
             }
             appendWriter.flush();
 
-            LogScanner<InternalRow> logScanner = createLogScanner(table);
+            LogScanner logScanner = createLogScanner(table);
             subscribeFromBeginning(logScanner, table);
             long scanned = 0;
             long total = 0;
@@ -252,7 +252,7 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
             }
             upsertWriter.flush();
 
-            LogScanner<InternalRow> logScanner = createLogScanner(table);
+            LogScanner logScanner = createLogScanner(table);
             subscribeFromBeginning(logScanner, table);
             long scanned = 0;
             long total = 0;
@@ -320,7 +320,7 @@ public class LogScannerITCase extends ClientToServerITCaseBase {
             // as early as possible to avoid potential time backwards
             long secondStartTimestamp = System.currentTimeMillis();
 
-            LogScanner<InternalRow> logScanner = createLogScanner(table);
+            LogScanner logScanner = createLogScanner(table);
             // try to fetch from firstStartTimestamp, which smaller than the first batch commit
             // timestamp.
             subscribeFromTimestamp(

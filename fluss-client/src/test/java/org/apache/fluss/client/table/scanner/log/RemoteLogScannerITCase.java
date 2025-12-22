@@ -99,7 +99,7 @@ public class RemoteLogScannerITCase {
         FLUSS_CLUSTER_EXTENSION.waitUntilSomeLogSegmentsCopyToRemote(new TableBucket(tableId, 0));
 
         // test fetch.
-        LogScanner<InternalRow> logScanner = table.newScan().createLogScanner();
+        LogScanner logScanner = table.newScan().createLogScanner();
         logScanner.subscribeFromBeginning(0);
         List<GenericRow> rowList = new ArrayList<>();
         while (rowList.size() < recordSize) {
@@ -150,7 +150,7 @@ public class RemoteLogScannerITCase {
         FLUSS_CLUSTER_EXTENSION.waitUntilSomeLogSegmentsCopyToRemote(new TableBucket(tableId, 0));
 
         // test fetch.
-        LogScanner<InternalRow> logScanner = createLogScanner(table, new int[] {0, 2});
+        LogScanner logScanner = createLogScanner(table, new int[] {0, 2});
         logScanner.subscribeFromBeginning(0);
         int count = 0;
         while (count < expectedSize) {

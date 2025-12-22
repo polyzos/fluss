@@ -36,7 +36,7 @@ import java.util.List;
  * column [k STRING]:
  *
  * <pre>{@code
- * Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
+ * Lookuper lookuper = table.newLookup().createLookuper();
  * CompletableFuture<LookupResult> resultFuture = lookuper.lookup(GenericRow.of("key1"));
  * resultFuture.get().getRowList().forEach(System.out::println);
  * }</pre>
@@ -45,7 +45,7 @@ import java.util.List;
  * columns [a INT, b STRING, c BIGINT] and bucket key [a, b]:
  *
  * <pre>{@code
- * Lookuper<InternalRow> lookuper = table.newLookup().lookupBy("a", "b").createLookuper();
+ * Lookuper lookuper = table.newLookup().lookupBy("a", "b").createLookuper();
  * CompletableFuture<LookupResult> resultFuture = lookuper.lookup(GenericRow.of(1, "b1"));
  * resultFuture.get().getRowList().forEach(System.out::println);
  * }</pre>
@@ -53,7 +53,7 @@ import java.util.List;
  * <p>Example 3: Using a POJO key (conversion handled internally):
  *
  * <pre>{@code
- * Lookuper<MyKeyPojo> lookuper = table.newLookup().createLookuper();
+ * TypedLookuper<MyKeyPojo> lookuper = table.newLookup().createTypedLookuper(MyKeyPojo.class);
  * LookupResult result = lookuper.lookup(new MyKeyPojo(...)).get();
  * }</pre>
  *
@@ -99,11 +99,16 @@ public interface Lookup {
      * lookup columns. By default, the lookup columns are the primary key columns, but can be
      * changed with ({@link #lookupBy(List)}) method.
      *
-     * <p>The returned lookuper accepts generic keys of type {@code K}. If a key is a POJO, the
-     * client implementation will convert it to an {@code InternalRow} based on the table schema and
-     * the active lookup columns.
-     *
      * @return the lookuper
      */
-    <K> Lookuper<K> createLookuper();
+    Lookuper createLookuper();
+
+    /**
+     * Creates a {@link TypedLookuper} instance to lookup rows of a primary key table using POJOs.
+     *
+     * @param pojoClass the class of the POJO
+     * @param <T> the type of the POJO
+     * @return the typed lookuper
+     */
+    <T> TypedLookuper<T> createTypedLookuper(Class<T> pojoClass);
 }

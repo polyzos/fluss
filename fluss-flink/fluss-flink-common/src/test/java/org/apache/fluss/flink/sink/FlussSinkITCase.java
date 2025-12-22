@@ -149,7 +149,7 @@ public class FlussSinkITCase extends FlinkTestBase {
         env.executeAsync("Test RowData Fluss Sink");
 
         Table table = conn.getTable(new TablePath(DEFAULT_DB, pkTableName));
-        LogScanner<InternalRow> logScanner = table.newScan().createLogScanner();
+        LogScanner logScanner = table.newScan().createLogScanner();
 
         int numBuckets = table.getTableInfo().getNumBuckets();
         for (int i = 0; i < numBuckets; i++) {
@@ -222,7 +222,7 @@ public class FlussSinkITCase extends FlinkTestBase {
         env.executeAsync("Test RowData Fluss Sink");
 
         Table table = conn.getTable(new TablePath(DEFAULT_DB, logTableName));
-        LogScanner<InternalRow> logScanner = table.newScan().createLogScanner();
+        LogScanner logScanner = table.newScan().createLogScanner();
 
         int numBuckets = table.getTableInfo().getNumBuckets();
         for (int i = 0; i < numBuckets; i++) {

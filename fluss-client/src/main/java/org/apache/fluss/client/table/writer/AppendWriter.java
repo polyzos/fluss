@@ -28,16 +28,13 @@ import java.util.concurrent.CompletableFuture;
  * @since 0.2
  */
 @PublicEvolving
-public interface AppendWriter<T> extends TableWriter {
+public interface AppendWriter extends TableWriter {
 
     /**
      * Append a record into a Log Table.
      *
-     * <p>If {@code T} is {@link InternalRow}, the row will be written directly. Otherwise, the
-     * client will convert the POJO into an {@link InternalRow} using the configured converters.
-     *
      * @param record the record to append.
      * @return A {@link CompletableFuture} that always returns append result when complete normally.
      */
-    CompletableFuture<AppendResult> append(T record);
+    CompletableFuture<AppendResult> append(InternalRow record);
 }

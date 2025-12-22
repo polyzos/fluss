@@ -1,5 +1,3 @@
-package org.apache.fluss.client.lookup;
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -17,57 +15,26 @@ package org.apache.fluss.client.lookup;
  * limitations under the License.
  */
 
-import org.apache.fluss.client.converter.PojoToRowConverter;
-import org.apache.fluss.metadata.TableInfo;
-import org.apache.fluss.row.InternalRow;
-import org.apache.fluss.types.RowType;
+package org.apache.fluss.client.lookup;
 
-import javax.annotation.Nullable;
+import org.apache.fluss.annotation.PublicEvolving;
 
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Decorator for {@link Lookuper} that enables generic key lookup via {@link
- * Lookuper#lookup(Object)}. Converts POJO keys to {@link InternalRow} using existing converters
- * based on table schema and active lookup columns, and directly delegates when the key is already
- * an {@link InternalRow}.
+ * A typed lookuper performs key-based lookups against a primary key table using POJOs.
+ *
+ * @param <T> the type of the lookup key
+ * @since 0.6
  */
-final class TypedLookuper<K> implements Lookuper<K> {
+@PublicEvolving
+public interface TypedLookuper<T> {
 
-    private final Lookuper<InternalRow> delegate;
-    private final TableInfo tableInfo;
-    @Nullable private final List<String> lookupColumnNames;
-
-    TypedLookuper(
-            Lookuper<InternalRow> delegate,
-            TableInfo tableInfo,
-            @Nullable List<String> lookupColumnNames) {
-        this.delegate = delegate;
-        this.tableInfo = tableInfo;
-        this.lookupColumnNames = lookupColumnNames;
-    }
-
-    @Override
-    public CompletableFuture<LookupResult> lookup(K key) {
-        if (key == null) {
-            throw new IllegalArgumentException("key must not be null");
-        }
-        // Fast-path: already an InternalRow
-        if (key instanceof InternalRow) {
-            return delegate.lookup((InternalRow) key);
-        }
-        RowType tableSchema = tableInfo.getRowType();
-        RowType keyProjection;
-        if (lookupColumnNames == null) {
-            keyProjection = tableSchema.project(tableInfo.getPrimaryKeys());
-        } else {
-            keyProjection = tableSchema.project(lookupColumnNames);
-        }
-        @SuppressWarnings("unchecked")
-        Class<K> keyClass = (Class<K>) key.getClass();
-        PojoToRowConverter<K> keyConv = PojoToRowConverter.of(keyClass, tableSchema, keyProjection);
-        InternalRow keyRow = keyConv.toRow(key);
-        return delegate.lookup(keyRow);
-    }
+    /**
+     * Lookups certain row from the given lookup key.
+     *
+     * @param lookupKey the lookup key
+     * @return the result of lookup.
+     */
+    CompletableFuture<LookupResult> lookup(T lookupKey);
 }

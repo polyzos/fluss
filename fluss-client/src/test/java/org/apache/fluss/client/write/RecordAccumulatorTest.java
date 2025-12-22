@@ -562,12 +562,15 @@ class RecordAccumulatorTest {
 
         Map<TablePath, Long> tableIdByPath = new HashMap<>();
         tableIdByPath.put(DATA1_TABLE_PATH, DATA1_TABLE_ID);
+        Map<TablePath, TableInfo> tableInfoByPath = new HashMap<>();
+        tableInfoByPath.put(DATA1_TABLE_PATH, DATA1_TABLE_INFO);
         return new Cluster(
                 aliveTabletServersById,
                 new ServerNode(0, "localhost", 89, ServerType.COORDINATOR),
                 bucketsByPath,
                 tableIdByPath,
-                Collections.emptyMap());
+                Collections.emptyMap(),
+                tableInfoByPath);
     }
 
     private void delayedInterrupt(final Thread thread, final long delayMs) {

@@ -26,6 +26,7 @@ import org.apache.fluss.client.table.Table;
 import org.apache.fluss.client.table.scanner.ScanRecord;
 import org.apache.fluss.client.table.scanner.log.LogScanner;
 import org.apache.fluss.client.table.scanner.log.ScanRecords;
+import org.apache.fluss.client.table.scanner.log.TypedLogScanner;
 import org.apache.fluss.client.table.writer.UpsertWriter;
 import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.config.Configuration;
@@ -129,15 +130,22 @@ public abstract class ClientToServerITCaseBase {
         return conf;
     }
 
-    protected static LogScanner<InternalRow> createLogScanner(Table table) {
+    protected static LogScanner createLogScanner(Table table) {
         return table.newScan().createLogScanner();
     }
 
-    protected static LogScanner<InternalRow> createLogScanner(Table table, int[] projectFields) {
+    protected static LogScanner createLogScanner(Table table, int[] projectFields) {
         return table.newScan().project(projectFields).createLogScanner();
     }
 
-    protected static void subscribeFromBeginning(LogScanner<?> logScanner, Table table) {
+    protected static void subscribeFromBeginning(LogScanner logScanner, Table table) {
+        int bucketCount = table.getTableInfo().getNumBuckets();
+        for (int i = 0; i < bucketCount; i++) {
+            logScanner.subscribeFromBeginning(i);
+        }
+    }
+
+    protected static void subscribeFromBeginning(TypedLogScanner<?> logScanner, Table table) {
         int bucketCount = table.getTableInfo().getNumBuckets();
         for (int i = 0; i < bucketCount; i++) {
             logScanner.subscribeFromBeginning(i);
@@ -272,14 +280,13 @@ public abstract class ClientToServerITCaseBase {
         upsertWriter.upsert(row);
         upsertWriter.flush();
         // lookup this key.
-        Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
+        Lookuper lookuper = table.newLookup().createLookuper();
         ProjectedRow keyRow = ProjectedRow.from(schema.getPrimaryKeyIndexes());
         keyRow.replaceRow(row);
         assertThatRow(lookupRow(lookuper, keyRow)).withSchema(schema.getRowType()).isEqualTo(row);
     }
 
-    protected static InternalRow lookupRow(Lookuper<InternalRow> lookuper, InternalRow keyRow)
-            throws Exception {
+    protected static InternalRow lookupRow(Lookuper lookuper, InternalRow keyRow) throws Exception {
         // lookup this key.
         return lookuper.lookup(keyRow).get().getSingletonRow();
     }

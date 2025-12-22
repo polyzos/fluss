@@ -26,12 +26,12 @@ import org.apache.fluss.client.table.scanner.batch.LimitBatchScanner;
 import org.apache.fluss.client.table.scanner.log.LogScanner;
 import org.apache.fluss.client.table.scanner.log.LogScannerImpl;
 import org.apache.fluss.client.table.scanner.log.TypedLogScanner;
+import org.apache.fluss.client.table.scanner.log.TypedLogScannerImpl;
 import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.exception.FlussRuntimeException;
 import org.apache.fluss.metadata.SchemaGetter;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableInfo;
-import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.types.RowType;
 
 import javax.annotation.Nullable;
@@ -116,9 +116,9 @@ public class TableScan implements Scan {
     }
 
     @Override
-    public <T> LogScanner<T> createLogScanner(Class<T> pojoClass) {
-        LogScanner<InternalRow> base = createLogScanner();
-        return new TypedLogScanner<>(base, pojoClass, tableInfo, projectedColumns);
+    public <T> TypedLogScanner<T> createTypedLogScanner(Class<T> pojoClass) {
+        LogScanner base = createLogScanner();
+        return new TypedLogScannerImpl<>(base, pojoClass, tableInfo, projectedColumns);
     }
 
     @Override

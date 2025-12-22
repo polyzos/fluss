@@ -60,8 +60,8 @@ public interface Upsert {
      * Create a new {@link UpsertWriter} using {@code InternalRow} with the optional {@link
      * #partialUpdate(String...)} information to upsert and delete data to a Primary Key Table.
      */
-    UpsertWriter<?> createWriter();
+    UpsertWriter createWriter();
 
     /** Create a new typed {@link UpsertWriter} to write POJOs directly. */
-    <T> UpsertWriter<T> createWriter(Class<T> pojoClass);
+    <T> TypedUpsertWriter<T> createWriter(Class<T> pojoClass);
 }

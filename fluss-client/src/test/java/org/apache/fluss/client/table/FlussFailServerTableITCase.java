@@ -109,7 +109,7 @@ class FlussFailServerTableITCase extends ClientToServerITCaseBase {
         // append one row.
         GenericRow row = row(1, "a");
         try (Table table = conn.getTable(DATA1_TABLE_PATH);
-                LogScanner<InternalRow> logScanner = createLogScanner(table)) {
+                LogScanner logScanner = createLogScanner(table)) {
             subscribeFromBeginning(logScanner, table);
             AppendWriter appendWriter = table.newAppend().createWriter();
             appendWriter.append(row).get();

@@ -33,8 +33,8 @@ public interface Append {
     //  apply overwrites, etc.
 
     /** Create a new {@link AppendWriter} to write data to a Log Table using InternalRow. */
-    AppendWriter<?> createWriter();
+    AppendWriter createWriter();
 
     /** Create a new typed {@link AppendWriter} to write POJOs directly. */
-    <T> AppendWriter<T> createWriter(Class<T> pojoClass);
+    <T> TypedAppendWriter<T> createWriter(Class<T> pojoClass);
 }

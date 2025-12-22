@@ -17,42 +17,24 @@
 
 package org.apache.fluss.client.table.writer;
 
-import org.apache.fluss.client.converter.PojoToRowConverter;
-import org.apache.fluss.metadata.TableInfo;
-import org.apache.fluss.row.InternalRow;
-import org.apache.fluss.types.RowType;
+import org.apache.fluss.annotation.PublicEvolving;
 
 import java.util.concurrent.CompletableFuture;
 
 /**
- * A typed {@link AppendWriter} that converts POJOs to {@link InternalRow} and delegates to the
- * existing internal-row based writer implementation.
+ * The typed writer to write data to the log table using POJOs.
+ *
+ * @param <T> the type of the record
+ * @since 0.6
  */
-class TypedAppendWriter<T> implements AppendWriter<T> {
+@PublicEvolving
+public interface TypedAppendWriter<T> extends TableWriter {
 
-    private final AppendWriterImpl delegate;
-    private final Class<T> pojoClass;
-    private final RowType tableSchema;
-    private final PojoToRowConverter<T> pojoToRowConverter;
-
-    TypedAppendWriter(AppendWriterImpl delegate, Class<T> pojoClass, TableInfo tableInfo) {
-        this.delegate = delegate;
-        this.pojoClass = pojoClass;
-        this.tableSchema = tableInfo.getRowType();
-        this.pojoToRowConverter = PojoToRowConverter.of(pojoClass, tableSchema, tableSchema);
-    }
-
-    @Override
-    public void flush() {
-        delegate.flush();
-    }
-
-    @Override
-    public CompletableFuture<AppendResult> append(T record) {
-        if (record instanceof InternalRow) {
-            return delegate.append((InternalRow) record);
-        }
-        InternalRow row = pojoToRowConverter.toRow(record);
-        return delegate.append(row);
-    }
+    /**
+     * Append a record into a Log Table.
+     *
+     * @param record the record to append.
+     * @return A {@link CompletableFuture} that always returns append result when complete normally.
+     */
+    CompletableFuture<AppendResult> append(T record);
 }

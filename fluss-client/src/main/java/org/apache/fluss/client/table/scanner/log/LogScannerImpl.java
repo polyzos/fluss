@@ -57,7 +57,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * @since 0.1
  */
 @PublicEvolving
-public class LogScannerImpl implements LogScanner<InternalRow> {
+public class LogScannerImpl implements LogScanner {
     private static final Logger LOG = LoggerFactory.getLogger(LogScannerImpl.class);
 
     private static final long NO_CURRENT_THREAD = -1L;

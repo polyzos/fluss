@@ -144,7 +144,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             appendWriter.flush();
 
             // assert the written data
-            LogScanner<InternalRow> logScanner = createLogScanner(table);
+            LogScanner logScanner = createLogScanner(table);
             subscribeFromBeginning(logScanner, table);
             int count = 0;
             while (count < expectedSize) {
@@ -178,7 +178,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             appendWriter.flush();
 
             // assert the written data
-            LogScanner<InternalRow> logScanner = createLogScanner(table);
+            LogScanner logScanner = createLogScanner(table);
             subscribeFromBeginning(logScanner, table);
             int count = 0;
             while (count < expectedSize) {
@@ -218,7 +218,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             upsertWriter.flush();
 
             // assert the written data
-            LogScanner<InternalRow> logScanner = createLogScanner(table);
+            LogScanner logScanner = createLogScanner(table);
             subscribeFromBeginning(logScanner, table);
             int count = 0;
             while (count < expectedSize) {
@@ -467,7 +467,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
         // if you want to test the lookup for not ready table, you can comment the following line.
         waitAllReplicasReady(tableId, 10);
         Table table = conn.getTable(tablePath);
-        Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
+        Lookuper lookuper = table.newLookup().createLookuper();
         assertThat(lookupRow(lookuper, rowKey)).isNull();
     }
 
@@ -597,7 +597,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
         UpsertWriter upsertWriter =
                 table.newUpsert().partialUpdate(new int[] {0, 1}).createWriter();
         upsertWriter.upsert(row(1, "aaa", null, null)).get();
-        Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
+        Lookuper lookuper = table.newLookup().createLookuper();
 
         // check the row
         GenericRow rowKey = row(1);
@@ -696,7 +696,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
         try (Table table = conn.getTable(DATA1_TABLE_PATH_PK)) {
             UpsertWriter upsertWriter = table.newUpsert().createWriter();
             upsertWriter.upsert(row).get();
-            Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
+            Lookuper lookuper = table.newLookup().createLookuper();
 
             // lookup this key.
             IndexedRow keyRow = keyRow(DATA1_SCHEMA_PK, new Object[] {1, "a"});
@@ -727,7 +727,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             appendWriter.append(row).get();
 
             // fetch data.
-            LogScanner<InternalRow> logScanner = createLogScanner(table);
+            LogScanner logScanner = createLogScanner(table);
             subscribeFromBeginning(logScanner, table);
             InternalRow result = null;
             while (result == null) {
@@ -808,7 +808,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
 
         // fetch data.
         try (Table table = conn.getTable(DATA1_TABLE_PATH);
-                LogScanner<InternalRow> logScanner = createLogScanner(table)) {
+                LogScanner logScanner = createLogScanner(table)) {
             subscribeFromBeginning(logScanner, table);
             int count = 0;
             while (count < expectedSize) {
@@ -869,7 +869,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             }
 
             // fetch data.
-            LogScanner<InternalRow> logScanner = createLogScanner(table, new int[] {0, 2});
+            LogScanner logScanner = createLogScanner(table, new int[] {0, 2});
             subscribeFromBeginning(logScanner, table);
             int count = 0;
             while (count < expectedSize) {
@@ -1200,7 +1200,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
 
             upsertWriter.flush();
 
-            Lookuper<InternalRow> lookuper = table.newLookup().createLookuper();
+            Lookuper lookuper = table.newLookup().createLookuper();
             // now, get rows by lookup
             for (int id = 0; id < rows; id++) {
                 InternalRow gotRow = lookuper.lookup(row(id)).get().getSingletonRow();
@@ -1211,7 +1211,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             if (doProjection) {
                 scan = scan.project(new int[] {0}); // do projection.
             }
-            LogScanner<InternalRow> logScanner = scan.createLogScanner();
+            LogScanner logScanner = scan.createLogScanner();
 
             logScanner.subscribeFromBeginning(0);
             List<ScanRecord<InternalRow>> actualLogRecords = new ArrayList<>(0);
@@ -1267,7 +1267,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             }
 
             // fetch data without project.
-            LogScanner<InternalRow> logScanner = createLogScanner(table);
+            LogScanner logScanner = createLogScanner(table);
             subscribeFromBeginning(logScanner, table);
             int count = 0;
             while (count < expectedSize) {
@@ -1383,7 +1383,7 @@ class FlussTableITCase extends ClientToServerITCaseBase {
             if (doProjection) {
                 scan = scan.project(new int[] {0}); // do projection.
             }
-            LogScanner<InternalRow> logScanner = scan.createLogScanner();
+            LogScanner logScanner = scan.createLogScanner();
             logScanner.subscribeFromBeginning(0);
             List<ScanRecord<InternalRow>> actualLogRecords = new ArrayList<>(rows);
             while (actualLogRecords.size() < rows) {

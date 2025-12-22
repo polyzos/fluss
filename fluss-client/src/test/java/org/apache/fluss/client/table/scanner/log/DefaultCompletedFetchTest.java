@@ -283,7 +283,7 @@ public class DefaultCompletedFetchTest {
                         logScannerStatus,
                         true,
                         fetchOffset);
-        List<ScanRecord> scanRecords = defaultCompletedFetch.fetchRecords(3);
+        List<ScanRecord<InternalRow>> scanRecords = defaultCompletedFetch.fetchRecords(3);
         // close the read context to release arrow root resource,
         // this is important to test complex types
         defaultCompletedFetch.readContext.close();

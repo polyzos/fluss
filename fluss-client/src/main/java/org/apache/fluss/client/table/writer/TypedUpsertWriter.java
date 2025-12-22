@@ -17,117 +17,32 @@
 
 package org.apache.fluss.client.table.writer;
 
-import org.apache.fluss.client.converter.PojoToRowConverter;
-import org.apache.fluss.metadata.TableInfo;
-import org.apache.fluss.row.GenericRow;
-import org.apache.fluss.row.InternalRow;
-import org.apache.fluss.types.RowType;
-
-import javax.annotation.Nullable;
+import org.apache.fluss.annotation.PublicEvolving;
 
 import java.util.concurrent.CompletableFuture;
 
 /**
- * A typed {@link UpsertWriter} that converts POJOs to {@link InternalRow} and delegates to the
- * existing internal-row based writer implementation.
+ * The typed writer to write data to the primary key table using POJOs.
+ *
+ * @param <T> the type of the record
+ * @since 0.6
  */
-class TypedUpsertWriter<T> implements UpsertWriter<T> {
+@PublicEvolving
+public interface TypedUpsertWriter<T> extends TableWriter {
 
-    @Override
-    public void flush() {
-        delegate.flush();
-    }
+    /**
+     * Inserts a record into Fluss table if it does not already exist, or updates it if it does.
+     *
+     * @param record the record to upsert.
+     * @return A {@link CompletableFuture} that always returns upsert result when complete normally.
+     */
+    CompletableFuture<UpsertResult> upsert(T record);
 
-    private final UpsertWriterImpl delegate;
-    private final Class<T> pojoClass;
-    private final TableInfo tableInfo;
-    private final RowType tableSchema;
-    private final int[] targetColumns; // may be null
-
-    private final RowType pkProjection;
-    @Nullable private final RowType targetProjection;
-
-    private final PojoToRowConverter<T> pojoToRowConverter;
-    private final PojoToRowConverter<T> pkConverter;
-    @Nullable private final PojoToRowConverter<T> targetConverter;
-
-    TypedUpsertWriter(
-            UpsertWriterImpl delegate,
-            Class<T> pojoClass,
-            TableInfo tableInfo,
-            int[] targetColumns) {
-        this.delegate = delegate;
-        this.pojoClass = pojoClass;
-        this.tableInfo = tableInfo;
-        this.tableSchema = tableInfo.getRowType();
-        this.targetColumns = targetColumns;
-
-        // Precompute projections
-        this.pkProjection = this.tableSchema.project(tableInfo.getPhysicalPrimaryKeys());
-        this.targetProjection =
-                (targetColumns == null) ? null : this.tableSchema.project(targetColumns);
-
-        // Initialize reusable converters
-        this.pojoToRowConverter = PojoToRowConverter.of(pojoClass, tableSchema, tableSchema);
-        this.pkConverter = PojoToRowConverter.of(pojoClass, tableSchema, pkProjection);
-        this.targetConverter =
-                (targetProjection == null)
-                        ? null
-                        : PojoToRowConverter.of(pojoClass, tableSchema, targetProjection);
-    }
-
-    @Override
-    public CompletableFuture<UpsertResult> upsert(T record) {
-        if (record instanceof InternalRow) {
-            return delegate.upsert((InternalRow) record);
-        }
-        InternalRow row = convertPojo(record, /*forDelete=*/ false);
-        return delegate.upsert(row);
-    }
-
-    @Override
-    public CompletableFuture<DeleteResult> delete(T record) {
-        if (record instanceof InternalRow) {
-            return delegate.delete((InternalRow) record);
-        }
-        InternalRow pkOnly = convertPojo(record, /*forDelete=*/ true);
-        return delegate.delete(pkOnly);
-    }
-
-    private InternalRow convertPojo(T pojo, boolean forDelete) {
-        final RowType projection;
-        final PojoToRowConverter<T> converter;
-        if (forDelete) {
-            projection = pkProjection;
-            converter = pkConverter;
-        } else if (targetProjection != null && targetConverter != null) {
-            projection = targetProjection;
-            converter = targetConverter;
-        } else {
-            projection = tableSchema;
-            converter = pojoToRowConverter;
-        }
-
-        GenericRow projected = converter.toRow(pojo);
-        if (projection == tableSchema) {
-            return projected;
-        }
-        // expand projected row to full row if needed
-        GenericRow full = new GenericRow(tableSchema.getFieldCount());
-        if (forDelete) {
-            // set PK fields, others null
-            for (String pk : tableInfo.getPhysicalPrimaryKeys()) {
-                int projIndex = projection.getFieldIndex(pk);
-                int fullIndex = tableSchema.getFieldIndex(pk);
-                full.setField(fullIndex, projected.getField(projIndex));
-            }
-        } else if (targetColumns != null) {
-            for (int i = 0; i < projection.getFieldCount(); i++) {
-                String name = projection.getFieldNames().get(i);
-                int fullIdx = tableSchema.getFieldIndex(name);
-                full.setField(fullIdx, projected.getField(i));
-            }
-        }
-        return full;
-    }
+    /**
+     * Delete a certain record from the Fluss table. The input must contain the primary key fields.
+     *
+     * @param record the record to delete.
+     * @return A {@link CompletableFuture} that always delete result when complete normally.
+     */
+    CompletableFuture<DeleteResult> delete(T record);
 }

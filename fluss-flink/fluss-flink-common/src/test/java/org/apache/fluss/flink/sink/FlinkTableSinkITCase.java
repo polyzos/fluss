@@ -295,7 +295,7 @@ abstract class FlinkTableSinkITCase extends AbstractTestBase {
         Configuration clientConf = FLUSS_CLUSTER_EXTENSION.getClientConfig();
         try (Connection conn = ConnectionFactory.createConnection(clientConf);
                 Table table = conn.getTable(TablePath.of(DEFAULT_DB, "sink_test"));
-                LogScanner<InternalRow> logScanner = table.newScan().createLogScanner()) {
+                LogScanner logScanner = table.newScan().createLogScanner()) {
             logScanner.subscribeFromBeginning(0);
             logScanner.subscribeFromBeginning(1);
             logScanner.subscribeFromBeginning(2);
