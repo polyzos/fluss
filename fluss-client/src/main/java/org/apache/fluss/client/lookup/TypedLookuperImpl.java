@@ -38,12 +38,17 @@ final class TypedLookuperImpl<K> implements TypedLookuper<K> {
     private final Lookuper delegate;
     private final TableInfo tableInfo;
     @Nullable private final List<String> lookupColumnNames;
+    private final PojoToRowConverter<K> keyConv;
 
     TypedLookuperImpl(
-            Lookuper delegate, TableInfo tableInfo, @Nullable List<String> lookupColumnNames) {
+            Lookuper delegate,
+            TableInfo tableInfo,
+            @Nullable List<String> lookupColumnNames,
+            Class<K> keyClass) {
         this.delegate = delegate;
         this.tableInfo = tableInfo;
         this.lookupColumnNames = lookupColumnNames;
+        this.keyConv = createPojoToRowConverter(keyClass);
     }
 
     @Override
@@ -55,6 +60,12 @@ final class TypedLookuperImpl<K> implements TypedLookuper<K> {
         if (key instanceof InternalRow) {
             return delegate.lookup((InternalRow) key);
         }
+
+        InternalRow keyRow = keyConv.toRow(key);
+        return delegate.lookup(keyRow);
+    }
+
+    private PojoToRowConverter<K> createPojoToRowConverter(Class<K> keyClass) {
         RowType tableSchema = tableInfo.getRowType();
         RowType keyProjection;
         if (lookupColumnNames == null) {
@@ -62,10 +73,6 @@ final class TypedLookuperImpl<K> implements TypedLookuper<K> {
         } else {
             keyProjection = tableSchema.project(lookupColumnNames);
         }
-        @SuppressWarnings("unchecked")
-        Class<K> keyClass = (Class<K>) key.getClass();
-        PojoToRowConverter<K> keyConv = PojoToRowConverter.of(keyClass, tableSchema, keyProjection);
-        InternalRow keyRow = keyConv.toRow(key);
-        return delegate.lookup(keyRow);
+        return PojoToRowConverter.of(keyClass, tableSchema, keyProjection);
     }
 }

@@ -74,6 +74,6 @@ public class TableLookup implements Lookup {
 
     @Override
     public <T> TypedLookuper<T> createTypedLookuper(Class<T> pojoClass) {
-        return new TypedLookuperImpl<>(createLookuper(), tableInfo, lookupColumnNames);
+        return new TypedLookuperImpl<>(createLookuper(), tableInfo, lookupColumnNames, pojoClass);
     }
 }
