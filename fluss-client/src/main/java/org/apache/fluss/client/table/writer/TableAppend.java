@@ -41,7 +41,6 @@ public class TableAppend implements Append {
 
     @Override
     public <T> TypedAppendWriter<T> createTypedWriter(Class<T> pojoClass) {
-        AppendWriterImpl delegate = new AppendWriterImpl(tablePath, tableInfo, writerClient);
-        return new TypedAppendWriterImpl<>(delegate, pojoClass, tableInfo);
+        return new TypedAppendWriterImpl<>(createWriter(), pojoClass, tableInfo);
     }
 }

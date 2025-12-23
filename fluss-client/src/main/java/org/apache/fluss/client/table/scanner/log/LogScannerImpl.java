@@ -163,7 +163,7 @@ public class LogScannerImpl implements LogScanner {
                 }
             } while (System.nanoTime() - startNanos < timeoutNanos);
 
-            return ScanRecords.empty();
+            return ScanRecords.EMPTY;
         } finally {
             release();
             scannerMetricGroup.recordPollEnd(System.currentTimeMillis());

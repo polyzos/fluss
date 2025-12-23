@@ -33,22 +33,10 @@ import java.util.concurrent.CompletableFuture;
  */
 class TypedUpsertWriterImpl<T> implements TypedUpsertWriter<T> {
 
-    @Override
-    public void flush() {
-        delegate.flush();
-    }
-
-    private final UpsertWriterImpl delegate;
-
-    @Override
-    public void close() throws Exception {
-        delegate.close();
-    }
-
-    private final Class<T> pojoClass;
+    private final UpsertWriter delegate;
     private final TableInfo tableInfo;
     private final RowType tableSchema;
-    private final int[] targetColumns; // may be null
+    @Nullable private final int[] targetColumns;
 
     private final RowType pkProjection;
     @Nullable private final RowType targetProjection;
@@ -58,12 +46,8 @@ class TypedUpsertWriterImpl<T> implements TypedUpsertWriter<T> {
     @Nullable private final PojoToRowConverter<T> targetConverter;
 
     TypedUpsertWriterImpl(
-            UpsertWriterImpl delegate,
-            Class<T> pojoClass,
-            TableInfo tableInfo,
-            int[] targetColumns) {
+            UpsertWriter delegate, Class<T> pojoClass, TableInfo tableInfo, int[] targetColumns) {
         this.delegate = delegate;
-        this.pojoClass = pojoClass;
         this.tableInfo = tableInfo;
         this.tableSchema = tableInfo.getRowType();
         this.targetColumns = targetColumns;
@@ -80,6 +64,11 @@ class TypedUpsertWriterImpl<T> implements TypedUpsertWriter<T> {
                 (targetProjection == null)
                         ? null
                         : PojoToRowConverter.of(pojoClass, tableSchema, targetProjection);
+    }
+
+    @Override
+    public void flush() {
+        delegate.flush();
     }
 
     @Override
@@ -124,6 +113,9 @@ class TypedUpsertWriterImpl<T> implements TypedUpsertWriter<T> {
             // set PK fields, others null
             for (String pk : tableInfo.getPhysicalPrimaryKeys()) {
                 int projIndex = projection.getFieldIndex(pk);
+
+                // TODO: this can be optimized by pre-computing
+                // the index mapping in the constructor?
                 int fullIndex = tableSchema.getFieldIndex(pk);
                 full.setField(fullIndex, projected.getField(projIndex));
             }

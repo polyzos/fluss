@@ -30,14 +30,12 @@ import java.util.concurrent.CompletableFuture;
  */
 class TypedAppendWriterImpl<T> implements TypedAppendWriter<T> {
 
-    private final AppendWriterImpl delegate;
-    private final Class<T> pojoClass;
+    private final AppendWriter delegate;
     private final RowType tableSchema;
     private final PojoToRowConverter<T> pojoToRowConverter;
 
-    TypedAppendWriterImpl(AppendWriterImpl delegate, Class<T> pojoClass, TableInfo tableInfo) {
+    TypedAppendWriterImpl(AppendWriter delegate, Class<T> pojoClass, TableInfo tableInfo) {
         this.delegate = delegate;
-        this.pojoClass = pojoClass;
         this.tableSchema = tableInfo.getRowType();
         this.pojoToRowConverter = PojoToRowConverter.of(pojoClass, tableSchema, tableSchema);
     }
@@ -45,11 +43,6 @@ class TypedAppendWriterImpl<T> implements TypedAppendWriter<T> {
     @Override
     public void flush() {
         delegate.flush();
-    }
-
-    @Override
-    public void close() throws Exception {
-        delegate.close();
     }
 
     @Override

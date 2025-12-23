@@ -28,7 +28,7 @@ import org.apache.fluss.config.ConfigOptions;
  * @since 0.1
  */
 @PublicEvolving
-public interface TableWriter extends AutoCloseable {
+public interface TableWriter {
 
     /**
      * Flush data written that have not yet been sent to the server, forcing the client to send the
@@ -38,9 +38,4 @@ public interface TableWriter extends AutoCloseable {
      * results in an error.
      */
     void flush();
-
-    @Override
-    default void close() throws Exception {
-        // by default do nothing
-    }
 }

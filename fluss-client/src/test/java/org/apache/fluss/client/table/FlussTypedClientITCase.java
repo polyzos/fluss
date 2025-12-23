@@ -49,6 +49,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -115,6 +116,86 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
             this.tsNtz = tsNtz;
             this.tsLtz = tsLtz;
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            AllTypesPojo that = (AllTypesPojo) o;
+            return Objects.equals(a, that.a)
+                    && Objects.equals(bool1, that.bool1)
+                    && Objects.equals(tiny, that.tiny)
+                    && Objects.equals(small, that.small)
+                    && Objects.equals(intv, that.intv)
+                    && Objects.equals(big, that.big)
+                    && Objects.equals(flt, that.flt)
+                    && Objects.equals(dbl, that.dbl)
+                    && Objects.equals(ch, that.ch)
+                    && Objects.equals(str, that.str)
+                    && Arrays.equals(bin, that.bin)
+                    && Arrays.equals(bytes, that.bytes)
+                    && Objects.equals(dec, that.dec)
+                    && Objects.equals(dt, that.dt)
+                    && Objects.equals(tm, that.tm)
+                    && Objects.equals(tsNtz, that.tsNtz)
+                    && Objects.equals(tsLtz, that.tsLtz);
+        }
+
+        @Override
+        public int hashCode() {
+            int result =
+                    Objects.hash(
+                            a, bool1, tiny, small, intv, big, flt, dbl, ch, str, dec, dt, tm, tsNtz,
+                            tsLtz);
+            result = 31 * result + Arrays.hashCode(bin);
+            result = 31 * result + Arrays.hashCode(bytes);
+            return result;
+        }
+
+        @Override
+        public String toString() {
+            return "AllTypesPojo{"
+                    + "a="
+                    + a
+                    + ", bool1="
+                    + bool1
+                    + ", tiny="
+                    + tiny
+                    + ", small="
+                    + small
+                    + ", intv="
+                    + intv
+                    + ", big="
+                    + big
+                    + ", flt="
+                    + flt
+                    + ", dbl="
+                    + dbl
+                    + ", ch="
+                    + ch
+                    + ", str='"
+                    + str
+                    + '\''
+                    + ", bin="
+                    + Arrays.toString(bin)
+                    + ", bytes="
+                    + Arrays.toString(bytes)
+                    + ", dec="
+                    + dec
+                    + ", dt="
+                    + dt
+                    + ", tm="
+                    + tm
+                    + ", tsNtz="
+                    + tsNtz
+                    + ", tsLtz="
+                    + tsLtz
+                    + '}';
+        }
     }
 
     /** Minimal POJO representing the primary key for {@link AllTypesPojo}. */
@@ -125,6 +206,28 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
 
         public PLookupKey(Integer a) {
             this.a = a;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            PLookupKey that = (PLookupKey) o;
+            return Objects.equals(a, that.a);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(a);
+        }
+
+        @Override
+        public String toString() {
+            return "PLookupKey{" + "a=" + a + '}';
         }
     }
 
@@ -232,7 +335,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
             for (int i = 0; i < 5; i++) {
                 AllTypesPojo u = newAllTypesPojo(i);
                 expected.add(u);
-                writer.append(u).get();
+                writer.append(u);
             }
             writer.flush();
 
@@ -293,11 +396,16 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
                     values.add(r.getValue());
                 }
             }
+
             assertThat(changes)
-                    .contains(ChangeType.INSERT, ChangeType.UPDATE_BEFORE, ChangeType.UPDATE_AFTER);
+                    .containsExactlyInAnyOrder(
+                            ChangeType.INSERT,
+                            ChangeType.INSERT,
+                            ChangeType.UPDATE_BEFORE,
+                            ChangeType.UPDATE_AFTER);
             // ensure the last update_after reflects new value
             int lastIdx = changes.lastIndexOf(ChangeType.UPDATE_AFTER);
-            assertThat(values.get(lastIdx).str).isEqualTo("a1");
+            assertThat(values.get(lastIdx)).isEqualTo(p1Updated);
         }
     }
 
@@ -313,7 +421,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
                     table.newUpsert().createTypedWriter(AllTypesPojo.class);
             writer.upsert(newAllTypesPojo(1)).get();
             writer.upsert(newAllTypesPojo(2)).get();
-            writer.close();
+            writer.flush();
 
             // primary key lookup using Lookuper API with POJO key
             TypedLookuper<PLookupKey> lookuper =
@@ -324,7 +432,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
 
             LookupResult lr = lookuper.lookup(new PLookupKey(1)).get();
             AllTypesPojo one = rowConv.fromRow(lr.getSingletonRow());
-            assertThat(one.str).isEqualTo("s1");
+            assertThat(one).isEqualTo(newAllTypesPojo(1));
         }
     }
 
@@ -341,7 +449,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
                     table.newUpsert().createTypedWriter(AllTypesPojo.class);
             writer.upsert(newAllTypesPojo(101)).get();
             writer.upsert(newAllTypesPojo(202)).get();
-            writer.close();
+            writer.flush();
 
             // now perform lookup using the raw InternalRow path to ensure it's still supported
             Lookuper lookuper = table.newLookup().createLookuper();
@@ -356,9 +464,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
             RowToPojoConverter<AllTypesPojo> rowConv =
                     RowToPojoConverter.of(AllTypesPojo.class, tableSchema, tableSchema);
             AllTypesPojo pojo = rowConv.fromRow(lr.getSingletonRow());
-            assertThat(pojo).isNotNull();
-            assertThat(pojo.a).isEqualTo(101);
-            assertThat(pojo.str).isEqualTo("s101");
+            assertThat(pojo).isEqualTo(newAllTypesPojo(101));
         }
     }
 
@@ -383,19 +489,14 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
                             .createTypedLogScanner(AllTypesPojo.class);
             subscribeFromBeginning(scanner, table);
             TypedScanRecords<AllTypesPojo> recs = scanner.poll(Duration.ofSeconds(2));
+            int i = 10;
             for (TypedScanRecord<AllTypesPojo> r : recs) {
                 AllTypesPojo u = r.getValue();
-                assertThat(u.a).isNotNull();
-                assertThat(u.str).isNotNull();
-                // non-projected fields should be null
-                assertThat(u.bool1).isNull();
-                assertThat(u.bin).isNull();
-                assertThat(u.bytes).isNull();
-                assertThat(u.dec).isNull();
-                assertThat(u.dt).isNull();
-                assertThat(u.tm).isNull();
-                assertThat(u.tsNtz).isNull();
-                assertThat(u.tsLtz).isNull();
+                AllTypesPojo expectedPojo = new AllTypesPojo();
+                expectedPojo.a = i;
+                expectedPojo.str = "s" + i;
+                assertThat(u).isEqualTo(expectedPojo);
+                i++;
             }
         }
     }
@@ -409,19 +510,22 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
         createTable(path, td, true);
 
         try (Table table = conn.getTable(path)) {
+            // 1. initial full row
+            TypedUpsertWriter<AllTypesPojo> fullWriter =
+                    table.newUpsert().createTypedWriter(AllTypesPojo.class);
+            fullWriter.upsert(newAllTypesPojo(1)).get();
+            fullWriter.flush();
+
+            // 2. partial update: only PK + subset fields
             Upsert upsert = table.newUpsert().partialUpdate("a", "str", "dec");
             TypedUpsertWriter<AllTypesPojo> writer = upsert.createTypedWriter(AllTypesPojo.class);
 
-            // initial full row
-            writer.upsert(newAllTypesPojo(1)).get();
-
-            // partial update: only PK + subset fields
             AllTypesPojo patch = new AllTypesPojo();
             patch.a = 1;
             patch.str = "second";
             patch.dec = new BigDecimal("99.99");
             writer.upsert(patch).get();
-            writer.close();
+            writer.flush();
 
             // verify via lookup and scan using Lookuper + POJO key
             TypedLookuper<PLookupKey> lookuper =
@@ -431,8 +535,10 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
                     RowToPojoConverter.of(AllTypesPojo.class, tableSchema, tableSchema);
             AllTypesPojo lookedUp =
                     rowConv.fromRow(lookuper.lookup(new PLookupKey(1)).get().getSingletonRow());
-            assertThat(lookedUp.str).isEqualTo("second");
-            assertThat(lookedUp.dec).isEqualByComparingTo("99.99");
+            AllTypesPojo expected = newAllTypesPojo(1);
+            expected.str = "second";
+            expected.dec = new BigDecimal("99.99");
+            assertThat(lookedUp).isEqualTo(expected);
 
             TypedLogScanner<AllTypesPojo> scanner =
                     table.newScan().createTypedLogScanner(AllTypesPojo.class);
@@ -442,7 +548,7 @@ public class FlussTypedClientITCase extends ClientToServerITCaseBase {
                 TypedScanRecords<AllTypesPojo> recs = scanner.poll(Duration.ofSeconds(2));
                 for (TypedScanRecord<AllTypesPojo> r : recs) {
                     if (r.getChangeType() == ChangeType.UPDATE_AFTER) {
-                        assertThat(r.getValue().str).isEqualTo("second");
+                        assertThat(r.getValue()).isEqualTo(expected);
                         sawUpdateAfter = true;
                     }
                 }
