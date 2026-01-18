@@ -23,6 +23,7 @@ import org.apache.fluss.rpc.protocol.Errors;
 import org.apache.fluss.server.kv.KvTablet;
 import org.apache.fluss.server.kv.rocksdb.RocksDBKv;
 import org.apache.fluss.utils.AutoCloseableAsync;
+import org.apache.fluss.utils.MapUtils;
 import org.apache.fluss.utils.clock.Clock;
 import org.apache.fluss.utils.clock.SystemClock;
 import org.apache.fluss.utils.concurrent.ExecutorThreadFactory;
@@ -39,7 +40,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -48,7 +48,7 @@ import java.util.concurrent.TimeUnit;
 public class ScannerManager implements AutoCloseableAsync {
     private static final Logger LOG = LoggerFactory.getLogger(ScannerManager.class);
 
-    private final Map<ByteBuffer, ScannerContext> scanners = new ConcurrentHashMap<>();
+    private final Map<ByteBuffer, ScannerContext> scanners = MapUtils.newConcurrentHashMap();
     private final ScheduledExecutorService cleanupExecutor;
     private final Clock clock;
     private final long scannerTtlMs;
