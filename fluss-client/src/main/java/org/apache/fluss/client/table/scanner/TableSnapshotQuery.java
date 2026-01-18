@@ -19,17 +19,19 @@ package org.apache.fluss.client.table.scanner;
 
 import org.apache.fluss.client.FlussConnection;
 import org.apache.fluss.client.table.scanner.batch.BatchScanner;
+import org.apache.fluss.exception.FlussRuntimeException;
+import org.apache.fluss.metadata.PartitionInfo;
 import org.apache.fluss.metadata.SchemaGetter;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.row.InternalRow;
-import org.apache.fluss.types.RowType;
 import org.apache.fluss.utils.CloseableIterator;
 
 import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -61,30 +63,6 @@ public class TableSnapshotQuery implements SnapshotQuery {
     }
 
     @Override
-    public SnapshotQuery project(@Nullable int[] projectedColumns) {
-        return new TableSnapshotQuery(conn, tableInfo, schemaGetter, projectedColumns);
-    }
-
-    @Override
-    public SnapshotQuery project(List<String> projectedColumnNames) {
-        int[] columnIndexes = new int[projectedColumnNames.size()];
-        RowType rowType = tableInfo.getRowType();
-        for (int i = 0; i < projectedColumnNames.size(); i++) {
-            int index = rowType.getFieldIndex(projectedColumnNames.get(i));
-            if (index < 0) {
-                throw new IllegalArgumentException(
-                        String.format(
-                                "Field '%s' not found in table schema. Available fields: %s, Table: %s",
-                                projectedColumnNames.get(i),
-                                rowType.getFieldNames(),
-                                tableInfo.getTablePath()));
-            }
-            columnIndexes[i] = index;
-        }
-        return new TableSnapshotQuery(conn, tableInfo, schemaGetter, columnIndexes);
-    }
-
-    @Override
     public CloseableIterator<InternalRow> execute(TableBucket tableBucket) {
         Scan scan = new TableScan(conn, tableInfo, schemaGetter);
         if (projectedColumns != null) {
@@ -92,6 +70,80 @@ public class TableSnapshotQuery implements SnapshotQuery {
         }
         BatchScanner batchScanner = scan.createBatchScanner(tableBucket);
         return new BatchScannerIterator(batchScanner);
+    }
+
+    @Override
+    public CloseableIterator<InternalRow> execute() {
+        List<TableBucket> buckets = new ArrayList<>();
+        try {
+            if (tableInfo.isPartitioned()) {
+                List<PartitionInfo> partitions =
+                        conn.getAdmin().listPartitionInfos(tableInfo.getTablePath()).get();
+                for (PartitionInfo partition : partitions) {
+                    for (int i = 0; i < tableInfo.getNumBuckets(); i++) {
+                        buckets.add(
+                                new TableBucket(
+                                        tableInfo.getTableId(), partition.getPartitionId(), i));
+                    }
+                }
+            } else {
+                for (int i = 0; i < tableInfo.getNumBuckets(); i++) {
+                    buckets.add(new TableBucket(tableInfo.getTableId(), i));
+                }
+            }
+        } catch (Exception e) {
+            throw new FlussRuntimeException(
+                    "Failed to list partitions for table " + tableInfo.getTablePath(), e);
+        }
+
+        return new MultiBucketBatchScannerIterator(buckets);
+    }
+
+    private class MultiBucketBatchScannerIterator implements CloseableIterator<InternalRow> {
+        private final Iterator<TableBucket> bucketIterator;
+        private CloseableIterator<InternalRow> currentScannerIterator;
+        private boolean isClosed = false;
+
+        private MultiBucketBatchScannerIterator(List<TableBucket> buckets) {
+            this.bucketIterator = buckets.iterator();
+        }
+
+        @Override
+        public boolean hasNext() {
+            if (isClosed) {
+                return false;
+            }
+            while (currentScannerIterator == null || !currentScannerIterator.hasNext()) {
+                if (currentScannerIterator != null) {
+                    currentScannerIterator.close();
+                    currentScannerIterator = null;
+                }
+                if (bucketIterator.hasNext()) {
+                    currentScannerIterator = execute(bucketIterator.next());
+                } else {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        @Override
+        public InternalRow next() {
+            if (!hasNext()) {
+                throw new NoSuchElementException();
+            }
+            return currentScannerIterator.next();
+        }
+
+        @Override
+        public void close() {
+            if (!isClosed) {
+                if (currentScannerIterator != null) {
+                    currentScannerIterator.close();
+                }
+                isClosed = true;
+            }
+        }
     }
 
     private static class BatchScannerIterator implements CloseableIterator<InternalRow> {

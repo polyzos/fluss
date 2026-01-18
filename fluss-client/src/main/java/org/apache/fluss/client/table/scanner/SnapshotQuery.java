@@ -22,10 +22,6 @@ import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.utils.CloseableIterator;
 
-import javax.annotation.Nullable;
-
-import java.util.List;
-
 /**
  * Used to configure and execute a snapshot query to read all current data in a table bucket for a
  * primary key table.
@@ -34,21 +30,6 @@ import java.util.List;
  */
 @PublicEvolving
 public interface SnapshotQuery {
-
-    /**
-     * Returns a new snapshot query from this that will read the given data columns.
-     *
-     * @param projectedColumns the selected column indexes
-     */
-    SnapshotQuery project(@Nullable int[] projectedColumns);
-
-    /**
-     * Returns a new snapshot query from this that will read the given data columns.
-     *
-     * @param projectedColumnNames the selected column names
-     */
-    SnapshotQuery project(List<String> projectedColumnNames);
-
     /**
      * Executes the snapshot query to read all current data in the given table bucket.
      *
@@ -56,4 +37,12 @@ public interface SnapshotQuery {
      * @return a closeable iterator of the rows in the table bucket
      */
     CloseableIterator<InternalRow> execute(TableBucket tableBucket);
+
+    /**
+     * Executes the snapshot query to read all current data in the table. Everything around
+     * partitions and buckets will be taken care of from the client.
+     *
+     * @return a closeable iterator of the rows in the table
+     */
+    CloseableIterator<InternalRow> execute();
 }
