@@ -23,10 +23,9 @@ import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.utils.CloseableIterator;
 
 /**
- * Used to configure and execute a snapshot query to read all current data in a table bucket for a
- * primary key table.
+ * Used to configure and execute a snapshot query to read all kv data of a primary key table.
  *
- * @since 0.6
+ * @since 0.9
  */
 @PublicEvolving
 public interface SnapshotQuery {
