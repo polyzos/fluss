@@ -20,6 +20,7 @@ package org.apache.fluss.client.table.scanner.batch;
 import org.apache.fluss.client.admin.ClientToServerITCaseBase;
 import org.apache.fluss.client.table.Table;
 import org.apache.fluss.client.table.writer.UpsertWriter;
+import org.apache.fluss.metadata.PartitionInfo;
 import org.apache.fluss.metadata.PartitionSpec;
 import org.apache.fluss.metadata.Schema;
 import org.apache.fluss.metadata.TableBucket;
@@ -33,7 +34,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -56,7 +56,6 @@ public class KvBatchScannerITCase extends ClientToServerITCaseBase {
 
     @Test
     void testBasicScan() throws Exception {
-        System.out.println("eddww");
         TablePath tablePath = TablePath.of("test_db", "test_basic_scan");
         Schema schema =
                 Schema.newBuilder()
@@ -68,7 +67,6 @@ public class KvBatchScannerITCase extends ClientToServerITCaseBase {
                 TableDescriptor.builder().schema(schema).distributedBy(1, "id").build();
 
         createTable(tablePath, descriptor, true);
-        System.out.println("eddww");
 
         Table table = conn.getTable(tablePath);
 
@@ -78,11 +76,10 @@ public class KvBatchScannerITCase extends ClientToServerITCaseBase {
         writer.upsert(row(2, "b"));
         writer.upsert(row(3, "c"));
         writer.flush();
-        System.out.println("never reaches this");
 
-        // 2. test the kvScan works as expected
+        // 2. test the snapshotQuery works as expected
         TableBucket bucket = new TableBucket(table.getTableInfo().getTableId(), 0);
-        List<InternalRow> result = scanAll(table, bucket);
+        List<InternalRow> result = snapshotQueryAll(table, bucket);
 
         assertThat(result).hasSize(3);
         result.sort(Comparator.comparingInt(r -> r.getInt(0)));
@@ -119,7 +116,7 @@ public class KvBatchScannerITCase extends ClientToServerITCaseBase {
         List<InternalRow> allResult = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
             TableBucket bucket = new TableBucket(table.getTableInfo().getTableId(), i);
-            allResult.addAll(scanAll(table, bucket));
+            allResult.addAll(snapshotQueryAll(table, bucket));
         }
 
         assertThat(allResult).hasSize(rowCount);
@@ -163,30 +160,27 @@ public class KvBatchScannerITCase extends ClientToServerITCaseBase {
         Table table = conn.getTable(tablePath);
         long p1Id = -1;
         long p2Id = -1;
-        for (org.apache.fluss.metadata.PartitionInfo p :
-                admin.listPartitionInfos(tablePath).get()) {
-            if (p.getPartitionName().equals("p=p1")) {
+        List<PartitionInfo> partitionInfos = admin.listPartitionInfos(tablePath).get();
+        for (PartitionInfo p : partitionInfos) {
+            if (p.getPartitionName().equals("p1")) {
                 p1Id = p.getPartitionId();
-            } else if (p.getPartitionName().equals("p=p2")) {
+            } else if (p.getPartitionName().equals("p2")) {
                 p2Id = p.getPartitionId();
             }
         }
 
-        // 1. write data to different partitions
         UpsertWriter writer = table.newUpsert().createWriter();
         writer.upsert(row(1, "p1", "a1"));
         writer.upsert(row(2, "p1", "b1"));
         writer.upsert(row(1, "p2", "a2"));
         writer.flush();
 
-        // 2. scan partition p1
         TableBucket p1Bucket = new TableBucket(table.getTableInfo().getTableId(), p1Id, 0);
-        List<InternalRow> p1Result = scanAll(table, p1Bucket);
+        List<InternalRow> p1Result = snapshotQueryAll(table, p1Bucket);
         assertThat(p1Result).hasSize(2);
 
-        // 3. scan partition p2
         TableBucket p2Bucket = new TableBucket(table.getTableInfo().getTableId(), p2Id, 0);
-        List<InternalRow> p2Result = scanAll(table, p2Bucket);
+        List<InternalRow> p2Result = snapshotQueryAll(table, p2Bucket);
         assertThat(p2Result).hasSize(1);
         assertThatRow(p2Result.get(0))
                 .withSchema(schema.getRowType())
@@ -218,7 +212,7 @@ public class KvBatchScannerITCase extends ClientToServerITCaseBase {
 
         // 2. scan and verify
         TableBucket bucket = new TableBucket(table.getTableInfo().getTableId(), 0);
-        List<InternalRow> result = scanAll(table, bucket);
+        List<InternalRow> result = snapshotQueryAll(table, bucket);
 
         assertThat(result).hasSize(rowCount);
         result.sort(Comparator.comparingInt(r -> r.getInt(0)));
@@ -253,12 +247,7 @@ public class KvBatchScannerITCase extends ClientToServerITCaseBase {
 
         // 2. test the snapshotQuery works as expected
         TableBucket bucket = new TableBucket(table.getTableInfo().getTableId(), 0);
-        List<InternalRow> result = new ArrayList<>();
-        try (CloseableIterator<InternalRow> iterator = table.newSnapshotQuery().execute(bucket)) {
-            while (iterator.hasNext()) {
-                result.add(iterator.next());
-            }
-        }
+        List<InternalRow> result = snapshotQueryAll(table, bucket);
 
         assertThat(result).hasSize(3);
         result.sort(Comparator.comparingInt(r -> r.getInt(0)));
@@ -267,15 +256,11 @@ public class KvBatchScannerITCase extends ClientToServerITCaseBase {
         assertThatRow(result.get(2)).withSchema(schema.getRowType()).isEqualTo(row(3, "c"));
     }
 
-    private List<InternalRow> scanAll(Table table, TableBucket bucket) throws Exception {
+    private List<InternalRow> snapshotQueryAll(Table table, TableBucket bucket) throws Exception {
         List<InternalRow> allRows = new ArrayList<>();
-        try (BatchScanner scanner = table.newScan().createBatchScanner(bucket)) {
-            CloseableIterator<InternalRow> iterator;
-            while ((iterator = scanner.pollBatch(Duration.ofSeconds(5))) != null) {
-                while (iterator.hasNext()) {
-                    allRows.add(iterator.next());
-                }
-                iterator.close();
+        try (CloseableIterator<InternalRow> iterator = table.newSnapshotQuery().execute(bucket)) {
+            while (iterator.hasNext()) {
+                allRows.add(iterator.next());
             }
         }
         return allRows;
