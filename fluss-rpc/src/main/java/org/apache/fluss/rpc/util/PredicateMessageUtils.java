@@ -36,55 +36,58 @@ import org.apache.fluss.predicate.NotIn;
 import org.apache.fluss.predicate.Or;
 import org.apache.fluss.predicate.Predicate;
 import org.apache.fluss.predicate.StartsWith;
+import org.apache.fluss.record.Filter;
 import org.apache.fluss.row.BinaryString;
 import org.apache.fluss.row.Decimal;
 import org.apache.fluss.row.TimestampLtz;
 import org.apache.fluss.row.TimestampNtz;
 import org.apache.fluss.rpc.messages.PbCompoundFunction;
 import org.apache.fluss.rpc.messages.PbCompoundPredicate;
-import org.apache.fluss.rpc.messages.PbDataType;
 import org.apache.fluss.rpc.messages.PbFieldRef;
 import org.apache.fluss.rpc.messages.PbFilter;
 import org.apache.fluss.rpc.messages.PbLeafFunction;
 import org.apache.fluss.rpc.messages.PbLeafPredicate;
 import org.apache.fluss.rpc.messages.PbLiteralValue;
 import org.apache.fluss.rpc.messages.PbPredicate;
-import org.apache.fluss.types.BigIntType;
-import org.apache.fluss.types.BinaryType;
-import org.apache.fluss.types.BooleanType;
-import org.apache.fluss.types.BytesType;
-import org.apache.fluss.types.CharType;
-import org.apache.fluss.types.DataType;
-import org.apache.fluss.types.DateType;
-import org.apache.fluss.types.DecimalType;
-import org.apache.fluss.types.DoubleType;
-import org.apache.fluss.types.FloatType;
-import org.apache.fluss.types.IntType;
-import org.apache.fluss.types.LocalZonedTimestampType;
-import org.apache.fluss.types.SmallIntType;
-import org.apache.fluss.types.StringType;
-import org.apache.fluss.types.TimeType;
-import org.apache.fluss.types.TimestampType;
-import org.apache.fluss.types.TinyIntType;
-import org.apache.fluss.record.Filter;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static org.apache.fluss.rpc.messages.PbLeafFunction.NOT_IN;
-
-/** Utils for converting Predicate to PbPredicate and vice versa. */
+/**
+ * Utility class for serializing and deserializing predicates between the internal {@link Predicate}
+ * model and the RPC {@link PbPredicate} Protobuf messages.
+ *
+ * <p>This class provides the entry points for:
+ *
+ * <ul>
+ *   <li>Converting Protobuf messages back to internal Predicate objects for server-side evaluation.
+ *   <li>Converting internal Predicate objects to Protobuf for client-server communication.
+ *   <li>Wrapping predicates into schema-aware {@link Filter} objects.
+ * </ul>
+ */
 public class PredicateMessageUtils {
+
+    /**
+     * Converts a Protobuf {@link PbPredicate} to an internal {@link Predicate}.
+     *
+     * @param pbPredicate the protobuf predicate, must not be null.
+     * @return the corresponding internal predicate.
+     * @throws IllegalArgumentException if the predicate type is unknown.
+     */
     public static Predicate toPredicate(PbPredicate pbPredicate) {
+        Objects.requireNonNull(pbPredicate, "pbPredicate must not be null");
         switch (pbPredicate.getType()) {
             case LEAF:
                 return toLeafPredicate(pbPredicate.getLeaf());
             case COMPOUND:
                 return toCompoundPredicate(pbPredicate.getCompound());
             default:
-                throw new IllegalArgumentException("Unknown predicate type in PbPredicate");
+                throw new IllegalArgumentException(
+                        "Unknown predicate type in PbPredicate: " + pbPredicate.getType());
         }
     }
 
@@ -116,49 +119,10 @@ public class PredicateMessageUtils {
 
         return new LeafPredicate(
                 toLeafFunction(pbLeaf.getFunction()),
-                toDataType(fieldRef.getDataType()),
+                CommonRpcMessageUtils.toDataType(fieldRef.getDataType()),
                 fieldRef.getFieldIndex(),
                 fieldRef.getFieldName(),
                 literals);
-    }
-
-    private static DataType toDataType(PbDataType type) {
-        switch (type.getRoot()) {
-            case BOOLEAN:
-                return new BooleanType(type.isNullable());
-            case INT:
-                return new IntType(type.isNullable());
-            case TINYINT:
-                return new TinyIntType(type.isNullable());
-            case SMALLINT:
-                return new SmallIntType(type.isNullable());
-            case BIGINT:
-                return new BigIntType(type.isNullable());
-            case FLOAT:
-                return new FloatType(type.isNullable());
-            case DOUBLE:
-                return new DoubleType(type.isNullable());
-            case CHAR:
-                return new CharType(type.isNullable(), type.getLength());
-            case VARCHAR:
-                return new StringType(type.isNullable());
-            case DECIMAL:
-                return new DecimalType(type.isNullable(), type.getPrecision(), type.getScale());
-            case DATE:
-                return new DateType(type.isNullable());
-            case TIME_WITHOUT_TIME_ZONE:
-                return new TimeType(type.isNullable(), type.getPrecision());
-            case TIMESTAMP_WITHOUT_TIME_ZONE:
-                return new TimestampType(type.isNullable(), type.getPrecision());
-            case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
-                return new LocalZonedTimestampType(type.isNullable(), type.getPrecision());
-            case BINARY:
-                return new BinaryType(type.getLength());
-            case BYTES:
-                return new BytesType(type.isNullable());
-            default:
-                throw new IllegalArgumentException("Unknown data type in PbDataType");
-        }
     }
 
     private static Object toLiteralValue(PbLiteralValue pbLiteral) {
@@ -182,10 +146,10 @@ public class PredicateMessageUtils {
                 return pbLiteral.getDoubleValue();
             case CHAR:
             case VARCHAR:
-            {
-                String stringValue = pbLiteral.getStringValue();
-                return null == stringValue ? null : BinaryString.fromString(stringValue);
-            }
+                {
+                    String stringValue = pbLiteral.getStringValue();
+                    return null == stringValue ? null : BinaryString.fromString(stringValue);
+                }
             case DECIMAL:
                 if (pbLiteral.hasDecimalBytes()) {
                     // Non-compact decimal
@@ -203,7 +167,8 @@ public class PredicateMessageUtils {
             case DATE:
                 return LocalDate.ofEpochDay(pbLiteral.getBigintValue());
             case TIME_WITHOUT_TIME_ZONE:
-                return LocalTime.ofNanoOfDay(pbLiteral.getIntValue() * 1_000_000L);
+                return LocalTime.ofNanoOfDay(
+                        TimeUnit.MILLISECONDS.toNanos(pbLiteral.getIntValue()));
             case TIMESTAMP_WITHOUT_TIME_ZONE:
                 return TimestampNtz.fromMillis(
                         pbLiteral.getTimestampMillisValue(),
@@ -216,7 +181,9 @@ public class PredicateMessageUtils {
             case BYTES:
                 return pbLiteral.getBinaryValue();
             default:
-                throw new IllegalArgumentException("Unknown literal value in PbLiteralValue");
+                throw new IllegalArgumentException(
+                        "Unknown literal value type in PbLiteralValue: "
+                                + pbLiteral.getType().getRoot());
         }
     }
 
@@ -253,10 +220,23 @@ public class PredicateMessageUtils {
         }
     }
 
+    /**
+     * Converts an internal {@link Predicate} into a {@link PbPredicate}.
+     *
+     * @param predicate the internal predicate to convert.
+     * @return the corresponding protobuf predicate.
+     */
     public static PbPredicate toPbPredicate(Predicate predicate) {
         return predicate.visit(PbPredicateConverter.INSTANCE);
     }
 
+    /**
+     * Converts an internal {@link Predicate} and schema ID into a {@link PbFilter}.
+     *
+     * @param predicate the predicate to wrap in the filter.
+     * @param schemaId the ID of the schema this filter is associated with.
+     * @return the protobuf filter message.
+     */
     public static PbFilter toPbFilter(Predicate predicate, int schemaId) {
         PbFilter pbFilter = new PbFilter();
         pbFilter.setPredicate(toPbPredicate(predicate));
@@ -264,7 +244,14 @@ public class PredicateMessageUtils {
         return pbFilter;
     }
 
+    /**
+     * Converts a Protobuf {@link PbFilter} to an internal {@link Filter}.
+     *
+     * @param pbFilter the protobuf filter, must not be null.
+     * @return the corresponding internal filter.
+     */
     public static Filter toFilter(PbFilter pbFilter) {
+        Objects.requireNonNull(pbFilter, "pbFilter must not be null");
         Predicate predicate = toPredicate(pbFilter.getPredicate());
         int schemaId = pbFilter.getSchemaId();
         return new Filter(predicate, schemaId);
