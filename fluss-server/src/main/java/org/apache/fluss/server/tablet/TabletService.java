@@ -63,8 +63,6 @@ import org.apache.fluss.rpc.messages.PutKvRequest;
 import org.apache.fluss.rpc.messages.PutKvResponse;
 import org.apache.fluss.rpc.messages.ScanKvRequest;
 import org.apache.fluss.rpc.messages.ScanKvResponse;
-import org.apache.fluss.rpc.messages.ScannerKeepAliveRequest;
-import org.apache.fluss.rpc.messages.ScannerKeepAliveResponse;
 import org.apache.fluss.rpc.messages.StopReplicaRequest;
 import org.apache.fluss.rpc.messages.StopReplicaResponse;
 import org.apache.fluss.rpc.messages.UpdateMetadataRequest;
@@ -419,19 +417,6 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
         ApiError error = ApiError.fromThrowable(e);
         response.setErrorCode(error.error().code()).setErrorMessage(error.message());
         return response;
-    }
-
-    @Override
-    public CompletableFuture<ScannerKeepAliveResponse> scannerKeepAlive(
-            ScannerKeepAliveRequest request) {
-        ScannerKeepAliveResponse response = new ScannerKeepAliveResponse();
-        try {
-            scannerManager.keepAlive(request.getScannerId());
-        } catch (Exception e) {
-            ApiError error = ApiError.fromThrowable(e);
-            response.setErrorCode(error.error().code()).setErrorMessage(error.message());
-        }
-        return CompletableFuture.completedFuture(response);
     }
 
     @Override

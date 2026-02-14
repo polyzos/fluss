@@ -234,7 +234,7 @@ public class TabletServer extends ServerBase {
             this.kvManager = KvManager.create(conf, zkClient, logManager, tabletServerMetricGroup);
             kvManager.startup();
 
-            this.scannerManager = new ScannerManager(conf, clock);
+            this.scannerManager = new ScannerManager(conf, scheduler, clock);
 
             // Register kvManager to dynamicConfigManager for dynamic reconfiguration
             dynamicConfigManager.register(kvManager);

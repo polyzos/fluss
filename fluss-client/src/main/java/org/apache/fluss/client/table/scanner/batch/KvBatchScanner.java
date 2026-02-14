@@ -34,12 +34,10 @@ import org.apache.fluss.rpc.gateway.TabletServerGateway;
 import org.apache.fluss.rpc.messages.PbScanReqForBucket;
 import org.apache.fluss.rpc.messages.ScanKvRequest;
 import org.apache.fluss.rpc.messages.ScanKvResponse;
-import org.apache.fluss.rpc.messages.ScannerKeepAliveRequest;
 import org.apache.fluss.rpc.protocol.Errors;
 import org.apache.fluss.types.RowType;
 import org.apache.fluss.utils.CloseableIterator;
 import org.apache.fluss.utils.SchemaUtil;
-import org.apache.fluss.utils.concurrent.ExecutorThreadFactory;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,8 +53,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /** A {@link BatchScanner} implementation that scans records from a primary key table. */
@@ -82,7 +78,6 @@ public class KvBatchScanner implements BatchScanner {
     private boolean isClosed = false;
 
     private CompletableFuture<ScanKvResponse> inFlightRequest;
-    private ScheduledExecutorService keepAliveExecutor;
 
     public KvBatchScanner(
             TableInfo tableInfo,
@@ -223,47 +218,12 @@ public class KvBatchScanner implements BatchScanner {
         }
     }
 
-    public void startKeepAlivePeriodically(int keepAliveIntervalMs) {
-        if (keepAliveExecutor != null) {
-            return;
-        }
-
-        keepAliveExecutor =
-                Executors.newSingleThreadScheduledExecutor(
-                        new ExecutorThreadFactory("kv-scanner-keep-alive-" + tableBucket));
-        keepAliveExecutor.scheduleAtFixedRate(
-                this::sendKeepAlive,
-                keepAliveIntervalMs,
-                keepAliveIntervalMs,
-                TimeUnit.MILLISECONDS);
-    }
-
-    private void sendKeepAlive() {
-        if (isClosed || scannerId == null || !hasMoreResults) {
-            return;
-        }
-
-        try {
-            int leader = metadataUpdater.leaderFor(tableInfo.getTablePath(), tableBucket);
-            TabletServerGateway gateway = metadataUpdater.newTabletServerClientForNode(leader);
-            if (gateway != null) {
-                gateway.scannerKeepAlive(new ScannerKeepAliveRequest().setScannerId(scannerId));
-            }
-        } catch (Exception e) {
-            LOG.warn("Failed to send keep alive for scanner {}", tableBucket, e);
-        }
-    }
-
     @Override
     public void close() throws IOException {
         if (isClosed) {
             return;
         }
         isClosed = true;
-
-        if (keepAliveExecutor != null) {
-            keepAliveExecutor.shutdownNow();
-        }
 
         if (scannerId != null && hasMoreResults) {
             // Close scanner on server

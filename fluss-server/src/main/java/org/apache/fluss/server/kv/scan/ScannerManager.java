@@ -26,8 +26,8 @@ import org.apache.fluss.utils.AutoCloseableAsync;
 import org.apache.fluss.utils.MapUtils;
 import org.apache.fluss.utils.clock.Clock;
 import org.apache.fluss.utils.clock.SystemClock;
-import org.apache.fluss.utils.concurrent.ExecutorThreadFactory;
 import org.apache.fluss.utils.concurrent.FutureUtils;
+import org.apache.fluss.utils.concurrent.Scheduler;
 
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksIterator;
@@ -40,34 +40,32 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ScheduledFuture;
 
 /** A manager for scanners. */
 public class ScannerManager implements AutoCloseableAsync {
     private static final Logger LOG = LoggerFactory.getLogger(ScannerManager.class);
 
     private final Map<ByteBuffer, ScannerContext> scanners = MapUtils.newConcurrentHashMap();
-    private final ScheduledExecutorService cleanupExecutor;
+    private final Scheduler scheduler;
     private final Clock clock;
     private final long scannerTtlMs;
+    private ScheduledFuture<?> cleanupTask;
 
-    public ScannerManager(Configuration conf) {
-        this(conf, SystemClock.getInstance());
+    public ScannerManager(Configuration conf, Scheduler scheduler) {
+        this(conf, scheduler, SystemClock.getInstance());
     }
 
-    public ScannerManager(Configuration conf, Clock clock) {
+    public ScannerManager(Configuration conf, Scheduler scheduler, Clock clock) {
+        this.scheduler = scheduler;
         this.clock = clock;
         this.scannerTtlMs = conf.get(ConfigOptions.SERVER_SCANNER_TTL).toMillis();
-        this.cleanupExecutor =
-                Executors.newSingleThreadScheduledExecutor(
-                        new ExecutorThreadFactory("scanner-cleanup-thread"));
-        this.cleanupExecutor.scheduleWithFixedDelay(
-                this::cleanupExpiredScanners,
-                scannerTtlMs / 2,
-                scannerTtlMs / 2,
-                TimeUnit.MILLISECONDS);
+        this.cleanupTask =
+                scheduler.schedule(
+                        "scanner-cleanup",
+                        this::cleanupExpiredScanners,
+                        scannerTtlMs / 2,
+                        scannerTtlMs / 2);
     }
 
     public byte[] createScanner(KvTablet kvTablet, long limit) {
@@ -90,16 +88,6 @@ public class ScannerManager implements AutoCloseableAsync {
             context.updateLastAccessTime(clock.milliseconds());
         }
         return context;
-    }
-
-    public void keepAlive(byte[] scannerId) {
-        ScannerContext context = scanners.get(ByteBuffer.wrap(scannerId));
-        if (context != null) {
-            context.updateLastAccessTime(clock.milliseconds());
-        } else {
-            throw Errors.SCANNER_NOT_FOUND_EXCEPTION.exception(
-                    "Scanner not found: " + scannerIdToString(scannerId));
-        }
     }
 
     public void removeScanner(byte[] scannerId) {
@@ -152,7 +140,9 @@ public class ScannerManager implements AutoCloseableAsync {
 
     @Override
     public void close() throws Exception {
-        cleanupExecutor.shutdownNow();
+        if (cleanupTask != null) {
+            cleanupTask.cancel(true);
+        }
         for (ScannerContext context : scanners.values()) {
             closeScannerContext(context);
         }

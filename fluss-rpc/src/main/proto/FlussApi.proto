@@ -320,19 +320,6 @@ message ScanKvResponse {
   optional int64 log_offset = 6;
 }
 
-// A scanner keep-alive request.
-// Updates the scanner access time, increasing its time-to-live.
-message ScannerKeepAliveRequest {
-  required bytes scanner_id = 1;
-}
-
-message ScannerKeepAliveResponse {
-  // The error, if an error occurred with this request.
-  optional int32 error_code = 1;
-  optional string error_message = 2;
-}
-
-
 // limit scan request and response
 message LimitScanRequest {
   required int64 table_id = 2;
