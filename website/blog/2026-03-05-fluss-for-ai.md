@@ -20,6 +20,7 @@ This shift explains the recent evolution of Apache Fluss. Investments in statele
 > What does a data foundation need to look like to support real-time intelligent systems reliably at scale?
 
 The rest of this post answers that question. We’ll explain what AI means when viewed through the lens of Apache Fluss, and why a streaming-first foundation for features, context, and state is central to building the next generation of intelligent systems.
+<!-- truncate -->
 
 ### What We Mean by “Real-Time Intelligent Systems”
 In this post, when we talk about real-time intelligent systems, we are not referring to a specific class of models or a particular AI technique. We are describing a category of systems defined by how they behave over time and how they interact with data that is constantly changing.
