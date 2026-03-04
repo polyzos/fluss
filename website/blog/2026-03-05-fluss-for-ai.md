@@ -1,6 +1,6 @@
 ---
 slug: fluss-for-ai
-date: 2026-02-05
+date: 2026-03-05
 title: "What does Apache Fluss mean in the context of AI?"
 authors: [giannis]
 ---
