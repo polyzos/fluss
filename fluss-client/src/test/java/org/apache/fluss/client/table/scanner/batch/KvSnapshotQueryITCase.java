@@ -20,6 +20,7 @@ package org.apache.fluss.client.table.scanner.batch;
 import org.apache.fluss.client.admin.ClientToServerITCaseBase;
 import org.apache.fluss.client.table.Table;
 import org.apache.fluss.client.table.writer.UpsertWriter;
+import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.metadata.PartitionSpec;
 import org.apache.fluss.metadata.Schema;
 import org.apache.fluss.metadata.TableDescriptor;
@@ -33,14 +34,19 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.fluss.testutils.DataTestUtils.row;
 import static org.apache.fluss.testutils.InternalRowAssert.assertThatRow;
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** ITCase for snapshot query. */
+/** ITCase for KV scan (full RocksDB scan via {@code table.newKvScan().execute()}). */
 public class KvSnapshotQueryITCase extends ClientToServerITCaseBase {
     @BeforeEach
     protected void setup() throws Exception {
@@ -68,21 +74,39 @@ public class KvSnapshotQueryITCase extends ClientToServerITCaseBase {
 
         Table table = conn.getTable(tablePath);
 
-        // 1. write data
         UpsertWriter writer = table.newUpsert().createWriter();
         writer.upsert(row(1, "a"));
         writer.upsert(row(2, "b"));
         writer.upsert(row(3, "c"));
         writer.flush();
 
-        // 2. test the snapshotQuery works as expected
-        List<InternalRow> result = snapshotQueryAll(table);
+        List<InternalRow> result = kvScanAll(table);
 
         assertThat(result).hasSize(3);
         result.sort(Comparator.comparingInt(r -> r.getInt(0)));
         assertThatRow(result.get(0)).withSchema(schema.getRowType()).isEqualTo(row(1, "a"));
         assertThatRow(result.get(1)).withSchema(schema.getRowType()).isEqualTo(row(2, "b"));
         assertThatRow(result.get(2)).withSchema(schema.getRowType()).isEqualTo(row(3, "c"));
+    }
+
+    @Test
+    void testEmptyTable() throws Exception {
+        TablePath tablePath = TablePath.of("test_db", "test_empty_table");
+        Schema schema =
+                Schema.newBuilder()
+                        .column("id", DataTypes.INT())
+                        .column("name", DataTypes.STRING())
+                        .primaryKey("id")
+                        .build();
+        TableDescriptor descriptor =
+                TableDescriptor.builder().schema(schema).distributedBy(1, "id").build();
+
+        createTable(tablePath, descriptor, true);
+        Table table = conn.getTable(tablePath);
+
+        // No writes — scan should return empty iterator immediately
+        List<InternalRow> result = kvScanAll(table);
+        assertThat(result).isEmpty();
     }
 
     @Test
@@ -94,14 +118,12 @@ public class KvSnapshotQueryITCase extends ClientToServerITCaseBase {
                         .column("name", DataTypes.STRING())
                         .primaryKey("id")
                         .build();
-        // 3 buckets
         TableDescriptor descriptor =
                 TableDescriptor.builder().schema(schema).distributedBy(3, "id").build();
 
         createTable(tablePath, descriptor, true);
         Table table = conn.getTable(tablePath);
 
-        // 1. write data to multiple buckets
         int rowCount = 100;
         UpsertWriter writer = table.newUpsert().createWriter();
         for (int i = 0; i < rowCount; i++) {
@@ -109,8 +131,7 @@ public class KvSnapshotQueryITCase extends ClientToServerITCaseBase {
         }
         writer.flush();
 
-        // 2. scan all buckets and collect all data
-        List<InternalRow> allResult = snapshotQueryAll(table);
+        List<InternalRow> allResult = kvScanAll(table);
 
         assertThat(allResult).hasSize(rowCount);
         allResult.sort(Comparator.comparingInt(r -> r.getInt(0)));
@@ -141,12 +162,12 @@ public class KvSnapshotQueryITCase extends ClientToServerITCaseBase {
         createTable(tablePath, descriptor, true);
         admin.createPartition(
                         tablePath,
-                        new PartitionSpec(java.util.Collections.singletonMap("p", "p1")),
+                        new PartitionSpec(Collections.singletonMap("p", "p1")),
                         false)
                 .get();
         admin.createPartition(
                         tablePath,
-                        new PartitionSpec(java.util.Collections.singletonMap("p", "p2")),
+                        new PartitionSpec(Collections.singletonMap("p", "p2")),
                         false)
                 .get();
 
@@ -158,7 +179,7 @@ public class KvSnapshotQueryITCase extends ClientToServerITCaseBase {
         writer.upsert(row(1, "p2", "a2"));
         writer.flush();
 
-        List<InternalRow> result = snapshotQueryAll(table);
+        List<InternalRow> result = kvScanAll(table);
         assertThat(result).hasSize(3);
     }
 
@@ -177,7 +198,6 @@ public class KvSnapshotQueryITCase extends ClientToServerITCaseBase {
         createTable(tablePath, descriptor, true);
         Table table = conn.getTable(tablePath);
 
-        // 1. write 10k records
         int rowCount = 10000;
         UpsertWriter writer = table.newUpsert().createWriter();
         for (int i = 0; i < rowCount; i++) {
@@ -185,8 +205,7 @@ public class KvSnapshotQueryITCase extends ClientToServerITCaseBase {
         }
         writer.flush();
 
-        // 2. scan and verify
-        List<InternalRow> result = snapshotQueryAll(table);
+        List<InternalRow> result = kvScanAll(table);
 
         assertThat(result).hasSize(rowCount);
         result.sort(Comparator.comparingInt(r -> r.getInt(0)));
@@ -198,8 +217,8 @@ public class KvSnapshotQueryITCase extends ClientToServerITCaseBase {
     }
 
     @Test
-    void testSnapshotQuery() throws Exception {
-        TablePath tablePath = TablePath.of("test_db", "test_snapshot_query");
+    void testEarlyClose() throws Exception {
+        TablePath tablePath = TablePath.of("test_db", "test_early_close");
         Schema schema =
                 Schema.newBuilder()
                         .column("id", DataTypes.INT())
@@ -212,26 +231,76 @@ public class KvSnapshotQueryITCase extends ClientToServerITCaseBase {
         createTable(tablePath, descriptor, true);
         Table table = conn.getTable(tablePath);
 
-        // 1. write data
+        int rowCount = 1000;
         UpsertWriter writer = table.newUpsert().createWriter();
-        writer.upsert(row(1, "a"));
-        writer.upsert(row(2, "b"));
-        writer.upsert(row(3, "c"));
+        for (int i = 0; i < rowCount; i++) {
+            writer.upsert(row(i, "val" + i));
+        }
         writer.flush();
 
-        // 2. test the snapshotQuery works as expected
-        List<InternalRow> result = snapshotQueryAll(table);
-
-        assertThat(result).hasSize(3);
-        result.sort(Comparator.comparingInt(r -> r.getInt(0)));
-        assertThatRow(result.get(0)).withSchema(schema.getRowType()).isEqualTo(row(1, "a"));
-        assertThatRow(result.get(1)).withSchema(schema.getRowType()).isEqualTo(row(2, "b"));
-        assertThatRow(result.get(2)).withSchema(schema.getRowType()).isEqualTo(row(3, "c"));
+        // Close the iterator after reading only the first few rows — should not throw
+        int readCount = 0;
+        try (CloseableIterator<InternalRow> iterator = table.newKvScan().execute()) {
+            while (iterator.hasNext() && readCount < 5) {
+                iterator.next();
+                readCount++;
+            }
+        }
+        assertThat(readCount).isEqualTo(5);
     }
 
-    private List<InternalRow> snapshotQueryAll(Table table) throws Exception {
+    @Test
+    void testConcurrentScans() throws Exception {
+        TablePath tablePath = TablePath.of("test_db", "test_concurrent_scans");
+        Schema schema =
+                Schema.newBuilder()
+                        .column("id", DataTypes.INT())
+                        .column("name", DataTypes.STRING())
+                        .primaryKey("id")
+                        .build();
+        TableDescriptor descriptor =
+                TableDescriptor.builder().schema(schema).distributedBy(1, "id").build();
+
+        createTable(tablePath, descriptor, true);
+        Table table = conn.getTable(tablePath);
+
+        int rowCount = 100;
+        UpsertWriter writer = table.newUpsert().createWriter();
+        for (int i = 0; i < rowCount; i++) {
+            writer.upsert(row(i, "val" + i));
+        }
+        writer.flush();
+
+        int concurrency = 4;
+        ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+        AtomicInteger totalRows = new AtomicInteger(0);
+        List<Future<?>> futures = new ArrayList<>();
+
+        for (int t = 0; t < concurrency; t++) {
+            futures.add(
+                    executor.submit(
+                            () -> {
+                                try {
+                                    List<InternalRow> rows = kvScanAll(table);
+                                    totalRows.addAndGet(rows.size());
+                                } catch (Exception e) {
+                                    throw new RuntimeException(e);
+                                }
+                            }));
+        }
+
+        for (Future<?> f : futures) {
+            f.get();
+        }
+        executor.shutdown();
+
+        // Each of the concurrent scans should have seen all rows
+        assertThat(totalRows.get()).isEqualTo(rowCount * concurrency);
+    }
+
+    private List<InternalRow> kvScanAll(Table table) throws Exception {
         List<InternalRow> allRows = new ArrayList<>();
-        try (CloseableIterator<InternalRow> iterator = table.newSnapshotQuery().execute()) {
+        try (CloseableIterator<InternalRow> iterator = table.newKvScan().execute()) {
             while (iterator.hasNext()) {
                 allRows.add(iterator.next());
             }

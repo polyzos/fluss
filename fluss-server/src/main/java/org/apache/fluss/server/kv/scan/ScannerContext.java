@@ -17,7 +17,9 @@
 
 package org.apache.fluss.server.kv.scan;
 
+import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.server.kv.rocksdb.RocksDBKv;
+import org.apache.fluss.server.utils.ResourceGuard;
 import org.apache.fluss.utils.clock.Clock;
 
 import org.rocksdb.ReadOptions;
@@ -26,46 +28,59 @@ import org.rocksdb.Snapshot;
 
 import javax.annotation.concurrent.NotThreadSafe;
 
-/** The context for a scanner. */
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/**
+ * The context for a scanner session. Each instance holds a RocksDB snapshot and iterator for
+ * point-in-time scan isolation. The {@link ResourceGuard.Lease} prevents RocksDB from being closed
+ * while this session is active.
+ *
+ * <p>This class is not thread-safe; callers must synchronize externally.
+ */
 @NotThreadSafe
 public class ScannerContext implements AutoCloseable {
+    private final byte[] scannerId;
+    private final TableBucket tableBucket;
     private final RocksDBKv rocksDBKv;
     private final RocksIterator iterator;
     private final ReadOptions readOptions;
     private final Snapshot snapshot;
-    private final long limit;
+    private final ResourceGuard.Lease resourceLease;
 
     private int callSeqId;
     private long lastAccessTime;
-    private long rowsScanned;
+    private final AtomicBoolean expired = new AtomicBoolean(false);
 
     public ScannerContext(
+            byte[] scannerId,
+            TableBucket tableBucket,
             RocksDBKv rocksDBKv,
             RocksIterator iterator,
             ReadOptions readOptions,
             Snapshot snapshot,
-            long limit,
+            ResourceGuard.Lease resourceLease,
             Clock clock) {
+        this.scannerId = scannerId;
+        this.tableBucket = tableBucket;
         this.rocksDBKv = rocksDBKv;
         this.iterator = iterator;
         this.readOptions = readOptions;
         this.snapshot = snapshot;
-        this.limit = limit;
+        this.resourceLease = resourceLease;
         this.callSeqId = 0;
         this.lastAccessTime = clock.milliseconds();
-        this.rowsScanned = 0;
+    }
+
+    public byte[] getScannerId() {
+        return scannerId;
+    }
+
+    public TableBucket getTableBucket() {
+        return tableBucket;
     }
 
     public RocksIterator getIterator() {
         return iterator;
-    }
-
-    public Snapshot getSnapshot() {
-        return snapshot;
-    }
-
-    public long getLimit() {
-        return limit;
     }
 
     public int getCallSeqId() {
@@ -84,18 +99,33 @@ public class ScannerContext implements AutoCloseable {
         this.lastAccessTime = lastAccessTime;
     }
 
-    public long getRowsScanned() {
-        return rowsScanned;
+    /**
+     * Marks this scanner as expired by the TTL reaper. After this call, {@link #isExpired()} will
+     * return {@code true}, allowing the server to distinguish an expired session from an unknown
+     * scanner id.
+     */
+    public void markExpired() {
+        expired.set(true);
     }
 
-    public void incrementRowsScanned(long count) {
-        this.rowsScanned += count;
+    public boolean isExpired() {
+        return expired.get();
     }
 
     @Override
     public void close() {
-        iterator.close();
-        readOptions.close();
-        rocksDBKv.releaseSnapshot(snapshot);
+        try {
+            iterator.close();
+        } finally {
+            try {
+                readOptions.close();
+            } finally {
+                try {
+                    rocksDBKv.releaseSnapshot(snapshot);
+                } finally {
+                    resourceLease.close();
+                }
+            }
+        }
     }
 }

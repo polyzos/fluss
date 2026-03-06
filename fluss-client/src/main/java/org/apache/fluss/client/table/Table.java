@@ -21,8 +21,8 @@ import org.apache.fluss.annotation.PublicEvolving;
 import org.apache.fluss.client.Connection;
 import org.apache.fluss.client.lookup.Lookup;
 import org.apache.fluss.client.lookup.Lookuper;
+import org.apache.fluss.client.table.scanner.KvScan;
 import org.apache.fluss.client.table.scanner.Scan;
-import org.apache.fluss.client.table.scanner.SnapshotQuery;
 import org.apache.fluss.client.table.writer.Append;
 import org.apache.fluss.client.table.writer.AppendWriter;
 import org.apache.fluss.client.table.writer.Upsert;
@@ -57,10 +57,10 @@ public interface Table extends AutoCloseable {
     Scan newScan();
 
     /**
-     * Creates a new {@link SnapshotQuery} for this table to configure and execute a snapshot query
-     * to read all current data in a table bucket (requires to be a Primary Key Table).
+     * Creates a new {@link KvScan} for this table to read all live KV data from the primary key
+     * table's RocksDB store (requires to be a Primary Key Table).
      */
-    SnapshotQuery newSnapshotQuery();
+    KvScan newKvScan();
 
     /**
      * Creates a new {@link Lookup} for this table to configure and create a {@link Lookuper} to

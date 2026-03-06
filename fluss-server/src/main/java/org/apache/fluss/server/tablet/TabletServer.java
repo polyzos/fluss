@@ -435,6 +435,12 @@ public class TabletServer extends ServerBase {
                     scheduler.shutdown();
                 }
 
+                // Close scanner sessions before shutting down kvManager so that
+                // RocksDB snapshots are released while RocksDB is still open.
+                if (scannerManager != null) {
+                    scannerManager.close();
+                }
+
                 if (kvManager != null) {
                     kvManager.shutdown();
                 }

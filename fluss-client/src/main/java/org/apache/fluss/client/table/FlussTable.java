@@ -23,9 +23,9 @@ import org.apache.fluss.client.lookup.Lookup;
 import org.apache.fluss.client.lookup.TableLookup;
 import org.apache.fluss.client.metadata.ClientSchemaGetter;
 import org.apache.fluss.client.table.scanner.Scan;
-import org.apache.fluss.client.table.scanner.SnapshotQuery;
+import org.apache.fluss.client.table.scanner.KvScan;
 import org.apache.fluss.client.table.scanner.TableScan;
-import org.apache.fluss.client.table.scanner.TableSnapshotQuery;
+import org.apache.fluss.client.table.scanner.TableKvScan;
 import org.apache.fluss.client.table.writer.Append;
 import org.apache.fluss.client.table.writer.TableAppend;
 import org.apache.fluss.client.table.writer.TableUpsert;
@@ -70,12 +70,12 @@ public class FlussTable implements Table {
     }
 
     @Override
-    public SnapshotQuery newSnapshotQuery() {
+    public KvScan newKvScan() {
         checkState(
                 hasPrimaryKey,
-                "Table %s is not a Primary Key Table and doesn't support SnapshotQuery.",
+                "Table %s is not a Primary Key Table and doesn't support KvScan.",
                 tablePath);
-        return new TableSnapshotQuery(conn, tableInfo, schemaGetter);
+        return new TableKvScan(conn, tableInfo, schemaGetter);
     }
 
     @Override

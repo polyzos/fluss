@@ -19,9 +19,11 @@ package org.apache.fluss.server.kv.scan;
 
 import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.config.Configuration;
-import org.apache.fluss.rpc.protocol.Errors;
+import org.apache.fluss.exception.TooManyScannersException;
+import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.server.kv.KvTablet;
 import org.apache.fluss.server.kv.rocksdb.RocksDBKv;
+import org.apache.fluss.server.utils.ResourceGuard;
 import org.apache.fluss.utils.AutoCloseableAsync;
 import org.apache.fluss.utils.MapUtils;
 import org.apache.fluss.utils.clock.Clock;
@@ -35,14 +37,22 @@ import org.rocksdb.Snapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
-/** A manager for scanners. */
+/**
+ * Manages scanner sessions for KV snapshot queries. Each session holds a RocksDB snapshot and
+ * iterator. Sessions that are idle longer than the TTL are reaped automatically by a background
+ * task.
+ */
 public class ScannerManager implements AutoCloseableAsync {
     private static final Logger LOG = LoggerFactory.getLogger(ScannerManager.class);
 
@@ -50,6 +60,10 @@ public class ScannerManager implements AutoCloseableAsync {
     private final Scheduler scheduler;
     private final Clock clock;
     private final long scannerTtlMs;
+    private final long expirationIntervalMs;
+    private final int maxPerBucket;
+    private final int maxPerServer;
+    private final AtomicInteger totalScanners = new AtomicInteger(0);
     private ScheduledFuture<?> cleanupTask;
 
     public ScannerManager(Configuration conf, Scheduler scheduler) {
@@ -60,28 +74,74 @@ public class ScannerManager implements AutoCloseableAsync {
         this.scheduler = scheduler;
         this.clock = clock;
         this.scannerTtlMs = conf.get(ConfigOptions.SERVER_SCANNER_TTL).toMillis();
+        this.expirationIntervalMs =
+                conf.get(ConfigOptions.SERVER_SCANNER_EXPIRATION_INTERVAL).toMillis();
+        this.maxPerBucket = conf.get(ConfigOptions.SERVER_SCANNER_MAX_PER_BUCKET);
+        this.maxPerServer = conf.get(ConfigOptions.SERVER_SCANNER_MAX_PER_SERVER);
         this.cleanupTask =
                 scheduler.schedule(
-                        "scanner-cleanup",
+                        "scanner-expiration",
                         this::cleanupExpiredScanners,
-                        scannerTtlMs / 2,
-                        scannerTtlMs / 2);
+                        expirationIntervalMs,
+                        expirationIntervalMs);
     }
 
-    public byte[] createScanner(KvTablet kvTablet, long limit) {
+    /**
+     * Creates a new scanner session for the given KV tablet and returns the {@link ScannerContext}.
+     * The context contains the scanner id assigned to this session.
+     *
+     * @throws TooManyScannersException if per-bucket or per-server limits are exceeded
+     * @throws IOException if the RocksDB resource guard cannot be acquired
+     */
+    public ScannerContext createScanner(KvTablet kvTablet, TableBucket tableBucket)
+            throws IOException {
+        // Check server-level limit first (cheap atomic check)
+        if (totalScanners.get() >= maxPerServer) {
+            throw new TooManyScannersException(
+                    "Server scanner limit ("
+                            + maxPerServer
+                            + ") reached. Try again later.");
+        }
+
+        // Check per-bucket limit
+        int bucketCount = countScannersForBucket(tableBucket);
+        if (bucketCount >= maxPerBucket) {
+            throw new TooManyScannersException(
+                    "Per-bucket scanner limit ("
+                            + maxPerBucket
+                            + ") reached for bucket "
+                            + tableBucket
+                            + ". Try again later.");
+        }
+
         RocksDBKv rocksDBKv = kvTablet.getRocksDBKv();
+        // Acquire a lease to prevent RocksDB from being closed while iterating
+        ResourceGuard.Lease lease = rocksDBKv.getResourceGuard().acquireResource();
         Snapshot snapshot = rocksDBKv.getSnapshot();
         ReadOptions readOptions = new ReadOptions().setSnapshot(snapshot);
         RocksIterator iterator = rocksDBKv.newIterator(readOptions);
         iterator.seekToFirst();
 
-        ScannerContext context =
-                new ScannerContext(rocksDBKv, iterator, readOptions, snapshot, limit, clock);
         byte[] scannerId = generateScannerId();
+        ScannerContext context =
+                new ScannerContext(
+                        scannerId,
+                        tableBucket,
+                        rocksDBKv,
+                        iterator,
+                        readOptions,
+                        snapshot,
+                        lease,
+                        clock);
         scanners.put(ByteBuffer.wrap(scannerId), context);
-        return scannerId;
+        totalScanners.incrementAndGet();
+        return context;
     }
 
+    /**
+     * Looks up a scanner by id and refreshes its last-access timestamp. Returns {@code null} if
+     * the scanner is not registered (was never created or has already been removed).
+     */
     public ScannerContext getScanner(byte[] scannerId) {
         ScannerContext context = scanners.get(ByteBuffer.wrap(scannerId));
         if (context != null) {
@@ -90,22 +150,65 @@ public class ScannerManager implements AutoCloseableAsync {
         return context;
     }
 
+    /**
+     * Removes and closes the scanner identified by {@code scannerId}. No-op if the id is unknown.
+     */
     public void removeScanner(byte[] scannerId) {
         ScannerContext context = scanners.remove(ByteBuffer.wrap(scannerId));
         if (context != null) {
+            totalScanners.decrementAndGet();
             closeScannerContext(context);
         }
+    }
+
+    /**
+     * Closes and removes all active scanner sessions for the given bucket. Called when a bucket
+     * loses leadership to prevent stale RocksDB snapshot/iterator leaks.
+     */
+    public void closeScannersForBucket(TableBucket tableBucket) {
+        List<ByteBuffer> toRemove = new ArrayList<>();
+        for (Map.Entry<ByteBuffer, ScannerContext> entry : scanners.entrySet()) {
+            if (tableBucket.equals(entry.getValue().getTableBucket())) {
+                toRemove.add(entry.getKey());
+            }
+        }
+        for (ByteBuffer key : toRemove) {
+            ScannerContext context = scanners.remove(key);
+            if (context != null) {
+                totalScanners.decrementAndGet();
+                LOG.info(
+                        "Closing scanner {} for bucket {} due to leadership change.",
+                        scannerIdToString(key.array()),
+                        tableBucket);
+                closeScannerContext(context);
+            }
+        }
+    }
+
+    private int countScannersForBucket(TableBucket tableBucket) {
+        int count = 0;
+        for (ScannerContext ctx : scanners.values()) {
+            if (tableBucket.equals(ctx.getTableBucket())) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private void cleanupExpiredScanners() {
         long now = clock.milliseconds();
         for (Map.Entry<ByteBuffer, ScannerContext> entry : scanners.entrySet()) {
-            if (now - entry.getValue().getLastAccessTime() > scannerTtlMs) {
-                ScannerContext context = scanners.remove(entry.getKey());
-                if (context != null) {
+            ScannerContext context = entry.getValue();
+            if (now - context.getLastAccessTime() > scannerTtlMs) {
+                // Mark expired before removal so TabletService can distinguish error codes
+                context.markExpired();
+                // Atomic conditional remove to avoid double-close race with removeScanner()
+                if (scanners.remove(entry.getKey(), context)) {
+                    totalScanners.decrementAndGet();
                     LOG.info(
-                            "Scanner {} expired, closing it.",
-                            scannerIdToString(entry.getKey().array()));
+                            "Scanner {} expired after {}ms idle, closing it.",
+                            scannerIdToString(entry.getKey().array()),
+                            scannerTtlMs);
                     closeScannerContext(context);
                 }
             }
@@ -116,7 +219,7 @@ public class ScannerManager implements AutoCloseableAsync {
         try {
             context.close();
         } catch (Exception e) {
-            LOG.error("Fail to close scanner context.", e);
+            LOG.error("Failed to close scanner context.", e);
         }
     }
 
@@ -147,5 +250,6 @@ public class ScannerManager implements AutoCloseableAsync {
             closeScannerContext(context);
         }
         scanners.clear();
+        totalScanners.set(0);
     }
 }

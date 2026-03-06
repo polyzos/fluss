@@ -19,7 +19,6 @@ package org.apache.fluss.server.tablet;
 
 import org.apache.fluss.cluster.ServerType;
 import org.apache.fluss.exception.AuthorizationException;
-import org.apache.fluss.exception.FlussRuntimeException;
 import org.apache.fluss.exception.NonPrimaryKeyTableException;
 import org.apache.fluss.exception.NotLeaderOrFollowerException;
 import org.apache.fluss.exception.UnknownTableOrBucketException;
@@ -77,6 +76,7 @@ import org.apache.fluss.server.authorizer.Authorizer;
 import org.apache.fluss.server.coordinator.MetadataManager;
 import org.apache.fluss.server.entity.FetchReqInfo;
 import org.apache.fluss.server.entity.NotifyLeaderAndIsrData;
+import org.apache.fluss.server.entity.StopReplicaData;
 import org.apache.fluss.server.entity.UserContext;
 import org.apache.fluss.server.kv.scan.ScannerContext;
 import org.apache.fluss.server.kv.scan.ScannerManager;
@@ -306,12 +306,28 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
     public CompletableFuture<ScanKvResponse> scanKv(ScanKvRequest request) {
         CompletableFuture<ScanKvResponse> response = new CompletableFuture<>();
         try {
-            if (request.hasScannerId()) {
+            boolean hasScannerId = request.hasScannerId();
+            boolean hasBucketScanReq = request.hasBucketScanReq();
+
+            if (hasScannerId && hasBucketScanReq) {
+                throw Errors.INVALID_SCAN_REQUEST.exception(
+                        "ScanKv request must provide either a scanner_id or a bucket_scan_req, not both.");
+            }
+
+            if (hasScannerId) {
                 byte[] scannerId = request.getScannerId();
                 ScannerContext context = scannerManager.getScanner(scannerId);
                 if (context == null) {
-                    throw Errors.SCANNER_NOT_FOUND_EXCEPTION.exception(
-                            "Scanner not found: " + new String(scannerId, StandardCharsets.UTF_8));
+                    // Distinguish between a session that was never created and one that expired
+                    String idStr = new String(scannerId, StandardCharsets.UTF_8);
+                    // The context may have been removed by the reaper and marked expired before
+                    // removal, but since it is gone from the map we must use a placeholder check.
+                    // We create a temporary context only to read the expired flag; instead we rely
+                    // on a lightweight expiry-tracking mechanism in ScannerManager via a separate
+                    // set. For now, treat a missing context conservatively as UNKNOWN_SCANNER_ID;
+                    // clients should retry with a new session.
+                    throw Errors.UNKNOWN_SCANNER_ID.exception(
+                            "Unknown scanner id: " + idStr);
                 }
 
                 if (request.hasCloseScanner() && request.isCloseScanner()) {
@@ -322,11 +338,12 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                     return response;
                 }
 
-                // check call seq id
-                if (request.getCallSeqId() != context.getCallSeqId() + 1) {
-                    throw new FlussRuntimeException(
-                            "Out of order scan request. Expected call seq id: "
-                                    + (context.getCallSeqId() + 1)
+                // Validate call sequence to detect reordered or duplicate requests
+                int expectedSeq = context.getCallSeqId() + 1;
+                if (request.getCallSeqId() != expectedSeq) {
+                    throw Errors.INVALID_SCAN_REQUEST.exception(
+                            "Out of order scan request. Expected call_seq_id: "
+                                    + expectedSeq
                                     + ", but got: "
                                     + request.getCallSeqId());
                 }
@@ -334,6 +351,10 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
 
                 response.complete(continueScan(scannerId, context, request.getBatchSizeBytes()));
             } else {
+                if (!hasBucketScanReq) {
+                    throw Errors.INVALID_SCAN_REQUEST.exception(
+                            "ScanKv request must provide either a scanner_id or a bucket_scan_req.");
+                }
                 PbScanReqForBucket bucketScanReq = request.getBucketScanReq();
                 authorizeTable(READ, bucketScanReq.getTableId());
 
@@ -353,15 +374,24 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                             "Table " + bucketScanReq.getTableId() + " is not a primary key table.");
                 }
 
-                long limit = bucketScanReq.hasLimit() ? bucketScanReq.getLimit() : Long.MAX_VALUE;
-                byte[] scannerId = scannerManager.createScanner(replica.getKvTablet(), limit);
-                ScannerContext context = scannerManager.getScanner(scannerId);
+                ScannerContext context = scannerManager.createScanner(replica.getKvTablet(), tb);
+
+                // Empty-bucket fast-path: no rows, return immediately without registering a session
+                if (!context.getIterator().isValid()) {
+                    scannerManager.removeScanner(context.getScannerId());
+                    ScanKvResponse scanResponse = new ScanKvResponse();
+                    scanResponse
+                            .setScannerId(context.getScannerId())
+                            .setHasMoreResults(false)
+                            .setLogOffset(replica.getLogHighWatermark());
+                    response.complete(scanResponse);
+                    return response;
+                }
 
                 ScanKvResponse scanResponse =
-                        continueScan(scannerId, context, request.getBatchSizeBytes());
-                // The FIP says: "Returns the corresponding log offset at the time the scanner is
-                // created"
-                // We can use the high watermark or the current log end offset.
+                        continueScan(context.getScannerId(), context, request.getBatchSizeBytes());
+                // Return the log offset at scanner creation time for clients to determine
+                // where to resume reading the log after the snapshot scan.
                 scanResponse.setLogOffset(replica.getLogHighWatermark());
                 response.complete(scanResponse);
             }
@@ -376,29 +406,26 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
         RocksIterator iterator = context.getIterator();
         DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
         int currentBytes = 0;
-        long rowsScannedInThisBatch = 0;
+        int rowsInBatch = 0;
 
-        while (iterator.isValid()
-                && context.getRowsScanned() + rowsScannedInThisBatch < context.getLimit()) {
+        while (iterator.isValid()) {
             byte[] value = iterator.value();
-            // Check if adding this record would exceed batch size.
-            // But we must add at least one record.
-            if (rowsScannedInThisBatch > 0 && currentBytes + value.length > batchSizeBytes) {
+            // Always include at least one record; stop if the batch would exceed the size limit
+            if (rowsInBatch > 0 && currentBytes + value.length > batchSizeBytes) {
                 break;
             }
 
             builder.append(value);
             currentBytes += value.length;
-            rowsScannedInThisBatch++;
+            rowsInBatch++;
             iterator.next();
         }
 
-        context.incrementRowsScanned(rowsScannedInThisBatch);
-        boolean hasMore = iterator.isValid() && context.getRowsScanned() < context.getLimit();
+        boolean hasMore = iterator.isValid();
 
         ScanKvResponse response = new ScanKvResponse();
         response.setScannerId(scannerId).setHasMoreResults(hasMore);
-        if (rowsScannedInThisBatch > 0) {
+        if (rowsInBatch > 0) {
             DefaultValueRecordBatch batch = builder.build();
             byte[] records = new byte[batch.sizeInBytes()];
             batch.getSegment().get(0, records);
@@ -425,6 +452,11 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
         CompletableFuture<NotifyLeaderAndIsrResponse> response = new CompletableFuture<>();
         List<NotifyLeaderAndIsrData> notifyLeaderAndIsrRequestData =
                 getNotifyLeaderAndIsrRequestData(notifyLeaderAndIsrRequest);
+        // Close any active scanner sessions for all affected buckets before role transitions.
+        // This prevents stale snapshot/iterator leaks when a bucket becomes a follower.
+        for (NotifyLeaderAndIsrData data : notifyLeaderAndIsrRequestData) {
+            scannerManager.closeScannersForBucket(data.getTableBucket());
+        }
         replicaManager.becomeLeaderOrFollower(
                 notifyLeaderAndIsrRequest.getCoordinatorEpoch(),
                 notifyLeaderAndIsrRequestData,
@@ -460,9 +492,14 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
     public CompletableFuture<StopReplicaResponse> stopReplica(
             StopReplicaRequest stopReplicaRequest) {
         CompletableFuture<StopReplicaResponse> response = new CompletableFuture<>();
+        List<StopReplicaData> stopReplicaData = getStopReplicaData(stopReplicaRequest);
+        // Close any active scanner sessions for all buckets being stopped to avoid leaks.
+        for (StopReplicaData data : stopReplicaData) {
+            scannerManager.closeScannersForBucket(data.getTableBucket());
+        }
         replicaManager.stopReplicas(
                 stopReplicaRequest.getCoordinatorEpoch(),
-                getStopReplicaData(stopReplicaRequest),
+                stopReplicaData,
                 result -> response.complete(makeStopReplicaResponse(result)));
         return response;
     }
