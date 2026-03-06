@@ -27,7 +27,6 @@ import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.record.DefaultValueRecordBatch;
 import org.apache.fluss.record.ValueRecord;
 import org.apache.fluss.record.ValueRecordReadContext;
-import org.apache.fluss.row.GenericRow;
 import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.row.ProjectedRow;
 import org.apache.fluss.rpc.gateway.TabletServerGateway;
@@ -35,7 +34,6 @@ import org.apache.fluss.rpc.messages.PbScanReqForBucket;
 import org.apache.fluss.rpc.messages.ScanKvRequest;
 import org.apache.fluss.rpc.messages.ScanKvResponse;
 import org.apache.fluss.rpc.protocol.Errors;
-import org.apache.fluss.types.RowType;
 import org.apache.fluss.utils.CloseableIterator;
 import org.apache.fluss.utils.SchemaUtil;
 
@@ -66,7 +64,6 @@ public class KvBatchScanner implements BatchScanner {
     @Nullable private final int[] projectedFields;
     @Nullable private final Long limit;
     private final int targetSchemaId;
-    private final InternalRow.FieldGetter[] fieldGetters;
     private final KvFormat kvFormat;
     private final int batchSizeBytes;
 
@@ -103,11 +100,6 @@ public class KvBatchScanner implements BatchScanner {
                                 .get(ConfigOptions.CLIENT_SCANNER_KV_FETCH_MAX_BYTES)
                                 .getBytes();
 
-        RowType rowType = tableInfo.getRowType();
-        this.fieldGetters = new InternalRow.FieldGetter[rowType.getFieldCount()];
-        for (int i = 0; i < rowType.getFieldCount(); i++) {
-            this.fieldGetters[i] = InternalRow.createFieldGetter(rowType.getTypeAt(i), i);
-        }
         this.readContext = ValueRecordReadContext.createReadContext(schemaGetter, kvFormat);
     }
 
@@ -218,13 +210,7 @@ public class KvBatchScanner implements BatchScanner {
     }
 
     private InternalRow applyColumnProjection(InternalRow row) {
-        GenericRow newRow = new GenericRow(fieldGetters.length);
-        for (int i = 0; i < fieldGetters.length; i++) {
-            newRow.setField(i, fieldGetters[i].getFieldOrNull(row));
-        }
-        ProjectedRow projectedRow = ProjectedRow.from(projectedFields);
-        projectedRow.replaceRow(newRow);
-        return projectedRow;
+        return ProjectedRow.from(projectedFields).replaceRow(row);
     }
 
     @Override

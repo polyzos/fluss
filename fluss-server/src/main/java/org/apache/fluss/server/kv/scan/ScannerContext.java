@@ -78,7 +78,7 @@ public class ScannerContext implements AutoCloseable {
     }
 
     public ByteBuffer getScannerIdKey() {
-        return scannerIdKey;
+        return scannerIdKey.duplicate();
     }
 
     public TableBucket getTableBucket() {

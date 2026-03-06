@@ -310,17 +310,16 @@ public class ScannerManager implements AutoCloseableAsync {
     @Override
     public void close() throws Exception {
         if (cleanupTask != null) {
-            cleanupTask.cancel(true);
+            cleanupTask.cancel(false);
         }
-        // If the cleanup task races with this loop, a scanner could be closed by both. RocksDB's
-        // NativeReference.close() is safe to call twice, but ResourceGuard.Lease.close() is not —
-        // it decrements a reference count. In practice this window is tiny (cancel + loop are on
-        // the same thread in tests; production uses a scheduled executor where the task is
-        // already done or is skipped by the cancel). This is an acceptable trade-off at shutdown.
-        for (ScannerContext context : scanners.values()) {
-            closeScannerContext(context);
+        // Use the same conditional-remove pattern as the cleanup task so that each ScannerContext
+        // is closed by exactly one caller even if the cleanup task is concurrently running.
+        for (Map.Entry<ByteBuffer, ScannerContext> entry : scanners.entrySet()) {
+            if (scanners.remove(entry.getKey(), entry.getValue())) {
+                totalScanners.decrementAndGet();
+                closeScannerContext(entry.getValue());
+            }
         }
-        scanners.clear();
         recentlyExpiredIds.clear();
         totalScanners.set(0);
     }

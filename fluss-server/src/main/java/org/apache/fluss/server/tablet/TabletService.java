@@ -330,7 +330,7 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 }
 
                 if (request.hasCloseScanner() && request.isCloseScanner()) {
-                    scannerManager.removeScanner(scannerId);
+                    scannerManager.removeScanner(context);
                     ScanKvResponse scanResponse = new ScanKvResponse();
                     scanResponse.setScannerId(scannerId).setHasMoreResults(false);
                     response.complete(scanResponse);
@@ -402,7 +402,7 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
 
     private ScanKvResponse continueScan(ScannerContext context, int batchSizeBytes)
             throws IOException {
-        byte[] scannerId = context.getScannerId();
+        final byte[] scannerId = context.getScannerId();
         RocksIterator iterator = context.getIterator();
         DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
         int currentBytes = 0;
@@ -433,7 +433,7 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
         }
 
         if (!hasMore) {
-            scannerManager.removeScanner(scannerId);
+            scannerManager.removeScanner(context);
         }
 
         return response;

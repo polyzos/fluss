@@ -96,7 +96,8 @@ public class TableKvScan implements KvScan {
             // Eagerly open and prefetch the first bucket scanner so its first RPC is in-flight
             // while the caller is setting up iteration.
             if (!buckets.isEmpty()) {
-                prefetchedScanner = openAndPrefetch(nextBucketIndex++);
+                prefetchedScanner = openAndPrefetch(nextBucketIndex);
+                nextBucketIndex++;
             }
         }
 
@@ -130,7 +131,8 @@ public class TableKvScan implements KvScan {
                 }
                 // Eagerly open and prefetch the scanner for the bucket after this one.
                 if (nextBucketIndex < buckets.size()) {
-                    prefetchedScanner = openAndPrefetch(nextBucketIndex++);
+                    prefetchedScanner = openAndPrefetch(nextBucketIndex);
+                    nextBucketIndex++;
                 }
                 currentScannerIterator = new BatchScannerIterator(nextScanner);
             }
@@ -209,12 +211,12 @@ public class TableKvScan implements KvScan {
         @Override
         public void close() {
             if (!isClosed) {
+                isClosed = true;
                 try {
                     scanner.close();
                 } catch (IOException e) {
                     throw new FlussRuntimeException("Error closing scanner", e);
                 }
-                isClosed = true;
             }
         }
     }
