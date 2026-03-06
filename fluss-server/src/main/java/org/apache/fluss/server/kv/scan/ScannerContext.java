@@ -28,6 +28,8 @@ import org.rocksdb.Snapshot;
 
 import javax.annotation.concurrent.NotThreadSafe;
 
+import java.nio.ByteBuffer;
+
 /**
  * The context for a scanner session. Each instance holds a RocksDB snapshot and iterator for
  * point-in-time scan isolation. The {@link ResourceGuard.Lease} prevents RocksDB from being closed
@@ -38,6 +40,8 @@ import javax.annotation.concurrent.NotThreadSafe;
 @NotThreadSafe
 public class ScannerContext implements AutoCloseable {
     private final byte[] scannerId;
+    /** Pre-computed map key to avoid per-RPC {@code ByteBuffer.wrap(scannerId)} allocation. */
+    private final ByteBuffer scannerIdKey;
     private final TableBucket tableBucket;
     private final RocksDBKv rocksDBKv;
     private final RocksIterator iterator;
@@ -58,6 +62,7 @@ public class ScannerContext implements AutoCloseable {
             ResourceGuard.Lease resourceLease,
             Clock clock) {
         this.scannerId = scannerId;
+        this.scannerIdKey = ByteBuffer.wrap(scannerId);
         this.tableBucket = tableBucket;
         this.rocksDBKv = rocksDBKv;
         this.iterator = iterator;
@@ -70,6 +75,10 @@ public class ScannerContext implements AutoCloseable {
 
     public byte[] getScannerId() {
         return scannerId;
+    }
+
+    public ByteBuffer getScannerIdKey() {
+        return scannerIdKey;
     }
 
     public TableBucket getTableBucket() {

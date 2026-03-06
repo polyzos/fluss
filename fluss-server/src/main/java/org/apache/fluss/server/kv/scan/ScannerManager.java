@@ -166,7 +166,7 @@ public class ScannerManager implements AutoCloseableAsync {
                             snapshot,
                             lease,
                             clock);
-            scanners.put(ByteBuffer.wrap(scannerId), context);
+            scanners.put(context.getScannerIdKey(), context);
             totalScanners.incrementAndGet();
             return context;
         } catch (Exception e) {
@@ -203,6 +203,17 @@ public class ScannerManager implements AutoCloseableAsync {
     public void removeScanner(byte[] scannerId) {
         ScannerContext context = scanners.remove(ByteBuffer.wrap(scannerId));
         if (context != null) {
+            totalScanners.decrementAndGet();
+            closeScannerContext(context);
+        }
+    }
+
+    /**
+     * Removes and closes a known scanner context directly, avoiding a map lookup. Prefer this over
+     * {@link #removeScanner(byte[])} when the caller already holds the {@link ScannerContext}.
+     */
+    public void removeScanner(ScannerContext context) {
+        if (scanners.remove(context.getScannerIdKey(), context)) {
             totalScanners.decrementAndGet();
             closeScannerContext(context);
         }

@@ -71,6 +71,7 @@ public class KvBatchScanner implements BatchScanner {
     private final int batchSizeBytes;
 
     private final Map<Short, int[]> schemaProjectionCache = new HashMap<>();
+    private final ValueRecordReadContext readContext;
 
     private byte[] scannerId;
     private int callSeqId = 0;
@@ -107,6 +108,7 @@ public class KvBatchScanner implements BatchScanner {
         for (int i = 0; i < rowType.getFieldCount(); i++) {
             this.fieldGetters[i] = InternalRow.createFieldGetter(rowType.getTypeAt(i), i);
         }
+        this.readContext = ValueRecordReadContext.createReadContext(schemaGetter, kvFormat);
     }
 
     @Nullable
@@ -148,6 +150,16 @@ public class KvBatchScanner implements BatchScanner {
         }
     }
 
+    /**
+     * Fires the first RPC eagerly so the network round-trip overlaps with draining the previous
+     * bucket. No-op if a request is already in-flight or the scanner is closed/exhausted.
+     */
+    public void prefetch() {
+        if (!isClosed && hasMoreResults && inFlightRequest == null) {
+            sendRequest();
+        }
+    }
+
     private void sendRequest() {
         int leader = metadataUpdater.leaderFor(tableInfo.getTablePath(), tableBucket);
         TabletServerGateway gateway = metadataUpdater.newTabletServerClientForNode(leader);
@@ -180,12 +192,10 @@ public class KvBatchScanner implements BatchScanner {
             return Collections.emptyList();
         }
 
-        List<InternalRow> scanRows = new ArrayList<>();
+        List<InternalRow> scanRows = new ArrayList<>(64);
         ByteBuffer recordsBuffer = ByteBuffer.wrap(response.getRecords());
         DefaultValueRecordBatch valueRecords =
                 DefaultValueRecordBatch.pointToByteBuffer(recordsBuffer);
-        ValueRecordReadContext readContext =
-                ValueRecordReadContext.createReadContext(schemaGetter, kvFormat);
 
         for (ValueRecord record : valueRecords.records(readContext)) {
             InternalRow row = record.getRow();
@@ -199,23 +209,22 @@ public class KvBatchScanner implements BatchScanner {
                                                 schemaGetter.getSchema(targetSchemaId)));
                 row = ProjectedRow.from(indexMapping).replaceRow(row);
             }
-            scanRows.add(maybeProject(row));
+            if (projectedFields != null) {
+                row = applyColumnProjection(row);
+            }
+            scanRows.add(row);
         }
         return scanRows;
     }
 
-    private InternalRow maybeProject(InternalRow originRow) {
+    private InternalRow applyColumnProjection(InternalRow row) {
         GenericRow newRow = new GenericRow(fieldGetters.length);
         for (int i = 0; i < fieldGetters.length; i++) {
-            newRow.setField(i, fieldGetters[i].getFieldOrNull(originRow));
+            newRow.setField(i, fieldGetters[i].getFieldOrNull(row));
         }
-        if (projectedFields != null) {
-            ProjectedRow projectedRow = ProjectedRow.from(projectedFields);
-            projectedRow.replaceRow(newRow);
-            return projectedRow;
-        } else {
-            return newRow;
-        }
+        ProjectedRow projectedRow = ProjectedRow.from(projectedFields);
+        projectedRow.replaceRow(newRow);
+        return projectedRow;
     }
 
     @Override

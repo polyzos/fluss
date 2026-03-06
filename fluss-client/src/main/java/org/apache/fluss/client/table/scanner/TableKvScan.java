@@ -19,6 +19,7 @@ package org.apache.fluss.client.table.scanner;
 
 import org.apache.fluss.client.FlussConnection;
 import org.apache.fluss.client.table.scanner.batch.BatchScanner;
+import org.apache.fluss.client.table.scanner.batch.KvBatchScanner;
 import org.apache.fluss.exception.FlussRuntimeException;
 import org.apache.fluss.metadata.PartitionInfo;
 import org.apache.fluss.metadata.SchemaGetter;
@@ -26,6 +27,8 @@ import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.utils.CloseableIterator;
+
+import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -78,20 +81,31 @@ public class TableKvScan implements KvScan {
         return new MultiBucketIterator(buckets, scan);
     }
 
-    private static CloseableIterator<InternalRow> scanBucket(Scan scan, TableBucket tableBucket) {
-        BatchScanner batchScanner = scan.createBatchScanner(tableBucket);
-        return new BatchScannerIterator(batchScanner);
-    }
-
     private static class MultiBucketIterator implements CloseableIterator<InternalRow> {
-        private final Iterator<TableBucket> bucketIterator;
+        private final List<TableBucket> buckets;
         private final Scan scan;
+        private int nextBucketIndex;
+        @Nullable private BatchScanner prefetchedScanner;
         private CloseableIterator<InternalRow> currentScannerIterator;
         private boolean isClosed = false;
 
         private MultiBucketIterator(List<TableBucket> buckets, Scan scan) {
-            this.bucketIterator = buckets.iterator();
+            this.buckets = buckets;
             this.scan = scan;
+            this.nextBucketIndex = 0;
+            // Eagerly open and prefetch the first bucket scanner so its first RPC is in-flight
+            // while the caller is setting up iteration.
+            if (!buckets.isEmpty()) {
+                prefetchedScanner = openAndPrefetch(nextBucketIndex++);
+            }
+        }
+
+        private BatchScanner openAndPrefetch(int index) {
+            BatchScanner scanner = scan.createBatchScanner(buckets.get(index));
+            if (scanner instanceof KvBatchScanner) {
+                ((KvBatchScanner) scanner).prefetch();
+            }
+            return scanner;
         }
 
         @Override
@@ -104,11 +118,21 @@ public class TableKvScan implements KvScan {
                     currentScannerIterator.close();
                     currentScannerIterator = null;
                 }
-                if (bucketIterator.hasNext()) {
-                    currentScannerIterator = scanBucket(scan, bucketIterator.next());
+                // Take the prefetched scanner (first RPC already in-flight), or open a new one.
+                BatchScanner nextScanner;
+                if (prefetchedScanner != null) {
+                    nextScanner = prefetchedScanner;
+                    prefetchedScanner = null;
+                } else if (nextBucketIndex < buckets.size()) {
+                    nextScanner = scan.createBatchScanner(buckets.get(nextBucketIndex++));
                 } else {
                     return false;
                 }
+                // Eagerly open and prefetch the scanner for the bucket after this one.
+                if (nextBucketIndex < buckets.size()) {
+                    prefetchedScanner = openAndPrefetch(nextBucketIndex++);
+                }
+                currentScannerIterator = new BatchScannerIterator(nextScanner);
             }
             return true;
         }
@@ -125,6 +149,14 @@ public class TableKvScan implements KvScan {
         public void close() {
             if (!isClosed) {
                 isClosed = true;
+                if (prefetchedScanner != null) {
+                    try {
+                        prefetchedScanner.close();
+                    } catch (IOException e) {
+                        throw new FlussRuntimeException("Error closing prefetched scanner", e);
+                    }
+                    prefetchedScanner = null;
+                }
                 if (currentScannerIterator != null) {
                     currentScannerIterator.close();
                 }
