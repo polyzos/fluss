@@ -49,6 +49,8 @@ public interface KvScan {
      * enumerated automatically; the caller only needs to iterate the returned rows.
      *
      * @return a closeable iterator of the rows in the table; must be closed after use
+     * @throws org.apache.fluss.exception.FlussRuntimeException if partition enumeration fails or
+     *     an error occurs while reading rows from the server
      */
     CloseableIterator<InternalRow> execute();
 }

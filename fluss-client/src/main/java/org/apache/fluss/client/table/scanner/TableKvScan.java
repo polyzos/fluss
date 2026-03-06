@@ -37,6 +37,9 @@ import java.util.NoSuchElementException;
 /** Implementation of {@link KvScan}. */
 public class TableKvScan implements KvScan {
 
+    /** Timeout used when polling each batch from the server-side scanner. */
+    private static final Duration BATCH_POLL_TIMEOUT = Duration.ofSeconds(30);
+
     private final FlussConnection conn;
     private final TableInfo tableInfo;
     private final SchemaGetter schemaGetter;
@@ -71,22 +74,24 @@ public class TableKvScan implements KvScan {
                     "Failed to list partitions for table " + tableInfo.getTablePath(), e);
         }
 
-        return new MultiBucketIterator(buckets);
+        Scan scan = new TableScan(conn, tableInfo, schemaGetter);
+        return new MultiBucketIterator(buckets, scan);
     }
 
-    private CloseableIterator<InternalRow> scanBucket(TableBucket tableBucket) {
-        Scan scan = new TableScan(conn, tableInfo, schemaGetter);
+    private static CloseableIterator<InternalRow> scanBucket(Scan scan, TableBucket tableBucket) {
         BatchScanner batchScanner = scan.createBatchScanner(tableBucket);
         return new BatchScannerIterator(batchScanner);
     }
 
-    private class MultiBucketIterator implements CloseableIterator<InternalRow> {
+    private static class MultiBucketIterator implements CloseableIterator<InternalRow> {
         private final Iterator<TableBucket> bucketIterator;
+        private final Scan scan;
         private CloseableIterator<InternalRow> currentScannerIterator;
         private boolean isClosed = false;
 
-        private MultiBucketIterator(List<TableBucket> buckets) {
+        private MultiBucketIterator(List<TableBucket> buckets, Scan scan) {
             this.bucketIterator = buckets.iterator();
+            this.scan = scan;
         }
 
         @Override
@@ -100,7 +105,7 @@ public class TableKvScan implements KvScan {
                     currentScannerIterator = null;
                 }
                 if (bucketIterator.hasNext()) {
-                    currentScannerIterator = scanBucket(bucketIterator.next());
+                    currentScannerIterator = scanBucket(scan, bucketIterator.next());
                 } else {
                     return false;
                 }
@@ -153,8 +158,7 @@ public class TableKvScan implements KvScan {
         private void ensureBatch() {
             try {
                 while ((currentBatch == null || !currentBatch.hasNext()) && !isClosed) {
-                    CloseableIterator<InternalRow> it =
-                            scanner.pollBatch(Duration.ofMinutes(1));
+                    CloseableIterator<InternalRow> it = scanner.pollBatch(BATCH_POLL_TIMEOUT);
                     if (it == null) {
                         isClosed = true;
                         break;
@@ -166,7 +170,7 @@ public class TableKvScan implements KvScan {
                     }
                 }
             } catch (IOException e) {
-                throw new RuntimeException("Error polling batch from scanner", e);
+                throw new FlussRuntimeException("Error polling batch from scanner", e);
             }
         }
 
@@ -176,7 +180,7 @@ public class TableKvScan implements KvScan {
                 try {
                     scanner.close();
                 } catch (IOException e) {
-                    throw new RuntimeException("Error closing scanner", e);
+                    throw new FlussRuntimeException("Error closing scanner", e);
                 }
                 isClosed = true;
             }

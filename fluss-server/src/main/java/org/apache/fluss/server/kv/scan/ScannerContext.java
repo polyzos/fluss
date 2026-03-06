@@ -35,7 +35,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * point-in-time scan isolation. The {@link ResourceGuard.Lease} prevents RocksDB from being closed
  * while this session is active.
  *
- * <p>This class is not thread-safe; callers must synchronize externally.
+ * <p>Most fields of this class are not thread-safe; in particular, {@link #iterator} and
+ * {@link #callSeqId} must only be accessed by a single thread at a time. The {@link #expired} flag
+ * is the sole exception: it is an {@link java.util.concurrent.atomic.AtomicBoolean} and may be
+ * written by the TTL reaper thread while another thread holds a reference to the context.
  */
 @NotThreadSafe
 public class ScannerContext implements AutoCloseable {

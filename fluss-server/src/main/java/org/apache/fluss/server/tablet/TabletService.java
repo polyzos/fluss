@@ -138,6 +138,7 @@ import static org.apache.fluss.server.utils.ServerRpcMessageUtils.toPrefixLookup
 public final class TabletService extends RpcServiceBase implements TabletServerGateway {
 
     private final String serviceName;
+    private final int serverId;
     private final ReplicaManager replicaManager;
     private final TabletServerMetadataCache metadataCache;
     private final TabletServerMetadataProvider metadataFunctionProvider;
@@ -163,6 +164,7 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 dynamicConfigManager,
                 ioExecutor);
         this.serviceName = "server-" + serverId;
+        this.serverId = serverId;
         this.replicaManager = replicaManager;
         this.metadataCache = metadataCache;
         this.scannerManager = scannerManager;
@@ -318,14 +320,11 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 byte[] scannerId = request.getScannerId();
                 ScannerContext context = scannerManager.getScanner(scannerId);
                 if (context == null) {
-                    // Distinguish between a session that was never created and one that expired
                     String idStr = new String(scannerId, StandardCharsets.UTF_8);
-                    // The context may have been removed by the reaper and marked expired before
-                    // removal, but since it is gone from the map we must use a placeholder check.
-                    // We create a temporary context only to read the expired flag; instead we rely
-                    // on a lightweight expiry-tracking mechanism in ScannerManager via a separate
-                    // set. For now, treat a missing context conservatively as UNKNOWN_SCANNER_ID;
-                    // clients should retry with a new session.
+                    if (scannerManager.isRecentlyExpired(scannerId)) {
+                        throw Errors.SCANNER_EXPIRED.exception(
+                                "Scanner session expired: " + idStr);
+                    }
                     throw Errors.UNKNOWN_SCANNER_ID.exception(
                             "Unknown scanner id: " + idStr);
                 }
@@ -349,7 +348,7 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 }
                 context.setCallSeqId(request.getCallSeqId());
 
-                response.complete(continueScan(scannerId, context, request.getBatchSizeBytes()));
+                response.complete(continueScan(context, request.getBatchSizeBytes()));
             } else {
                 if (!hasBucketScanReq) {
                     throw Errors.INVALID_SCAN_REQUEST.exception(
@@ -374,25 +373,23 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                             "Table " + bucketScanReq.getTableId() + " is not a primary key table.");
                 }
 
+                // Capture log offset before opening the snapshot so clients get a lower bound
+                // on the WAL position consistent with the data they are about to read.
+                long logHighWatermark = replica.getLogHighWatermark();
                 ScannerContext context = scannerManager.createScanner(replica.getKvTablet(), tb);
 
-                // Empty-bucket fast-path: no rows, return immediately without registering a session
-                if (!context.getIterator().isValid()) {
-                    scannerManager.removeScanner(context.getScannerId());
+                if (context == null) {
+                    // Empty bucket: no rows, no scanner registered
                     ScanKvResponse scanResponse = new ScanKvResponse();
-                    scanResponse
-                            .setScannerId(context.getScannerId())
-                            .setHasMoreResults(false)
-                            .setLogOffset(replica.getLogHighWatermark());
+                    scanResponse.setHasMoreResults(false).setLogOffset(logHighWatermark);
                     response.complete(scanResponse);
                     return response;
                 }
 
-                ScanKvResponse scanResponse =
-                        continueScan(context.getScannerId(), context, request.getBatchSizeBytes());
-                // Return the log offset at scanner creation time for clients to determine
-                // where to resume reading the log after the snapshot scan.
-                scanResponse.setLogOffset(replica.getLogHighWatermark());
+                ScanKvResponse scanResponse = continueScan(context, request.getBatchSizeBytes());
+                // Return the log offset for clients to determine where to resume reading the log
+                // after the snapshot scan completes.
+                scanResponse.setLogOffset(logHighWatermark);
                 response.complete(scanResponse);
             }
         } catch (Exception e) {
@@ -401,8 +398,9 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
         return response;
     }
 
-    private ScanKvResponse continueScan(
-            byte[] scannerId, ScannerContext context, int batchSizeBytes) throws IOException {
+    private ScanKvResponse continueScan(ScannerContext context, int batchSizeBytes)
+            throws IOException {
+        byte[] scannerId = context.getScannerId();
         RocksIterator iterator = context.getIterator();
         DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
         int currentBytes = 0;
@@ -452,10 +450,12 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
         CompletableFuture<NotifyLeaderAndIsrResponse> response = new CompletableFuture<>();
         List<NotifyLeaderAndIsrData> notifyLeaderAndIsrRequestData =
                 getNotifyLeaderAndIsrRequestData(notifyLeaderAndIsrRequest);
-        // Close any active scanner sessions for all affected buckets before role transitions.
-        // This prevents stale snapshot/iterator leaks when a bucket becomes a follower.
+        // Close scanner sessions only for buckets where this server is becoming a follower.
+        // Buckets where this server remains or becomes the leader keep their snapshots valid.
         for (NotifyLeaderAndIsrData data : notifyLeaderAndIsrRequestData) {
-            scannerManager.closeScannersForBucket(data.getTableBucket());
+            if (data.getLeader() != serverId) {
+                scannerManager.closeScannersForBucket(data.getTableBucket());
+            }
         }
         replicaManager.becomeLeaderOrFollower(
                 notifyLeaderAndIsrRequest.getCoordinatorEpoch(),
