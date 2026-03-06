@@ -288,6 +288,95 @@ message LimitScanResponse{
 }
 
 
+// streaming kv scan request and response
+//
+// A scan request. Initially, it should specify a scan via bucket_scan_req. Later on, you
+// can use the scanner_id returned in ScanKvResponse to fetch result batches with a different
+// scan request that only sets scanner_id.
+//
+// The scanner will remain open if there are more results, and it's not asked to be closed
+// explicitly.
+//
+// Clients may choose to retry scan requests that fail to complete (due to, for example, a
+// timeout or network error) using the same call_seq_id.
+//
+// You can fetch the results and ask the scanner to be closed to save a trip if you are not
+// interested in remaining results.
+message ScanKvRequest {
+  // If continuing an existing scan, then you must set scanner_id.
+  // Otherwise, you must set bucket_scan_req.
+  optional bytes scanner_id = 1;
+  optional PbScanReqForBucket bucket_scan_req = 2;
+
+  // The sequence ID of this call. The sequence ID should start at 0 with the request for
+  // a new scanner, and after each successful request, the client should increment it by 1.
+  // When retrying a request, the client should NOT increment this value. If the server
+  // detects that the client is sending an unexpected sequence ID, it will respond with an error.
+  optional uint32 call_seq_id = 3;
+
+  // The maximum number of bytes to send in the response. Determined by
+  // client.scanner.kv.fetch.max-bytes configuration.
+  optional uint32 batch_size_bytes = 4;
+
+  // If set, the server will close the scanner after responding to this request, regardless
+  // of whether all rows have been delivered.
+  optional bool close_scanner = 5;
+}
+
+message PbScanReqForBucket {
+  // The tablet to scan.
+  required int64 table_id = 1;
+  optional int64 partition_id = 2;
+  required int32 bucket_id = 3;
+
+  // The maximum number of rows to scan with the new scanner.
+  // The scanner will automatically stop yielding results and close itself
+  // after reaching this number of result rows.
+  optional uint64 limit = 4;
+}
+
+message ScanKvResponse {
+  // The error, if an error occurred with this request.
+  optional int32 error_code = 1;
+  optional string error_message = 2;
+
+  // When a scanner is created, returns the scanner ID (UUID hex string) which may be used
+  // to pull new rows from the scanner.
+  optional bytes scanner_id = 3;
+
+  // Set to true to indicate that there may be further results to be fetched from this scanner.
+  // If the scanner has no more results, then the scanner ID will become invalid and cannot
+  // continue to be used.
+  //
+  // Note that if a scan returns no results, then the initial response from the first RPC may
+  // return false in this flag, in which case there will be no scanner ID assigned.
+  optional bool has_more_results = 4;
+
+  // The block of returned rows as a DefaultValueRecordBatch.
+  //
+  // NOTE: The schema will match the schema requested by the client when it created the scanner.
+  optional bytes records = 5;
+
+  // Returns the corresponding log offset at the time the scanner is created (only present
+  // in the initial response). In Flink streaming scan, the source split reader can first
+  // consume KV records via the streaming scanner up to this log_offset and then switch to
+  // reading the log entries starting from this point.
+  optional int64 log_offset = 6;
+}
+
+// A scanner keep-alive request.
+// Updates the scanner access time, increasing its time-to-live.
+message ScannerKeepAliveRequest {
+  required bytes scanner_id = 1;
+}
+
+message ScannerKeepAliveResponse {
+  // The error, if an error occurred with this request.
+  optional int32 error_code = 1;
+  optional string error_message = 2;
+}
+
+
 // Get table statistics request and response.
 // Sent to TabletServer to get per-bucket statistics.
 message GetTableStatsRequest {

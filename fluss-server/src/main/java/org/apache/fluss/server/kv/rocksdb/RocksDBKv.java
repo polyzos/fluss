@@ -151,6 +151,55 @@ public class RocksDBKv implements AutoCloseable {
         return pkList;
     }
 
+    /**
+     * Opens a new scan iterator backed by a RocksDB snapshot for streaming KV scan. The returned
+     * iterator is positioned at the first key. Callers are responsible for closing the returned
+     * {@link ScanIteratorHandle}, which releases the underlying iterator, ReadOptions and snapshot.
+     *
+     * <p>The snapshot prevents compaction of older data until it is released. Callers should close
+     * the handle promptly (or rely on the ScannerManager TTL) to avoid blocking compaction.
+     */
+    public ScanIteratorHandle newScanIterator() {
+        org.rocksdb.Snapshot snapshot = db.getSnapshot();
+        ReadOptions readOptions = new ReadOptions();
+        readOptions.setSnapshot(snapshot);
+        readOptions.setFillCache(false);
+        RocksIterator rawIterator = db.newIterator(defaultColumnFamilyHandle, readOptions);
+        rawIterator.seekToFirst();
+        return new ScanIteratorHandle(db, snapshot, readOptions, rawIterator);
+    }
+
+    /**
+     * A handle that groups the RocksDB {@link org.rocksdb.Snapshot}, its paired {@link
+     * ReadOptions}, and the {@link RocksIterator} opened against that snapshot. Closing this handle
+     * releases all three resources in the correct order.
+     */
+    public static final class ScanIteratorHandle implements AutoCloseable {
+        private final RocksDB db;
+        private final org.rocksdb.Snapshot snapshot;
+        private final ReadOptions readOptions;
+        public final RocksIterator iterator;
+
+        private ScanIteratorHandle(
+                RocksDB db,
+                org.rocksdb.Snapshot snapshot,
+                ReadOptions readOptions,
+                RocksIterator iterator) {
+            this.db = db;
+            this.snapshot = snapshot;
+            this.readOptions = readOptions;
+            this.iterator = iterator;
+        }
+
+        @Override
+        public void close() {
+            iterator.close();
+            readOptions.close();
+            db.releaseSnapshot(snapshot);
+            snapshot.close();
+        }
+    }
+
     public void put(byte[] key, byte[] value) throws IOException {
         try {
             db.put(writeOptions, key, value);

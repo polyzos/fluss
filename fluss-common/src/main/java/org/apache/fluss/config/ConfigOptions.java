@@ -1197,6 +1197,14 @@ public class ConfigOptions {
                             "Local directory that is used by client for"
                                     + " storing the data files (like kv snapshot, log segment files) to read temporarily");
 
+    public static final ConfigOption<MemorySize> CLIENT_SCANNER_KV_FETCH_MAX_BYTES =
+            key("client.scanner.kv.fetch.max-bytes")
+                    .memoryType()
+                    .defaultValue(MemorySize.parse("1mb"))
+                    .withDescription(
+                            "The maximum number of bytes to include in a single streaming KV scan response "
+                                    + "batch from the tablet server. The default setting is 1mb.");
+
     public static final ConfigOption<Integer> REMOTE_FILE_DOWNLOAD_THREAD_NUM =
             key("client.remote-file.download-thread-num")
                     .intType()
@@ -1562,6 +1570,24 @@ public class ConfigOptions {
                     .withDescription(
                             "The interval to check the expiration of kv snapshot lease. "
                                     + "The default setting is 10 minutes.");
+
+    public static final ConfigOption<Duration> SERVER_SCANNER_TTL =
+            key("server.scanner.ttl")
+                    .durationType()
+                    .defaultValue(Duration.ofSeconds(60))
+                    .withDescription(
+                            "The time-to-live of an idle server-side KV scanner session. A scanner that has "
+                                    + "not received any request for this duration will be automatically expired "
+                                    + "and its underlying RocksDB iterator and snapshot will be released. "
+                                    + "The default setting is 60 seconds.");
+
+    public static final ConfigOption<Duration> SERVER_SCANNER_EXPIRATION_INTERVAL =
+            key("server.scanner.expiration-interval")
+                    .durationType()
+                    .defaultValue(Duration.ofSeconds(30))
+                    .withDescription(
+                            "The interval at which the server checks for and removes expired KV scanner "
+                                    + "sessions. The default setting is 30 seconds.");
 
     public static final ConfigOption<Integer> KV_MAX_BACKGROUND_THREADS =
             key("kv.rocksdb.thread.num")

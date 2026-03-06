@@ -77,6 +77,9 @@ import org.apache.fluss.server.entity.StopReplicaResultForBucket;
 import org.apache.fluss.server.entity.UserContext;
 import org.apache.fluss.server.kv.KvManager;
 import org.apache.fluss.server.kv.KvSnapshotResource;
+import org.apache.fluss.server.kv.scanner.InitScanResult;
+import org.apache.fluss.server.kv.scanner.KvScanIterator;
+import org.apache.fluss.server.kv.scanner.ScannerManager;
 import org.apache.fluss.server.kv.snapshot.CompletedKvSnapshotCommitter;
 import org.apache.fluss.server.kv.snapshot.DefaultSnapshotContext;
 import org.apache.fluss.server.kv.snapshot.SnapshotContext;
@@ -195,6 +198,9 @@ public class ReplicaManager {
     private final KvSnapshotResource kvSnapshotResource;
     private final SnapshotContext kvSnapshotContext;
 
+    // for streaming kv scan
+    private final ScannerManager scannerManager;
+
     // remote log manager for remote log storage.
     private final RemoteLogManager remoteLogManager;
 
@@ -300,6 +306,11 @@ public class ReplicaManager {
         this.kvSnapshotContext =
                 DefaultSnapshotContext.create(
                         zkClient, completedKvSnapshotCommitter, kvSnapshotResource, conf);
+        // for streaming kv scan
+        long scannerTtlMs = conf.get(ConfigOptions.SERVER_SCANNER_TTL).toMillis();
+        long scannerExpirationIntervalMs =
+                conf.get(ConfigOptions.SERVER_SCANNER_EXPIRATION_INTERVAL).toMillis();
+        this.scannerManager = new ScannerManager(scannerTtlMs, scannerExpirationIntervalMs);
         this.remoteLogManager = remoteLogManager;
         this.serverMetricGroup = serverMetricGroup;
         this.userMetrics = userMetrics;
@@ -1316,6 +1327,136 @@ public class ReplicaManager {
         responseCallback.accept(limitScanResultForBucket);
     }
 
+    /**
+     * Handles a {@code ScanKvRequest}. If the request contains a new scan (no scanner_id), opens a
+     * RocksDB snapshot iterator on the leader replica and registers it with the
+     * {@link ScannerManager}. If the request provides an existing scanner_id, fetches the next
+     * page from the existing scan session.
+     *
+     * @param tableBucket    the bucket to scan (used only for new scans)
+     * @param scannerId      null for a new scan; the existing scanner ID for subsequent fetches
+     * @param rowLimit       max rows (0 = unlimited); used only when opening a new scanner
+     * @param batchSizeBytes max bytes per response page
+     * @param callSeqId      sequence ID for ordering / retry detection
+     * @param closeAfter     if true the scanner is closed after serving this response
+     * @param responseCallback receives the result including records bytes, hasMore flag, etc.
+     */
+    public void scanKv(
+            @Nullable TableBucket tableBucket,
+            @Nullable String scannerId,
+            long rowLimit,
+            int batchSizeBytes,
+            int callSeqId,
+            boolean closeAfter,
+            Consumer<ScanKvResult> responseCallback) {
+        try {
+            if (scannerId == null) {
+                // --- New scan: open a scanner ---
+                checkNotNull(tableBucket, "tableBucket must be provided for a new scan request.");
+                Replica replica = getReplicaOrException(tableBucket);
+                InitScanResult init = replica.initKvScan();
+                long rowLimitEffective = rowLimit <= 0 ? 0L : rowLimit;
+                String newScannerId =
+                        scannerManager.registerScanner(
+                                tableBucket,
+                                init.logOffset,
+                                rowLimitEffective,
+                                init.handle);
+                KvScanIterator scanner = scannerManager.getScanner(newScannerId);
+                KvScanIterator.FetchResult page =
+                        scanner.fetch(callSeqId, batchSizeBytes, closeAfter);
+                if (!page.hasMore) {
+                    scannerManager.closeScanner(newScannerId);
+                }
+                responseCallback.accept(
+                        new ScanKvResult(
+                                newScannerId,
+                                page.records,
+                                page.hasMore,
+                                init.logOffset,
+                                /* isNewScanner= */ true));
+            } else {
+                // --- Existing scan: fetch next page ---
+                KvScanIterator scanner = scannerManager.getScanner(scannerId);
+                KvScanIterator.FetchResult page =
+                        scanner.fetch(callSeqId, batchSizeBytes, closeAfter);
+                if (!page.hasMore) {
+                    scannerManager.closeScanner(scannerId);
+                }
+                responseCallback.accept(
+                        new ScanKvResult(
+                                scannerId,
+                                page.records,
+                                page.hasMore,
+                                /* logOffset= */ -1L,
+                                /* isNewScanner= */ false));
+            }
+        } catch (Exception e) {
+            if (isUnexpectedException(e)) {
+                LOG.error("Error during streaming KV scan, bucket={}, scannerId={}", tableBucket, scannerId, e);
+            }
+            responseCallback.accept(ScanKvResult.error(ApiError.fromThrowable(e)));
+        }
+    }
+
+    /**
+     * Handles a {@code ScannerKeepAliveRequest}: resets the TTL clock of the named scanner so it
+     * is not evicted while the client is processing previously fetched records.
+     */
+    public void scannerKeepAlive(String scannerId, Consumer<ApiError> responseCallback) {
+        try {
+            scannerManager.getScanner(scannerId).keepAlive();
+            responseCallback.accept(ApiError.NONE);
+        } catch (Exception e) {
+            responseCallback.accept(ApiError.fromThrowable(e));
+        }
+    }
+
+    /**
+     * Result of a single {@link #scanKv} call, handed to the response-building callback in
+     * {@code TabletService}.
+     */
+    public static final class ScanKvResult {
+        public final String scannerId;
+        public final byte[] records;
+        public final boolean hasMore;
+        /** Log offset captured at scanner creation time; -1 for subsequent pages. */
+        public final long logOffset;
+        public final boolean isNewScanner;
+        @Nullable public final ApiError error;
+
+        ScanKvResult(
+                String scannerId,
+                byte[] records,
+                boolean hasMore,
+                long logOffset,
+                boolean isNewScanner) {
+            this.scannerId = scannerId;
+            this.records = records;
+            this.hasMore = hasMore;
+            this.logOffset = logOffset;
+            this.isNewScanner = isNewScanner;
+            this.error = null;
+        }
+
+        private ScanKvResult(ApiError error) {
+            this.scannerId = null;
+            this.records = new byte[0];
+            this.hasMore = false;
+            this.logOffset = -1L;
+            this.isNewScanner = false;
+            this.error = error;
+        }
+
+        static ScanKvResult error(ApiError error) {
+            return new ScanKvResult(error);
+        }
+
+        public boolean hasError() {
+            return error != null;
+        }
+    }
+
     public Map<TableBucket, LogReadResult> readFromLog(
             FetchParams fetchParams,
             Map<TableBucket, FetchReqInfo> bucketFetchInfo,
@@ -1767,6 +1908,9 @@ public class ReplicaManager {
             Map<Long, Path> deletedPartitionIds) {
         // First stop fetchers for this table bucket.
         replicaFetcherManager.removeFetcherForBuckets(Collections.singleton(tb));
+        // Close all streaming KV scan sessions for this bucket before the replica is torn down,
+        // so that the underlying RocksDB snapshot and iterator are released before close().
+        scannerManager.closeScannersForBucket(tb);
 
         HostedReplica replica = getReplica(tb);
         if (replica instanceof OnlineReplica) {
@@ -1964,6 +2108,8 @@ public class ReplicaManager {
     public void shutdown() throws InterruptedException {
         // Close the resources for snapshot kv
         kvSnapshotResource.close();
+        // Close all streaming KV scan sessions before replicas are stopped
+        scannerManager.close();
         replicaFetcherManager.shutdown();
         delayedWriteManager.shutdown();
         delayedFetchLogManager.shutdown();

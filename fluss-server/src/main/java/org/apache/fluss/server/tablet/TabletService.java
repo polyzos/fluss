@@ -58,6 +58,10 @@ import org.apache.fluss.rpc.messages.ProduceLogRequest;
 import org.apache.fluss.rpc.messages.ProduceLogResponse;
 import org.apache.fluss.rpc.messages.PutKvRequest;
 import org.apache.fluss.rpc.messages.PutKvResponse;
+import org.apache.fluss.rpc.messages.ScanKvRequest;
+import org.apache.fluss.rpc.messages.ScanKvResponse;
+import org.apache.fluss.rpc.messages.ScannerKeepAliveRequest;
+import org.apache.fluss.rpc.messages.ScannerKeepAliveResponse;
 import org.apache.fluss.rpc.messages.StopReplicaRequest;
 import org.apache.fluss.rpc.messages.StopReplicaResponse;
 import org.apache.fluss.rpc.messages.UpdateMetadataRequest;
@@ -71,6 +75,7 @@ import org.apache.fluss.server.DynamicConfigManager;
 import org.apache.fluss.server.RpcServiceBase;
 import org.apache.fluss.server.authorizer.Authorizer;
 import org.apache.fluss.server.coordinator.MetadataManager;
+import org.apache.fluss.server.replica.ReplicaManager.ScanKvResult;
 import org.apache.fluss.server.entity.FetchReqInfo;
 import org.apache.fluss.server.entity.NotifyLeaderAndIsrData;
 import org.apache.fluss.server.entity.UserContext;
@@ -308,6 +313,105 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 request.getLimit(),
                 value -> response.complete(makeLimitScanResponse(value)));
         return response;
+    }
+
+    @Override
+    public CompletableFuture<ScanKvResponse> scanKv(ScanKvRequest request) {
+        // Determine the table ID for authorization from the request
+        long tableId;
+        if (request.hasScannerId()) {
+            // Subsequent request: we don't have the table ID in the request. Skip auth check here;
+            // the scanner was already authorized when it was opened.
+            tableId = -1L;
+        } else {
+            tableId = request.getBucketScanReq().getTableId();
+            authorizeTable(READ, tableId);
+        }
+
+        CompletableFuture<ScanKvResponse> response = new CompletableFuture<>();
+
+        // Parse common fields
+        int callSeqId = request.hasCallSeqId() ? request.getCallSeqId() : 0;
+        int batchSizeBytes =
+                request.hasBatchSizeBytes() ? request.getBatchSizeBytes() : (1024 * 1024);
+        boolean closeAfter = request.hasCloseScanner() && request.getCloseScanner();
+
+        if (request.hasScannerId()) {
+            // Existing scan: fetch next page
+            String scannerId = new String(request.getScannerId());
+            replicaManager.scanKv(
+                    null,
+                    scannerId,
+                    0L,
+                    batchSizeBytes,
+                    callSeqId,
+                    closeAfter,
+                    result -> response.complete(makeScanKvResponse(result)));
+        } else {
+            // New scan
+            org.apache.fluss.rpc.messages.PbScanReqForBucket bucketReq =
+                    request.getBucketScanReq();
+            TableBucket tableBucket =
+                    new TableBucket(
+                            bucketReq.getTableId(),
+                            bucketReq.hasPartitionId() ? bucketReq.getPartitionId() : null,
+                            bucketReq.getBucketId());
+            long rowLimit = bucketReq.hasLimit() ? bucketReq.getLimit() : 0L;
+            replicaManager.scanKv(
+                    tableBucket,
+                    null,
+                    rowLimit,
+                    batchSizeBytes,
+                    callSeqId,
+                    closeAfter,
+                    result -> response.complete(makeScanKvResponse(result)));
+        }
+        return response;
+    }
+
+    @Override
+    public CompletableFuture<ScannerKeepAliveResponse> scannerKeepAlive(
+            ScannerKeepAliveRequest request) {
+        CompletableFuture<ScannerKeepAliveResponse> response = new CompletableFuture<>();
+        String scannerId = new String(request.getScannerId());
+        replicaManager.scannerKeepAlive(
+                scannerId,
+                error -> response.complete(makeScannerKeepAliveResponse(error)));
+        return response;
+    }
+
+    private ScanKvResponse makeScanKvResponse(ScanKvResult result) {
+        ScanKvResponse resp = new ScanKvResponse();
+        if (result.hasError()) {
+            ApiError error = result.error;
+            resp.setErrorCode(error.error().code());
+            if (error.message() != null) {
+                resp.setErrorMessage(error.message());
+            }
+            return resp;
+        }
+        if (result.scannerId != null) {
+            resp.setScannerId(result.scannerId.getBytes());
+        }
+        resp.setHasMoreResults(result.hasMore);
+        if (result.records != null && result.records.length > 0) {
+            resp.setRecords(result.records);
+        }
+        if (result.isNewScanner && result.logOffset >= 0) {
+            resp.setLogOffset(result.logOffset);
+        }
+        return resp;
+    }
+
+    private ScannerKeepAliveResponse makeScannerKeepAliveResponse(ApiError error) {
+        ScannerKeepAliveResponse resp = new ScannerKeepAliveResponse();
+        if (error != ApiError.NONE) {
+            resp.setErrorCode(error.error().code());
+            if (error.message() != null) {
+                resp.setErrorMessage(error.message());
+            }
+        }
+        return resp;
     }
 
     @Override

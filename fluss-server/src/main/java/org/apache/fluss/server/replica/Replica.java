@@ -1310,6 +1310,47 @@ public final class Replica {
                 });
     }
 
+    /**
+     * Opens a new streaming KV scan session. Validates that this replica is the leader and that
+     * the table is a primary-key (KV) table, then delegates to {@link KvTablet#initKvScan()}.
+     *
+     * @return a pair of (logOffset at snapshot creation, ScanIteratorHandle)
+     */
+    public org.apache.fluss.server.kv.scanner.InitScanResult initKvScan() {
+        if (!isKvTable()) {
+            throw new NonPrimaryKeyTableException(
+                    "Streaming KV scan is only supported for primary-key tables. Bucket: "
+                            + tableBucket);
+        }
+        return inReadLock(
+                leaderIsrUpdateLock,
+                () -> {
+                    try {
+                        if (!isLeader()) {
+                            throw new NotLeaderOrFollowerException(
+                                    String.format(
+                                            "Leader not local for bucket %s on tabletServer %d",
+                                            tableBucket, localTabletServerId));
+                        }
+                        checkNotNull(
+                                kvTablet,
+                                "KvTablet for the replica to stream scan shouldn't be null.");
+                        long logOffset = kvTablet.getCurrentLogOffset();
+                        org.apache.fluss.server.kv.rocksdb.RocksDBKv.ScanIteratorHandle handle =
+                                kvTablet.initKvScan();
+                        return new org.apache.fluss.server.kv.scanner.InitScanResult(
+                                logOffset, handle);
+                    } catch (IOException e) {
+                        String errorMsg =
+                                String.format(
+                                        "Failed to initialize streaming KV scan for table bucket %s: %s",
+                                        tableBucket, e.getMessage());
+                        LOG.error(errorMsg, e);
+                        throw new KvStorageException(errorMsg, e);
+                    }
+                });
+    }
+
     public LogRecords limitLogScan(int limit) {
         return inReadLock(
                 leaderIsrUpdateLock,

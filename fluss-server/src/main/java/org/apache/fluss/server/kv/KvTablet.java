@@ -756,6 +756,36 @@ public final class KvTablet {
                 });
     }
 
+    /**
+     * Opens a new streaming scan session against the live RocksDB instance. The returned {@link
+     * org.apache.fluss.server.kv.rocksdb.RocksDBKv.ScanIteratorHandle} is backed by a RocksDB
+     * snapshot so it provides a stable, point-in-time view of the data.
+     *
+     * <p>The caller is responsible for registering the handle with the {@link
+     * org.apache.fluss.server.kv.scanner.ScannerManager} and ultimately closing it.
+     *
+     * @return a {@link org.apache.fluss.server.kv.rocksdb.RocksDBKv.ScanIteratorHandle} positioned
+     *     at the first key
+     */
+    public org.apache.fluss.server.kv.rocksdb.RocksDBKv.ScanIteratorHandle initKvScan()
+            throws IOException {
+        return inReadLock(
+                kvLock,
+                () -> {
+                    rocksDBKv.checkIfRocksDBClosed();
+                    return rocksDBKv.newScanIterator();
+                });
+    }
+
+    /**
+     * Returns the current log end offset (high watermark) of the changelog log tablet. This is
+     * captured at scanner creation time and returned to the client in the initial scan response so
+     * that streaming consumers can switch to log scanning at exactly the right offset.
+     */
+    public long getCurrentLogOffset() {
+        return logTablet.getHighWatermark();
+    }
+
     public KvBatchWriter createKvBatchWriter() {
         return rocksDBKv.newWriteBatch(
                 writeBatchSize,

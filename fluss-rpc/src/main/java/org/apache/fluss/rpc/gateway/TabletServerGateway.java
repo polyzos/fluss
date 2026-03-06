@@ -44,6 +44,10 @@ import org.apache.fluss.rpc.messages.ProduceLogRequest;
 import org.apache.fluss.rpc.messages.ProduceLogResponse;
 import org.apache.fluss.rpc.messages.PutKvRequest;
 import org.apache.fluss.rpc.messages.PutKvResponse;
+import org.apache.fluss.rpc.messages.ScanKvRequest;
+import org.apache.fluss.rpc.messages.ScanKvResponse;
+import org.apache.fluss.rpc.messages.ScannerKeepAliveRequest;
+import org.apache.fluss.rpc.messages.ScannerKeepAliveResponse;
 import org.apache.fluss.rpc.messages.StopReplicaRequest;
 import org.apache.fluss.rpc.messages.StopReplicaResponse;
 import org.apache.fluss.rpc.messages.UpdateMetadataRequest;
@@ -131,6 +135,31 @@ public interface TabletServerGateway extends RpcGateway, AdminReadOnlyGateway {
      */
     @RPC(api = ApiKeys.LIMIT_SCAN)
     CompletableFuture<LimitScanResponse> limitScan(LimitScanRequest request);
+
+    /**
+     * Stream KV records from a primary-key table bucket. On the first call (no scanner_id), the
+     * server opens a RocksDB snapshot iterator and returns the first page of records together with
+     * a scanner_id. Subsequent calls supply the scanner_id to fetch additional pages. The scanner
+     * is closed automatically when there are no more results, or when {@code close_scanner} is set
+     * to {@code true} in the request.
+     *
+     * @param request the scan request
+     * @return the scan response
+     */
+    @RPC(api = ApiKeys.SCAN_KV)
+    CompletableFuture<ScanKvResponse> scanKv(ScanKvRequest request);
+
+    /**
+     * Keep a server-side KV scan session alive, resetting its idle TTL. Clients should call this
+     * periodically when the interval between {@link #scanKv} calls may exceed
+     * {@code server.scanner.ttl}.
+     *
+     * @param request the keep-alive request containing the scanner_id
+     * @return the keep-alive response
+     */
+    @RPC(api = ApiKeys.SCANNER_KEEP_ALIVE)
+    CompletableFuture<ScannerKeepAliveResponse> scannerKeepAlive(
+            ScannerKeepAliveRequest request);
 
     /**
      * Get statistics for the specified table buckets.
