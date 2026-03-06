@@ -28,17 +28,12 @@ import org.rocksdb.Snapshot;
 
 import javax.annotation.concurrent.NotThreadSafe;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
 /**
  * The context for a scanner session. Each instance holds a RocksDB snapshot and iterator for
  * point-in-time scan isolation. The {@link ResourceGuard.Lease} prevents RocksDB from being closed
  * while this session is active.
  *
- * <p>Most fields of this class are not thread-safe; in particular, {@link #iterator} and
- * {@link #callSeqId} must only be accessed by a single thread at a time. The {@link #expired} flag
- * is the sole exception: it is an {@link java.util.concurrent.atomic.AtomicBoolean} and may be
- * written by the TTL reaper thread while another thread holds a reference to the context.
+ * <p>This class is not thread-safe; all fields must only be accessed by a single thread at a time.
  */
 @NotThreadSafe
 public class ScannerContext implements AutoCloseable {
@@ -52,7 +47,6 @@ public class ScannerContext implements AutoCloseable {
 
     private int callSeqId;
     private long lastAccessTime;
-    private final AtomicBoolean expired = new AtomicBoolean(false);
 
     public ScannerContext(
             byte[] scannerId,
@@ -100,19 +94,6 @@ public class ScannerContext implements AutoCloseable {
 
     public void updateLastAccessTime(long lastAccessTime) {
         this.lastAccessTime = lastAccessTime;
-    }
-
-    /**
-     * Marks this scanner as expired by the TTL reaper. After this call, {@link #isExpired()} will
-     * return {@code true}, allowing the server to distinguish an expired session from an unknown
-     * scanner id.
-     */
-    public void markExpired() {
-        expired.set(true);
-    }
-
-    public boolean isExpired() {
-        return expired.get();
     }
 
     @Override

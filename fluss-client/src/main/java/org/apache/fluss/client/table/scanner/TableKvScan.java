@@ -124,10 +124,10 @@ public class TableKvScan implements KvScan {
         @Override
         public void close() {
             if (!isClosed) {
+                isClosed = true;
                 if (currentScannerIterator != null) {
                     currentScannerIterator.close();
                 }
-                isClosed = true;
             }
         }
     }

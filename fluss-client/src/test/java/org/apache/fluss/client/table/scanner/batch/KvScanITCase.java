@@ -20,16 +20,17 @@ package org.apache.fluss.client.table.scanner.batch;
 import org.apache.fluss.client.admin.ClientToServerITCaseBase;
 import org.apache.fluss.client.table.Table;
 import org.apache.fluss.client.table.writer.UpsertWriter;
+import org.apache.fluss.exception.FlussRuntimeException;
+import org.apache.fluss.metadata.PartitionInfo;
 import org.apache.fluss.metadata.PartitionSpec;
 import org.apache.fluss.metadata.Schema;
+import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableDescriptor;
 import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.types.DataTypes;
 import org.apache.fluss.utils.CloseableIterator;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -49,25 +50,32 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Integration tests for full KV scan via {@code table.newKvScan().execute()}.
  *
- * <p>All non-partitioned tables use 3 buckets to exercise multi-bucket fan-out on the 3-node
- * cluster provided by {@link ClientToServerITCaseBase}. Each test calls {@link
- * #waitAllReplicasReady} after table creation to ensure leader election completes before scanning,
- * which is especially important for empty-table tests that have no upsert traffic to act as a
- * natural synchronization barrier.
+ * <p>All non-partitioned tables use {@link #NUM_BUCKETS} buckets to exercise multi-bucket fan-out
+ * on the 3-node cluster provided by {@link ClientToServerITCaseBase}. Each test calls {@link
+ * #waitAllReplicasReady} (or {@link #waitPartitionedTableReplicasReady}) after table creation to
+ * ensure leader election completes before scanning — especially important for empty tables or
+ * partitions that have no upsert traffic as a natural synchronization barrier.
  */
 public class KvScanITCase extends ClientToServerITCaseBase {
 
     private static final int NUM_BUCKETS = 3;
 
-    @BeforeEach
-    protected void setup() throws Exception {
-        super.setup();
-    }
+    /** Schema shared by all non-partitioned PK tests: (id INT, name STRING), PK = id. */
+    private static final Schema PK_SCHEMA =
+            Schema.newBuilder()
+                    .column("id", DataTypes.INT())
+                    .column("name", DataTypes.STRING())
+                    .primaryKey("id")
+                    .build();
 
-    @AfterEach
-    protected void teardown() throws Exception {
-        super.teardown();
-    }
+    /** Schema shared by partitioned PK tests: (id INT, p STRING, name STRING), PK = (id, p). */
+    private static final Schema PARTITIONED_SCHEMA =
+            Schema.newBuilder()
+                    .column("id", DataTypes.INT())
+                    .column("p", DataTypes.STRING())
+                    .column("name", DataTypes.STRING())
+                    .primaryKey("id", "p")
+                    .build();
 
     // -------------------------------------------------------------------------
     //  Basic / structural tests
@@ -75,22 +83,7 @@ public class KvScanITCase extends ClientToServerITCaseBase {
 
     @Test
     void testBasicScan() throws Exception {
-        TablePath tablePath = TablePath.of("test_db", "test_basic_scan");
-        Schema schema =
-                Schema.newBuilder()
-                        .column("id", DataTypes.INT())
-                        .column("name", DataTypes.STRING())
-                        .primaryKey("id")
-                        .build();
-        TableDescriptor descriptor =
-                TableDescriptor.builder()
-                        .schema(schema)
-                        .distributedBy(NUM_BUCKETS, "id")
-                        .build();
-
-        long tableId = createTable(tablePath, descriptor, true);
-        waitAllReplicasReady(tableId, NUM_BUCKETS);
-        Table table = conn.getTable(tablePath);
+        Table table = createPkTable(TablePath.of("test_db", "test_basic_scan"));
 
         UpsertWriter writer = table.newUpsert().createWriter();
         writer.upsert(row(1, "a"));
@@ -102,92 +95,23 @@ public class KvScanITCase extends ClientToServerITCaseBase {
 
         assertThat(result).hasSize(3);
         result.sort(Comparator.comparingInt(r -> r.getInt(0)));
-        assertThatRow(result.get(0)).withSchema(schema.getRowType()).isEqualTo(row(1, "a"));
-        assertThatRow(result.get(1)).withSchema(schema.getRowType()).isEqualTo(row(2, "b"));
-        assertThatRow(result.get(2)).withSchema(schema.getRowType()).isEqualTo(row(3, "c"));
+        assertThatRow(result.get(0)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(1, "a"));
+        assertThatRow(result.get(1)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(2, "b"));
+        assertThatRow(result.get(2)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(3, "c"));
     }
 
     @Test
     void testEmptyTable() throws Exception {
-        TablePath tablePath = TablePath.of("test_db", "test_empty_table");
-        Schema schema =
-                Schema.newBuilder()
-                        .column("id", DataTypes.INT())
-                        .column("name", DataTypes.STRING())
-                        .primaryKey("id")
-                        .build();
-        TableDescriptor descriptor =
-                TableDescriptor.builder()
-                        .schema(schema)
-                        .distributedBy(NUM_BUCKETS, "id")
-                        .build();
-
-        long tableId = createTable(tablePath, descriptor, true);
-        // No upsert traffic — must wait for leaders to be elected before scanning.
-        waitAllReplicasReady(tableId, NUM_BUCKETS);
-        Table table = conn.getTable(tablePath);
-
-        List<InternalRow> result = kvScanAll(table);
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void testMultiBucketScan() throws Exception {
-        TablePath tablePath = TablePath.of("test_db", "test_multi_bucket_scan");
-        Schema schema =
-                Schema.newBuilder()
-                        .column("id", DataTypes.INT())
-                        .column("name", DataTypes.STRING())
-                        .primaryKey("id")
-                        .build();
-        TableDescriptor descriptor =
-                TableDescriptor.builder()
-                        .schema(schema)
-                        .distributedBy(NUM_BUCKETS, "id")
-                        .build();
-
-        long tableId = createTable(tablePath, descriptor, true);
-        waitAllReplicasReady(tableId, NUM_BUCKETS);
-        Table table = conn.getTable(tablePath);
-
-        int rowCount = 100;
-        UpsertWriter writer = table.newUpsert().createWriter();
-        for (int i = 0; i < rowCount; i++) {
-            writer.upsert(row(i, "val" + i));
-        }
-        writer.flush();
-
-        List<InternalRow> allResult = kvScanAll(table);
-
-        assertThat(allResult).hasSize(rowCount);
-        allResult.sort(Comparator.comparingInt(r -> r.getInt(0)));
-        for (int i = 0; i < rowCount; i++) {
-            assertThatRow(allResult.get(i))
-                    .withSchema(schema.getRowType())
-                    .isEqualTo(row(i, "val" + i));
-        }
+        Table table = createPkTable(TablePath.of("test_db", "test_empty_table"));
+        // No upsert traffic — waitAllReplicasReady inside createPkTable ensures leaders are ready.
+        assertThat(kvScanAll(table)).isEmpty();
     }
 
     @Test
     void testLargeDataScan() throws Exception {
-        TablePath tablePath = TablePath.of("test_db", "test_large_data_scan");
-        Schema schema =
-                Schema.newBuilder()
-                        .column("id", DataTypes.INT())
-                        .column("name", DataTypes.STRING())
-                        .primaryKey("id")
-                        .build();
-        TableDescriptor descriptor =
-                TableDescriptor.builder()
-                        .schema(schema)
-                        .distributedBy(NUM_BUCKETS, "id")
-                        .build();
+        Table table = createPkTable(TablePath.of("test_db", "test_large_data_scan"));
 
-        long tableId = createTable(tablePath, descriptor, true);
-        waitAllReplicasReady(tableId, NUM_BUCKETS);
-        Table table = conn.getTable(tablePath);
-
-        int rowCount = 10000;
+        int rowCount = 10_000;
         UpsertWriter writer = table.newUpsert().createWriter();
         for (int i = 0; i < rowCount; i++) {
             writer.upsert(row(i, "val" + i));
@@ -200,7 +124,7 @@ public class KvScanITCase extends ClientToServerITCaseBase {
         result.sort(Comparator.comparingInt(r -> r.getInt(0)));
         for (int i = 0; i < rowCount; i++) {
             assertThatRow(result.get(i))
-                    .withSchema(schema.getRowType())
+                    .withSchema(PK_SCHEMA.getRowType())
                     .isEqualTo(row(i, "val" + i));
         }
     }
@@ -212,34 +136,17 @@ public class KvScanITCase extends ClientToServerITCaseBase {
     @Test
     void testPartitionedTableScan() throws Exception {
         TablePath tablePath = TablePath.of("test_db", "test_partitioned_scan");
-        Schema schema =
-                Schema.newBuilder()
-                        .column("id", DataTypes.INT())
-                        .column("p", DataTypes.STRING())
-                        .column("name", DataTypes.STRING())
-                        .primaryKey("id", "p")
-                        .build();
-        TableDescriptor descriptor =
-                TableDescriptor.builder()
-                        .schema(schema)
-                        .partitionedBy("p")
-                        .distributedBy(NUM_BUCKETS, "id")
-                        .build();
+        long tableId = createPartitionedTable(tablePath);
 
-        createTable(tablePath, descriptor, true);
         admin.createPartition(
-                        tablePath,
-                        new PartitionSpec(Collections.singletonMap("p", "p1")),
-                        false)
+                        tablePath, new PartitionSpec(Collections.singletonMap("p", "p1")), false)
                 .get();
         admin.createPartition(
-                        tablePath,
-                        new PartitionSpec(Collections.singletonMap("p", "p2")),
-                        false)
+                        tablePath, new PartitionSpec(Collections.singletonMap("p", "p2")), false)
                 .get();
+        waitPartitionedTableReplicasReady(tableId, tablePath);
 
         Table table = conn.getTable(tablePath);
-
         UpsertWriter writer = table.newUpsert().createWriter();
         writer.upsert(row(1, "p1", "a1"));
         writer.upsert(row(2, "p1", "b1"));
@@ -251,50 +158,40 @@ public class KvScanITCase extends ClientToServerITCaseBase {
         result.sort(
                 Comparator.comparingInt((InternalRow r) -> r.getInt(0))
                         .thenComparing(r -> r.getString(1).toString()));
-        assertThatRow(result.get(0)).withSchema(schema.getRowType()).isEqualTo(row(1, "p1", "a1"));
-        assertThatRow(result.get(1)).withSchema(schema.getRowType()).isEqualTo(row(1, "p2", "a2"));
-        assertThatRow(result.get(2)).withSchema(schema.getRowType()).isEqualTo(row(2, "p1", "b1"));
+        assertThatRow(result.get(0))
+                .withSchema(PARTITIONED_SCHEMA.getRowType())
+                .isEqualTo(row(1, "p1", "a1"));
+        assertThatRow(result.get(1))
+                .withSchema(PARTITIONED_SCHEMA.getRowType())
+                .isEqualTo(row(1, "p2", "a2"));
+        assertThatRow(result.get(2))
+                .withSchema(PARTITIONED_SCHEMA.getRowType())
+                .isEqualTo(row(2, "p1", "b1"));
     }
 
     @Test
     void testPartitionedTableEmptyPartition() throws Exception {
         TablePath tablePath = TablePath.of("test_db", "test_partitioned_empty");
-        Schema schema =
-                Schema.newBuilder()
-                        .column("id", DataTypes.INT())
-                        .column("p", DataTypes.STRING())
-                        .column("name", DataTypes.STRING())
-                        .primaryKey("id", "p")
-                        .build();
-        TableDescriptor descriptor =
-                TableDescriptor.builder()
-                        .schema(schema)
-                        .partitionedBy("p")
-                        .distributedBy(NUM_BUCKETS, "id")
-                        .build();
+        long tableId = createPartitionedTable(tablePath);
 
-        createTable(tablePath, descriptor, true);
-        // p1 will have data, p2 will be empty
+        // p1 will have data; p2 will be empty
         admin.createPartition(
-                        tablePath,
-                        new PartitionSpec(Collections.singletonMap("p", "p1")),
-                        false)
+                        tablePath, new PartitionSpec(Collections.singletonMap("p", "p1")), false)
                 .get();
         admin.createPartition(
-                        tablePath,
-                        new PartitionSpec(Collections.singletonMap("p", "p2")),
-                        false)
+                        tablePath, new PartitionSpec(Collections.singletonMap("p", "p2")), false)
                 .get();
+        // Explicitly wait for p2's bucket replicas — it has no writes to act as a barrier
+        waitPartitionedTableReplicasReady(tableId, tablePath);
 
         Table table = conn.getTable(tablePath);
-
         UpsertWriter writer = table.newUpsert().createWriter();
         writer.upsert(row(1, "p1", "a1"));
         writer.upsert(row(2, "p1", "b1"));
         writer.flush();
 
         List<InternalRow> result = kvScanAll(table);
-        // Only p1 rows should appear; p2 is empty
+        // Only p1 rows; p2 is empty and must not contribute any rows
         assertThat(result).hasSize(2);
     }
 
@@ -304,22 +201,7 @@ public class KvScanITCase extends ClientToServerITCaseBase {
 
     @Test
     void testDeleteVisibility() throws Exception {
-        TablePath tablePath = TablePath.of("test_db", "test_delete_visibility");
-        Schema schema =
-                Schema.newBuilder()
-                        .column("id", DataTypes.INT())
-                        .column("name", DataTypes.STRING())
-                        .primaryKey("id")
-                        .build();
-        TableDescriptor descriptor =
-                TableDescriptor.builder()
-                        .schema(schema)
-                        .distributedBy(NUM_BUCKETS, "id")
-                        .build();
-
-        long tableId = createTable(tablePath, descriptor, true);
-        waitAllReplicasReady(tableId, NUM_BUCKETS);
-        Table table = conn.getTable(tablePath);
+        Table table = createPkTable(TablePath.of("test_db", "test_delete_visibility"));
 
         UpsertWriter writer = table.newUpsert().createWriter();
         writer.upsert(row(1, "a"));
@@ -327,37 +209,20 @@ public class KvScanITCase extends ClientToServerITCaseBase {
         writer.upsert(row(3, "c"));
         writer.flush();
 
-        // Delete row with id=2; only its primary key fields are required
         writer.delete(row(2, "b"));
         writer.flush();
 
         List<InternalRow> result = kvScanAll(table);
 
-        // Rows 1 and 3 survive; the deleted row must not appear
         assertThat(result).hasSize(2);
         result.sort(Comparator.comparingInt(r -> r.getInt(0)));
-        assertThatRow(result.get(0)).withSchema(schema.getRowType()).isEqualTo(row(1, "a"));
-        assertThatRow(result.get(1)).withSchema(schema.getRowType()).isEqualTo(row(3, "c"));
+        assertThatRow(result.get(0)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(1, "a"));
+        assertThatRow(result.get(1)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(3, "c"));
     }
 
     @Test
     void testUpsertOverwrite() throws Exception {
-        TablePath tablePath = TablePath.of("test_db", "test_upsert_overwrite");
-        Schema schema =
-                Schema.newBuilder()
-                        .column("id", DataTypes.INT())
-                        .column("name", DataTypes.STRING())
-                        .primaryKey("id")
-                        .build();
-        TableDescriptor descriptor =
-                TableDescriptor.builder()
-                        .schema(schema)
-                        .distributedBy(NUM_BUCKETS, "id")
-                        .build();
-
-        long tableId = createTable(tablePath, descriptor, true);
-        waitAllReplicasReady(tableId, NUM_BUCKETS);
-        Table table = conn.getTable(tablePath);
+        Table table = createPkTable(TablePath.of("test_db", "test_upsert_overwrite"));
 
         UpsertWriter writer = table.newUpsert().createWriter();
         writer.upsert(row(1, "original"));
@@ -368,36 +233,19 @@ public class KvScanITCase extends ClientToServerITCaseBase {
 
         List<InternalRow> result = kvScanAll(table);
 
-        // Exactly one row with the latest value — no duplicates
         assertThat(result).hasSize(1);
         assertThatRow(result.get(0))
-                .withSchema(schema.getRowType())
+                .withSchema(PK_SCHEMA.getRowType())
                 .isEqualTo(row(1, "updated"));
     }
 
     /**
-     * Verifies that each scan opens a new point-in-time RocksDB snapshot: a scan that completes
-     * before any mutations only sees the original state, and a scan that starts after mutations
-     * sees the updated state (deletes and inserts both applied).
+     * Verifies point-in-time snapshot isolation: a scan that completes before any mutations only
+     * sees the original state; a scan that starts after mutations sees the updated state.
      */
     @Test
     void testSnapshotIsolation() throws Exception {
-        TablePath tablePath = TablePath.of("test_db", "test_snapshot_isolation");
-        Schema schema =
-                Schema.newBuilder()
-                        .column("id", DataTypes.INT())
-                        .column("name", DataTypes.STRING())
-                        .primaryKey("id")
-                        .build();
-        TableDescriptor descriptor =
-                TableDescriptor.builder()
-                        .schema(schema)
-                        .distributedBy(NUM_BUCKETS, "id")
-                        .build();
-
-        long tableId = createTable(tablePath, descriptor, true);
-        waitAllReplicasReady(tableId, NUM_BUCKETS);
-        Table table = conn.getTable(tablePath);
+        Table table = createPkTable(TablePath.of("test_db", "test_snapshot_isolation"));
 
         UpsertWriter writer = table.newUpsert().createWriter();
         writer.upsert(row(1, "a"));
@@ -418,15 +266,27 @@ public class KvScanITCase extends ClientToServerITCaseBase {
 
         assertThat(beforeMutation).hasSize(3);
         beforeMutation.sort(Comparator.comparingInt(r -> r.getInt(0)));
-        assertThatRow(beforeMutation.get(0)).withSchema(schema.getRowType()).isEqualTo(row(1, "a"));
-        assertThatRow(beforeMutation.get(1)).withSchema(schema.getRowType()).isEqualTo(row(2, "b"));
-        assertThatRow(beforeMutation.get(2)).withSchema(schema.getRowType()).isEqualTo(row(3, "c"));
+        assertThatRow(beforeMutation.get(0))
+                .withSchema(PK_SCHEMA.getRowType())
+                .isEqualTo(row(1, "a"));
+        assertThatRow(beforeMutation.get(1))
+                .withSchema(PK_SCHEMA.getRowType())
+                .isEqualTo(row(2, "b"));
+        assertThatRow(beforeMutation.get(2))
+                .withSchema(PK_SCHEMA.getRowType())
+                .isEqualTo(row(3, "c"));
 
         assertThat(afterMutation).hasSize(3);
         afterMutation.sort(Comparator.comparingInt(r -> r.getInt(0)));
-        assertThatRow(afterMutation.get(0)).withSchema(schema.getRowType()).isEqualTo(row(2, "b"));
-        assertThatRow(afterMutation.get(1)).withSchema(schema.getRowType()).isEqualTo(row(3, "c"));
-        assertThatRow(afterMutation.get(2)).withSchema(schema.getRowType()).isEqualTo(row(4, "d"));
+        assertThatRow(afterMutation.get(0))
+                .withSchema(PK_SCHEMA.getRowType())
+                .isEqualTo(row(2, "b"));
+        assertThatRow(afterMutation.get(1))
+                .withSchema(PK_SCHEMA.getRowType())
+                .isEqualTo(row(3, "c"));
+        assertThatRow(afterMutation.get(2))
+                .withSchema(PK_SCHEMA.getRowType())
+                .isEqualTo(row(4, "d"));
     }
 
     // -------------------------------------------------------------------------
@@ -435,31 +295,14 @@ public class KvScanITCase extends ClientToServerITCaseBase {
 
     @Test
     void testEarlyClose() throws Exception {
-        TablePath tablePath = TablePath.of("test_db", "test_early_close");
-        Schema schema =
-                Schema.newBuilder()
-                        .column("id", DataTypes.INT())
-                        .column("name", DataTypes.STRING())
-                        .primaryKey("id")
-                        .build();
-        TableDescriptor descriptor =
-                TableDescriptor.builder()
-                        .schema(schema)
-                        .distributedBy(NUM_BUCKETS, "id")
-                        .build();
+        Table table = createPkTable(TablePath.of("test_db", "test_early_close"));
 
-        long tableId = createTable(tablePath, descriptor, true);
-        waitAllReplicasReady(tableId, NUM_BUCKETS);
-        Table table = conn.getTable(tablePath);
-
-        int rowCount = 1000;
         UpsertWriter writer = table.newUpsert().createWriter();
-        for (int i = 0; i < rowCount; i++) {
+        for (int i = 0; i < 1000; i++) {
             writer.upsert(row(i, "val" + i));
         }
         writer.flush();
 
-        // Close the iterator after reading only the first 5 rows — must not throw
         int readCount = 0;
         try (CloseableIterator<InternalRow> iterator = table.newKvScan().execute()) {
             while (iterator.hasNext() && readCount < 5) {
@@ -472,32 +315,17 @@ public class KvScanITCase extends ClientToServerITCaseBase {
 
     @Test
     void testIteratorCloseIdempotent() throws Exception {
-        TablePath tablePath = TablePath.of("test_db", "test_close_idempotent");
-        Schema schema =
-                Schema.newBuilder()
-                        .column("id", DataTypes.INT())
-                        .column("name", DataTypes.STRING())
-                        .primaryKey("id")
-                        .build();
-        TableDescriptor descriptor =
-                TableDescriptor.builder()
-                        .schema(schema)
-                        .distributedBy(NUM_BUCKETS, "id")
-                        .build();
-
-        long tableId = createTable(tablePath, descriptor, true);
-        waitAllReplicasReady(tableId, NUM_BUCKETS);
-        Table table = conn.getTable(tablePath);
+        Table table = createPkTable(TablePath.of("test_db", "test_close_idempotent"));
 
         UpsertWriter writer = table.newUpsert().createWriter();
         writer.upsert(row(1, "a"));
         writer.flush();
 
         CloseableIterator<InternalRow> iterator = table.newKvScan().execute();
-        // Drain fully then close twice — second close must be a no-op
         while (iterator.hasNext()) {
             iterator.next();
         }
+        // Second close must be a no-op, not throw
         iterator.close();
         iterator.close();
     }
@@ -513,7 +341,7 @@ public class KvScanITCase extends ClientToServerITCaseBase {
                 Schema.newBuilder()
                         .column("id", DataTypes.INT())
                         .column("name", DataTypes.STRING())
-                        .build(); // no primaryKey → log table
+                        .build();
         TableDescriptor descriptor =
                 TableDescriptor.builder().schema(schema).distributedBy(NUM_BUCKETS).build();
 
@@ -531,22 +359,7 @@ public class KvScanITCase extends ClientToServerITCaseBase {
 
     @Test
     void testConcurrentScans() throws Exception {
-        TablePath tablePath = TablePath.of("test_db", "test_concurrent_scans");
-        Schema schema =
-                Schema.newBuilder()
-                        .column("id", DataTypes.INT())
-                        .column("name", DataTypes.STRING())
-                        .primaryKey("id")
-                        .build();
-        TableDescriptor descriptor =
-                TableDescriptor.builder()
-                        .schema(schema)
-                        .distributedBy(NUM_BUCKETS, "id")
-                        .build();
-
-        long tableId = createTable(tablePath, descriptor, true);
-        waitAllReplicasReady(tableId, NUM_BUCKETS);
-        Table table = conn.getTable(tablePath);
+        Table table = createPkTable(TablePath.of("test_db", "test_concurrent_scans"));
 
         int rowCount = 100;
         UpsertWriter writer = table.newUpsert().createWriter();
@@ -565,10 +378,9 @@ public class KvScanITCase extends ClientToServerITCaseBase {
                     executor.submit(
                             () -> {
                                 try {
-                                    List<InternalRow> rows = kvScanAll(table);
-                                    totalRows.addAndGet(rows.size());
+                                    totalRows.addAndGet(kvScanAll(table).size());
                                 } catch (Exception e) {
-                                    throw new RuntimeException(e);
+                                    throw new FlussRuntimeException(e);
                                 }
                             }));
         }
@@ -583,16 +395,61 @@ public class KvScanITCase extends ClientToServerITCaseBase {
     }
 
     // -------------------------------------------------------------------------
-    //  Helper
+    //  Helpers
     // -------------------------------------------------------------------------
 
-    private List<InternalRow> kvScanAll(Table table) throws Exception {
-        List<InternalRow> allRows = new ArrayList<>();
-        try (CloseableIterator<InternalRow> iterator = table.newKvScan().execute()) {
-            while (iterator.hasNext()) {
-                allRows.add(iterator.next());
+    /**
+     * Creates a non-partitioned primary key table using {@link #PK_SCHEMA} with {@link
+     * #NUM_BUCKETS} buckets, waits for all replicas to be ready, and returns an open {@link Table}.
+     */
+    private Table createPkTable(TablePath path) throws Exception {
+        TableDescriptor descriptor =
+                TableDescriptor.builder()
+                        .schema(PK_SCHEMA)
+                        .distributedBy(NUM_BUCKETS, "id")
+                        .build();
+        long tableId = createTable(path, descriptor, true);
+        waitAllReplicasReady(tableId, NUM_BUCKETS);
+        return conn.getTable(path);
+    }
+
+    /**
+     * Creates a partitioned primary key table using {@link #PARTITIONED_SCHEMA} with {@link
+     * #NUM_BUCKETS} buckets and returns the table ID. Partitions must be created separately before
+     * scanning.
+     */
+    private long createPartitionedTable(TablePath path) throws Exception {
+        TableDescriptor descriptor =
+                TableDescriptor.builder()
+                        .schema(PARTITIONED_SCHEMA)
+                        .partitionedBy("p")
+                        .distributedBy(NUM_BUCKETS, "id")
+                        .build();
+        return createTable(path, descriptor, true);
+    }
+
+    /**
+     * Waits until all bucket replicas are ready for every partition of a partitioned table. This is
+     * critical for empty partitions that have no write traffic to act as a natural barrier.
+     */
+    private void waitPartitionedTableReplicasReady(long tableId, TablePath tablePath)
+            throws Exception {
+        List<PartitionInfo> partitions = admin.listPartitionInfos(tablePath).get();
+        for (PartitionInfo partition : partitions) {
+            for (int i = 0; i < NUM_BUCKETS; i++) {
+                FLUSS_CLUSTER_EXTENSION.waitUntilAllReplicaReady(
+                        new TableBucket(tableId, partition.getPartitionId(), i));
             }
         }
-        return allRows;
+    }
+
+    private List<InternalRow> kvScanAll(Table table) throws Exception {
+        List<InternalRow> rows = new ArrayList<>();
+        try (CloseableIterator<InternalRow> iterator = table.newKvScan().execute()) {
+            while (iterator.hasNext()) {
+                rows.add(iterator.next());
+            }
+        }
+        return rows;
     }
 }

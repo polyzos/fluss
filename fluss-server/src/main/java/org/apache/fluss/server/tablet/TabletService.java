@@ -337,7 +337,9 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                     return response;
                 }
 
-                // Validate call sequence to detect reordered or duplicate requests
+                // Validate call sequence to detect reordered or duplicate requests.
+                // Update callSeqId only after continueScan() succeeds so that clients can safely
+                // retry with the same callSeqId if the server returns an error response.
                 int expectedSeq = context.getCallSeqId() + 1;
                 if (request.getCallSeqId() != expectedSeq) {
                     throw Errors.INVALID_SCAN_REQUEST.exception(
@@ -346,9 +348,9 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                                     + ", but got: "
                                     + request.getCallSeqId());
                 }
+                ScanKvResponse scanResponse = continueScan(context, request.getBatchSizeBytes());
                 context.setCallSeqId(request.getCallSeqId());
-
-                response.complete(continueScan(context, request.getBatchSizeBytes()));
+                response.complete(scanResponse);
             } else {
                 if (!hasBucketScanReq) {
                     throw Errors.INVALID_SCAN_REQUEST.exception(

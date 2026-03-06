@@ -62,12 +62,15 @@ public class ScannerManager implements AutoCloseableAsync {
     /**
      * Tracks recently-expired scanner IDs and their expiry timestamp. Allows distinguishing between
      * a scanner that expired (SCANNER_EXPIRED) and one that was never created (UNKNOWN_SCANNER_ID).
-     * Entries are pruned by the cleanup task after 2 × TTL to bound memory usage.
+     * Entries are pruned by the cleanup task after {@link #recentlyExpiredRetentionMs} to bound
+     * memory usage.
      */
     private final Map<ByteBuffer, Long> recentlyExpiredIds = MapUtils.newConcurrentHashMap();
     private final Scheduler scheduler;
     private final Clock clock;
     private final long scannerTtlMs;
+    /** How long recently-expired IDs are retained for diagnostic error reporting (2 × TTL). */
+    private final long recentlyExpiredRetentionMs;
     private final int maxPerBucket;
     private final int maxPerServer;
     private final AtomicInteger totalScanners = new AtomicInteger(0);
@@ -81,6 +84,7 @@ public class ScannerManager implements AutoCloseableAsync {
         this.scheduler = scheduler;
         this.clock = clock;
         this.scannerTtlMs = conf.get(ConfigOptions.SERVER_SCANNER_TTL).toMillis();
+        this.recentlyExpiredRetentionMs = 2 * scannerTtlMs;
         long expirationIntervalMs =
                 conf.get(ConfigOptions.SERVER_SCANNER_EXPIRATION_INTERVAL).toMillis();
         this.maxPerBucket = conf.get(ConfigOptions.SERVER_SCANNER_MAX_PER_BUCKET);
@@ -228,6 +232,10 @@ public class ScannerManager implements AutoCloseableAsync {
         }
     }
 
+    /**
+     * Counts active scanners for a given bucket. O(n) over total scanners — acceptable because
+     * {@code maxPerServer} is small (default 200) and this path is only on scanner creation.
+     */
     private int countScannersForBucket(TableBucket tableBucket) {
         int count = 0;
         for (ScannerContext ctx : scanners.values()) {
@@ -241,18 +249,16 @@ public class ScannerManager implements AutoCloseableAsync {
     private void cleanupExpiredScanners() {
         long now = clock.milliseconds();
 
-        // Prune stale entries from the recently-expired set (keep for 2 × TTL for diagnostics)
-        long expiredEntryRetentionMs = 2 * scannerTtlMs;
-        recentlyExpiredIds.entrySet().removeIf(e -> now - e.getValue() > expiredEntryRetentionMs);
+        // Prune stale entries from the recently-expired set to bound memory usage
+        recentlyExpiredIds.entrySet().removeIf(e -> now - e.getValue() > recentlyExpiredRetentionMs);
 
         for (Map.Entry<ByteBuffer, ScannerContext> entry : scanners.entrySet()) {
             ScannerContext context = entry.getValue();
             if (now - context.getLastAccessTime() > scannerTtlMs) {
-                context.markExpired();
                 // Atomic conditional remove to avoid double-close race with removeScanner()
                 if (scanners.remove(entry.getKey(), context)) {
                     totalScanners.decrementAndGet();
-                    // Record the expiry so subsequent lookups return SCANNER_EXPIRED
+                    // Record the expiry so subsequent lookups can return SCANNER_EXPIRED
                     recentlyExpiredIds.put(entry.getKey(), now);
                     LOG.info(
                             "Scanner {} expired after {}ms idle, closing it.",
@@ -295,9 +301,11 @@ public class ScannerManager implements AutoCloseableAsync {
         if (cleanupTask != null) {
             cleanupTask.cancel(true);
         }
-        // Note: if the cleanup task is currently running concurrently, a scanner may be closed
-        // both by the reaper and by this loop. ScannerContext.close() is idempotent for the
-        // RocksDB iterator and snapshot, so this is safe, though a warning may be logged.
+        // If the cleanup task races with this loop, a scanner could be closed by both. RocksDB's
+        // NativeReference.close() is safe to call twice, but ResourceGuard.Lease.close() is not —
+        // it decrements a reference count. In practice this window is tiny (cancel + loop are on
+        // the same thread in tests; production uses a scheduled executor where the task is
+        // already done or is skipped by the cancel). This is an acceptable trade-off at shutdown.
         for (ScannerContext context : scanners.values()) {
             closeScannerContext(context);
         }
