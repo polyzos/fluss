@@ -68,7 +68,6 @@ import org.apache.fluss.exception.RebalanceFailureException;
 import org.apache.fluss.exception.RecordTooLargeException;
 import org.apache.fluss.exception.RetriableAuthenticationException;
 import org.apache.fluss.exception.ScannerExpiredException;
-import org.apache.fluss.exception.ScannerNotFoundException;
 import org.apache.fluss.exception.SchemaNotExistException;
 import org.apache.fluss.exception.SecurityDisabledException;
 import org.apache.fluss.exception.SecurityTokenException;

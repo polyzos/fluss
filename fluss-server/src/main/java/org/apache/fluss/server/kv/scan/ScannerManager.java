@@ -267,9 +267,6 @@ public class ScannerManager implements AutoCloseableAsync {
         }
     }
 
-    // ------------------------------------------------------------------------------------------
-    //  Internal helpers
-    // ------------------------------------------------------------------------------------------
 
     /**
      * Fast pre-check of per-server and per-bucket limits before opening the snapshot. This is a
