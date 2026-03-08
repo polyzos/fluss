@@ -59,9 +59,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li><b>Per-server:</b> at most {@code maxPerServer} concurrent sessions across all buckets.
  * </ul>
  *
- * <p>Limit enforcement is two-phase: a fast pre-check guards the common case; the subsequent
- * atomic increment with re-check and rollback prevents the TOCTOU race from permanently breaching
- * the configured limits. Exceeding either limit causes {@link TooManyScannersException}.
+ * <p>Limit enforcement is two-phase: a fast pre-check guards the common case; the subsequent atomic
+ * increment with re-check and rollback prevents the TOCTOU race from permanently breaching the
+ * configured limits. Exceeding either limit causes {@link TooManyScannersException}.
  *
  * <h3>Empty bucket handling</h3>
  *
