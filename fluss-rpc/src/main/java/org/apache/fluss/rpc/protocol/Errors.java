@@ -66,7 +66,6 @@ import org.apache.fluss.exception.RebalanceFailureException;
 import org.apache.fluss.exception.RecordTooLargeException;
 import org.apache.fluss.exception.RetriableAuthenticationException;
 import org.apache.fluss.exception.ScannerExpiredException;
-import org.apache.fluss.exception.ScannerNotFoundException;
 import org.apache.fluss.exception.SchemaNotExistException;
 import org.apache.fluss.exception.SecurityDisabledException;
 import org.apache.fluss.exception.SecurityTokenException;
@@ -246,11 +245,6 @@ public enum Errors {
     REBALANCE_FAILURE_EXCEPTION(61, "The rebalance task failure.", RebalanceFailureException::new),
     NO_REBALANCE_IN_PROGRESS_EXCEPTION(
             62, "No rebalance task in progress.", NoRebalanceInProgressException::new),
-    /**
-     * @deprecated Superseded by {@link #UNKNOWN_SCANNER_ID} (65) and {@link #SCANNER_EXPIRED} (64).
-     */
-    @Deprecated
-    SCANNER_NOT_FOUND_EXCEPTION(63, "The scanner is not found.", ScannerNotFoundException::new),
     SCANNER_EXPIRED(
             64, "The scanner session has expired due to inactivity.", ScannerExpiredException::new),
     UNKNOWN_SCANNER_ID(
