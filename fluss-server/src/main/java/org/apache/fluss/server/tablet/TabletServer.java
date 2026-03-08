@@ -40,6 +40,7 @@ import org.apache.fluss.server.authorizer.AuthorizerLoader;
 import org.apache.fluss.server.coordinator.LakeCatalogDynamicLoader;
 import org.apache.fluss.server.coordinator.MetadataManager;
 import org.apache.fluss.server.kv.KvManager;
+import org.apache.fluss.server.kv.scan.ScannerManager;
 import org.apache.fluss.server.kv.snapshot.DefaultCompletedKvSnapshotCommitter;
 import org.apache.fluss.server.log.LogManager;
 import org.apache.fluss.server.log.remote.RemoteLogManager;
@@ -144,6 +145,9 @@ public class TabletServer extends ServerBase {
 
     @GuardedBy("lock")
     private ReplicaManager replicaManager;
+
+    @GuardedBy("lock")
+    private ScannerManager scannerManager;
 
     @GuardedBy("lock")
     private @Nullable RemoteLogManager remoteLogManager = null;
@@ -280,6 +284,8 @@ public class TabletServer extends ServerBase {
             // Start dynamicConfigManager after all reconfigurable components are registered
             dynamicConfigManager.startup();
 
+            this.scannerManager = new ScannerManager(conf, scheduler);
+
             this.tabletService =
                     new TabletService(
                             serverId,
@@ -290,7 +296,8 @@ public class TabletServer extends ServerBase {
                             metadataManager,
                             authorizer,
                             dynamicConfigManager,
-                            ioExecutor);
+                            ioExecutor,
+                            scannerManager);
 
             RequestsMetrics requestsMetrics =
                     RequestsMetrics.createTabletServerRequestMetrics(tabletServerMetricGroup);
@@ -430,6 +437,10 @@ public class TabletServer extends ServerBase {
                 // touch other resources that might have been shutdown and cause exceptions.
                 if (scheduler != null) {
                     scheduler.shutdown();
+                }
+
+                if (scannerManager != null) {
+                    scannerManager.close();
                 }
 
                 if (kvManager != null) {
