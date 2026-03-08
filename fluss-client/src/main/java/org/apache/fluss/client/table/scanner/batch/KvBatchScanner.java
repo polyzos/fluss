@@ -19,10 +19,10 @@ package org.apache.fluss.client.table.scanner.batch;
 
 import org.apache.fluss.client.metadata.MetadataUpdater;
 import org.apache.fluss.exception.LeaderNotAvailableException;
-import org.apache.fluss.metadata.KvFormat;
 import org.apache.fluss.metadata.SchemaGetter;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableInfo;
+import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.record.DefaultValueRecordBatch;
 import org.apache.fluss.record.ValueRecord;
 import org.apache.fluss.record.ValueRecordReadContext;
@@ -65,17 +65,17 @@ import java.util.concurrent.TimeoutException;
 public class KvBatchScanner implements BatchScanner {
     private static final int BATCH_SIZE_BYTES = 4 * 1024 * 1024;
 
-    private final TableInfo tableInfo;
+    private final TablePath tablePath;
     private final TableBucket tableBucket;
     private final SchemaGetter schemaGetter;
     private final MetadataUpdater metadataUpdater;
-    private final KvFormat kvFormat;
     private final int targetSchemaId;
-    /**
-     * Cache for schema evolution index mappings. When a record on disk was written under an older
-     * schema version, its fields are remapped to the current target schema using this cache.
-     */
+
+    /** Cache for schema evolution index mappings. */
     private final Map<Short, int[]> schemaMappingCache = new HashMap<>();
+
+    /** Reused across all batches; schemaGetter and kvFormat never change. */
+    private final ValueRecordReadContext readContext;
 
     private boolean done = false;
     @Nullable private TabletServerGateway gateway;
@@ -91,12 +91,14 @@ public class KvBatchScanner implements BatchScanner {
             TableBucket tableBucket,
             SchemaGetter schemaGetter,
             MetadataUpdater metadataUpdater) {
-        this.tableInfo = tableInfo;
+        this.tablePath = tableInfo.getTablePath();
         this.tableBucket = tableBucket;
         this.schemaGetter = schemaGetter;
         this.metadataUpdater = metadataUpdater;
         this.targetSchemaId = tableInfo.getSchemaId();
-        this.kvFormat = tableInfo.getTableConfig().getKvFormat();
+        this.readContext =
+                ValueRecordReadContext.createReadContext(
+                        schemaGetter, tableInfo.getTableConfig().getKvFormat());
     }
 
     /**
@@ -175,9 +177,9 @@ public class KvBatchScanner implements BatchScanner {
 
     private void openScanner() {
         if (tableBucket.getPartitionId() != null) {
-            metadataUpdater.checkAndUpdateMetadata(tableInfo.getTablePath(), tableBucket);
+            metadataUpdater.checkAndUpdateMetadata(tablePath, tableBucket);
         }
-        int leader = metadataUpdater.leaderFor(tableInfo.getTablePath(), tableBucket);
+        int leader = metadataUpdater.leaderFor(tablePath, tableBucket);
         gateway = metadataUpdater.newTabletServerClientForNode(leader);
         if (gateway == null) {
             throw new LeaderNotAvailableException(
@@ -211,8 +213,6 @@ public class KvBatchScanner implements BatchScanner {
         ByteBuffer recordsBuffer = ByteBuffer.wrap(response.getRecords());
         DefaultValueRecordBatch valueRecords =
                 DefaultValueRecordBatch.pointToByteBuffer(recordsBuffer);
-        ValueRecordReadContext readContext =
-                ValueRecordReadContext.createReadContext(schemaGetter, kvFormat);
         for (ValueRecord record : valueRecords.records(readContext)) {
             InternalRow row = record.getRow();
             if (targetSchemaId != record.schemaId()) {

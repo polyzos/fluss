@@ -47,7 +47,6 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
 
     private static final int NUM_BUCKETS = 3;
 
-    /** Schema shared by all non-partitioned PK tests: (id INT, name STRING), PK = id. */
     private static final Schema PK_SCHEMA =
             Schema.newBuilder()
                     .column("id", DataTypes.INT())
@@ -55,7 +54,6 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
                     .primaryKey("id")
                     .build();
 
-    /** Schema shared by partitioned PK tests: (id INT, p STRING, name STRING), PK = (id, p). */
     private static final Schema PARTITIONED_SCHEMA =
             Schema.newBuilder()
                     .column("id", DataTypes.INT())
@@ -66,48 +64,63 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
 
     @Test
     void testBasicScan() throws Exception {
-        Table table = createPkTable(TablePath.of("test_db", "test_basic_scan"));
+        TablePath path = TablePath.of("test_db", "test_basic_scan");
+        createPkTable(path);
 
-        UpsertWriter writer = table.newUpsert().createWriter();
-        writer.upsert(row(1, "a"));
-        writer.upsert(row(2, "b"));
-        writer.upsert(row(3, "c"));
-        writer.flush();
+        try (Table table = conn.getTable(path)) {
+            UpsertWriter writer = table.newUpsert().createWriter();
+            writer.upsert(row(1, "a"));
+            writer.upsert(row(2, "b"));
+            writer.upsert(row(3, "c"));
+            writer.flush();
 
-        List<InternalRow> result = kvScanAll(table);
+            List<InternalRow> result = kvScanAll(table);
 
-        assertThat(result).hasSize(3);
-        result.sort(Comparator.comparingInt(r -> r.getInt(0)));
-        assertThatRow(result.get(0)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(1, "a"));
-        assertThatRow(result.get(1)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(2, "b"));
-        assertThatRow(result.get(2)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(3, "c"));
+            assertThat(result).hasSize(3);
+            result.sort(Comparator.comparingInt(r -> r.getInt(0)));
+            assertThatRow(result.get(0)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(1, "a"));
+            assertThatRow(result.get(1)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(2, "b"));
+            assertThatRow(result.get(2)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(3, "c"));
+        }
     }
 
     @Test
     void testEmptyTable() throws Exception {
-        Table table = createPkTable(TablePath.of("test_db", "test_empty_table"));
-        assertThat(kvScanAll(table)).isEmpty();
+        TablePath path = TablePath.of("test_db", "test_empty_table");
+        createPkTable(path);
+
+        try (Table table = conn.getTable(path)) {
+            assertThat(kvScanAll(table)).isEmpty();
+        }
     }
 
     @Test
     void testLargeDataScan() throws Exception {
-        Table table = createPkTable(TablePath.of("test_db", "test_large_data_scan"));
+        TablePath path = TablePath.of("test_db", "test_large_data_scan");
+        createPkTable(path);
 
         int rowCount = 10_000;
-        UpsertWriter writer = table.newUpsert().createWriter();
-        for (int i = 0; i < rowCount; i++) {
-            writer.upsert(row(i, "val" + i));
-        }
-        writer.flush();
+        try (Table table = conn.getTable(path)) {
+            UpsertWriter writer = table.newUpsert().createWriter();
+            for (int i = 0; i < rowCount; i++) {
+                writer.upsert(row(i, "val" + i));
+            }
+            writer.flush();
 
-        List<InternalRow> result = kvScanAll(table);
+            List<InternalRow> result = kvScanAll(table);
 
-        assertThat(result).hasSize(rowCount);
-        result.sort(Comparator.comparingInt(r -> r.getInt(0)));
-        for (int i = 0; i < rowCount; i++) {
-            assertThatRow(result.get(i))
+            assertThat(result).hasSize(rowCount);
+            result.sort(Comparator.comparingInt(r -> r.getInt(0)));
+
+            assertThatRow(result.get(0))
                     .withSchema(PK_SCHEMA.getRowType())
-                    .isEqualTo(row(i, "val" + i));
+                    .isEqualTo(row(0, "val0"));
+            assertThatRow(result.get(rowCount / 2))
+                    .withSchema(PK_SCHEMA.getRowType())
+                    .isEqualTo(row(rowCount / 2, "val" + rowCount / 2));
+            assertThatRow(result.get(rowCount - 1))
+                    .withSchema(PK_SCHEMA.getRowType())
+                    .isEqualTo(row(rowCount - 1, "val" + (rowCount - 1)));
         }
     }
 
@@ -124,27 +137,28 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
                 .get();
         waitPartitionedTableReplicasReady(tableId, tablePath);
 
-        Table table = conn.getTable(tablePath);
-        UpsertWriter writer = table.newUpsert().createWriter();
-        writer.upsert(row(1, "p1", "a1"));
-        writer.upsert(row(2, "p1", "b1"));
-        writer.upsert(row(1, "p2", "a2"));
-        writer.flush();
+        try (Table table = conn.getTable(tablePath)) {
+            UpsertWriter writer = table.newUpsert().createWriter();
+            writer.upsert(row(1, "p1", "a1"));
+            writer.upsert(row(2, "p1", "b1"));
+            writer.upsert(row(1, "p2", "a2"));
+            writer.flush();
 
-        List<InternalRow> result = kvScanAll(table);
-        assertThat(result).hasSize(3);
-        result.sort(
-                Comparator.comparingInt((InternalRow r) -> r.getInt(0))
-                        .thenComparing(r -> r.getString(1).toString()));
-        assertThatRow(result.get(0))
-                .withSchema(PARTITIONED_SCHEMA.getRowType())
-                .isEqualTo(row(1, "p1", "a1"));
-        assertThatRow(result.get(1))
-                .withSchema(PARTITIONED_SCHEMA.getRowType())
-                .isEqualTo(row(1, "p2", "a2"));
-        assertThatRow(result.get(2))
-                .withSchema(PARTITIONED_SCHEMA.getRowType())
-                .isEqualTo(row(2, "p1", "b1"));
+            List<InternalRow> result = kvScanAll(table);
+            assertThat(result).hasSize(3);
+            result.sort(
+                    Comparator.comparingInt((InternalRow r) -> r.getInt(0))
+                            .thenComparing(r -> r.getString(1).toString()));
+            assertThatRow(result.get(0))
+                    .withSchema(PARTITIONED_SCHEMA.getRowType())
+                    .isEqualTo(row(1, "p1", "a1"));
+            assertThatRow(result.get(1))
+                    .withSchema(PARTITIONED_SCHEMA.getRowType())
+                    .isEqualTo(row(1, "p2", "a2"));
+            assertThatRow(result.get(2))
+                    .withSchema(PARTITIONED_SCHEMA.getRowType())
+                    .isEqualTo(row(2, "p1", "b1"));
+        }
     }
 
     @Test
@@ -160,105 +174,115 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
                 .get();
         waitPartitionedTableReplicasReady(tableId, tablePath);
 
-        Table table = conn.getTable(tablePath);
-        UpsertWriter writer = table.newUpsert().createWriter();
-        writer.upsert(row(1, "p1", "a1"));
-        writer.upsert(row(2, "p1", "b1"));
-        writer.flush();
+        try (Table table = conn.getTable(tablePath)) {
+            UpsertWriter writer = table.newUpsert().createWriter();
+            writer.upsert(row(1, "p1", "a1"));
+            writer.upsert(row(2, "p1", "b1"));
+            writer.flush();
 
-        List<InternalRow> result = kvScanAll(table);
-        // Only p1 rows; p2 is empty and must not contribute any rows.
-        assertThat(result).hasSize(2);
+            List<InternalRow> result = kvScanAll(table);
+            // Only p1 rows; p2 is empty and must not contribute any rows.
+            assertThat(result).hasSize(2);
+        }
     }
 
     @Test
     void testDeleteVisibility() throws Exception {
-        Table table = createPkTable(TablePath.of("test_db", "test_delete_visibility"));
+        TablePath path = TablePath.of("test_db", "test_delete_visibility");
+        createPkTable(path);
 
-        UpsertWriter writer = table.newUpsert().createWriter();
-        writer.upsert(row(1, "a"));
-        writer.upsert(row(2, "b"));
-        writer.upsert(row(3, "c"));
-        writer.flush();
+        try (Table table = conn.getTable(path)) {
+            UpsertWriter writer = table.newUpsert().createWriter();
+            writer.upsert(row(1, "a"));
+            writer.upsert(row(2, "b"));
+            writer.upsert(row(3, "c"));
+            writer.flush();
 
-        writer.delete(row(2, "b"));
-        writer.flush();
+            writer.delete(row(2, "b"));
+            writer.flush();
 
-        List<InternalRow> result = kvScanAll(table);
+            List<InternalRow> result = kvScanAll(table);
 
-        assertThat(result).hasSize(2);
-        result.sort(Comparator.comparingInt(r -> r.getInt(0)));
-        assertThatRow(result.get(0)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(1, "a"));
-        assertThatRow(result.get(1)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(3, "c"));
+            assertThat(result).hasSize(2);
+            result.sort(Comparator.comparingInt(r -> r.getInt(0)));
+            assertThatRow(result.get(0)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(1, "a"));
+            assertThatRow(result.get(1)).withSchema(PK_SCHEMA.getRowType()).isEqualTo(row(3, "c"));
+        }
     }
 
     @Test
     void testUpsertOverwrite() throws Exception {
-        Table table = createPkTable(TablePath.of("test_db", "test_upsert_overwrite"));
+        TablePath path = TablePath.of("test_db", "test_upsert_overwrite");
+        createPkTable(path);
 
-        UpsertWriter writer = table.newUpsert().createWriter();
-        writer.upsert(row(1, "original"));
-        writer.flush();
+        try (Table table = conn.getTable(path)) {
+            UpsertWriter writer = table.newUpsert().createWriter();
+            writer.upsert(row(1, "original"));
+            writer.flush();
 
-        writer.upsert(row(1, "updated"));
-        writer.flush();
+            writer.upsert(row(1, "updated"));
+            writer.flush();
 
-        List<InternalRow> result = kvScanAll(table);
+            List<InternalRow> result = kvScanAll(table);
 
-        assertThat(result).hasSize(1);
-        assertThatRow(result.get(0))
-                .withSchema(PK_SCHEMA.getRowType())
-                .isEqualTo(row(1, "updated"));
+            assertThat(result).hasSize(1);
+            assertThatRow(result.get(0))
+                    .withSchema(PK_SCHEMA.getRowType())
+                    .isEqualTo(row(1, "updated"));
+        }
     }
 
     /**
-     * Verifies point-in-time snapshot isolation: a scan that completes before any mutations only
-     * sees the original state; a scan that starts after mutations sees the updated state.
+     * Verifies that a scan started after a mutation sees the updated state, and a scan started
+     * before the mutation sees the original state.
      */
     @Test
-    void testSnapshotIsolation() throws Exception {
-        Table table = createPkTable(TablePath.of("test_db", "test_snapshot_isolation"));
+    void testSequentialScansReflectMutations() throws Exception {
+        TablePath path = TablePath.of("test_db", "test_sequential_scans");
+        createPkTable(path);
 
-        UpsertWriter writer = table.newUpsert().createWriter();
-        writer.upsert(row(1, "a"));
-        writer.upsert(row(2, "b"));
-        writer.upsert(row(3, "c"));
-        writer.flush();
+        try (Table table = conn.getTable(path)) {
+            UpsertWriter writer = table.newUpsert().createWriter();
+            writer.upsert(row(1, "a"));
+            writer.upsert(row(2, "b"));
+            writer.upsert(row(3, "c"));
+            writer.flush();
 
-        // First scan: captures state {1, 2, 3} and fully drains before any mutation.
-        List<InternalRow> beforeMutation = kvScanAll(table);
+            // First scan: fully drains before any mutation.
+            List<InternalRow> beforeMutation = kvScanAll(table);
 
-        // Mutate: add row 4, delete row 1.
-        writer.upsert(row(4, "d"));
-        writer.delete(row(1, "a"));
-        writer.flush();
+            // Mutate: add row 4, delete row 1.
+            writer.upsert(row(4, "d"));
+            writer.delete(row(1, "a"));
+            writer.flush();
 
-        // Second scan: fresh snapshot after mutations must see {2, 3, 4}.
-        List<InternalRow> afterMutation = kvScanAll(table);
+            // Second scan: must see {2, 3, 4}.
+            List<InternalRow> afterMutation = kvScanAll(table);
 
-        assertThat(beforeMutation).hasSize(3);
-        beforeMutation.sort(Comparator.comparingInt(r -> r.getInt(0)));
-        assertThatRow(beforeMutation.get(0))
-                .withSchema(PK_SCHEMA.getRowType())
-                .isEqualTo(row(1, "a"));
-        assertThatRow(beforeMutation.get(1))
-                .withSchema(PK_SCHEMA.getRowType())
-                .isEqualTo(row(2, "b"));
-        assertThatRow(beforeMutation.get(2))
-                .withSchema(PK_SCHEMA.getRowType())
-                .isEqualTo(row(3, "c"));
+            assertThat(beforeMutation).hasSize(3);
+            beforeMutation.sort(Comparator.comparingInt(r -> r.getInt(0)));
+            assertThatRow(beforeMutation.get(0))
+                    .withSchema(PK_SCHEMA.getRowType())
+                    .isEqualTo(row(1, "a"));
+            assertThatRow(beforeMutation.get(1))
+                    .withSchema(PK_SCHEMA.getRowType())
+                    .isEqualTo(row(2, "b"));
+            assertThatRow(beforeMutation.get(2))
+                    .withSchema(PK_SCHEMA.getRowType())
+                    .isEqualTo(row(3, "c"));
 
-        assertThat(afterMutation).hasSize(3);
-        afterMutation.sort(Comparator.comparingInt(r -> r.getInt(0)));
-        assertThatRow(afterMutation.get(0))
-                .withSchema(PK_SCHEMA.getRowType())
-                .isEqualTo(row(2, "b"));
-        assertThatRow(afterMutation.get(1))
-                .withSchema(PK_SCHEMA.getRowType())
-                .isEqualTo(row(3, "c"));
-        assertThatRow(afterMutation.get(2))
-                .withSchema(PK_SCHEMA.getRowType())
-                .isEqualTo(row(4, "d"));
+            assertThat(afterMutation).hasSize(3);
+            afterMutation.sort(Comparator.comparingInt(r -> r.getInt(0)));
+            assertThatRow(afterMutation.get(0))
+                    .withSchema(PK_SCHEMA.getRowType())
+                    .isEqualTo(row(2, "b"));
+            assertThatRow(afterMutation.get(1))
+                    .withSchema(PK_SCHEMA.getRowType())
+                    .isEqualTo(row(3, "c"));
+            assertThatRow(afterMutation.get(2))
+                    .withSchema(PK_SCHEMA.getRowType())
+                    .isEqualTo(row(4, "d"));
+        }
     }
 
     @Test
@@ -273,14 +297,14 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
                 TableDescriptor.builder().schema(schema).distributedBy(NUM_BUCKETS).build();
 
         createTable(tablePath, descriptor, false);
-        Table table = conn.getTable(tablePath);
-
-        assertThatThrownBy(() -> table.newKvScan())
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("not a Primary Key Table");
+        try (Table table = conn.getTable(tablePath)) {
+            assertThatThrownBy(() -> table.newKvScan())
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("not a Primary Key Table");
+        }
     }
 
-    private Table createPkTable(TablePath path) throws Exception {
+    private void createPkTable(TablePath path) throws Exception {
         TableDescriptor descriptor =
                 TableDescriptor.builder()
                         .schema(PK_SCHEMA)
@@ -288,7 +312,6 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
                         .build();
         long tableId = createTable(path, descriptor, true);
         waitAllReplicasReady(tableId, NUM_BUCKETS);
-        return conn.getTable(path);
     }
 
     private long createPartitionedTable(TablePath path) throws Exception {
