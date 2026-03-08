@@ -50,6 +50,8 @@ public class TableKvScan implements KvScan {
     /**
      * Short poll timeout used inside the iterator's {@code hasNext()} loop. This keeps the busy
      * loop responsive while still allowing the prefetch to arrive.
+     *
+     * <p>TODO: make this configurable via a client config option.
      */
     private static final Duration POLL_TIMEOUT = Duration.ofMillis(10);
 
@@ -179,6 +181,7 @@ public class TableKvScan implements KvScan {
         @Override
         public void close() {
             exhausted = true;
+            currentBatch = null;
             if (currentScanner != null) {
                 try {
                     currentScanner.close();
