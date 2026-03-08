@@ -267,7 +267,6 @@ public class ScannerManager implements AutoCloseableAsync {
         }
     }
 
-
     /**
      * Fast pre-check of per-server and per-bucket limits before opening the snapshot. This is a
      * best-effort check; a small race window exists between the check and {@link #registerContext}.
