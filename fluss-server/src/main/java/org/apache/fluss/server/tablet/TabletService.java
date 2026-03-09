@@ -439,6 +439,11 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
         try {
             ScannerContext context;
 
+            if (request.hasBucketScanReq() && request.hasScannerId()) {
+                throw new InvalidScanRequestException(
+                        "ScanKvRequest must not set both bucket_scan_req and scanner_id.");
+            }
+
             if (request.hasBucketScanReq()) {
                 // New scan: open a fresh scanner session
                 PbScanReqForBucket bucketReq = request.getBucketScanReq();
@@ -503,6 +508,9 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
 
             // Build the next batch
             int batchSizeBytes = request.getBatchSizeBytes();
+            if (batchSizeBytes <= 0) {
+                throw new InvalidScanRequestException("batch_size_bytes must be greater than 0.");
+            }
             DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
             int totalBytes = 0;
 

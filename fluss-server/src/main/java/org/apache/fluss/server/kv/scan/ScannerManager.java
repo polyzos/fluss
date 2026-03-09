@@ -356,10 +356,12 @@ public class ScannerManager implements AutoCloseableAsync {
 
     private void decrementCounts(TableBucket bucket) {
         totalScanners.decrementAndGet();
-        AtomicInteger count = perBucketCount.get(bucket);
-        if (count != null) {
-            count.decrementAndGet();
-        }
+        perBucketCount.computeIfPresent(
+                bucket,
+                (k, count) -> {
+                    int remaining = count.decrementAndGet();
+                    return remaining <= 0 ? null : count;
+                });
     }
 
     private void closeScannerContext(ScannerContext context) {

@@ -436,6 +436,6 @@ public class TestTabletServerGateway implements TabletServerGateway {
 
     @Override
     public CompletableFuture<ScanKvResponse> scanKv(ScanKvRequest request) {
-        return null;
+        throw new UnsupportedOperationException();
     }
 }
