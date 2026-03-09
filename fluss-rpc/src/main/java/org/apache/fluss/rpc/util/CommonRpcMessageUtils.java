@@ -266,7 +266,7 @@ public class CommonRpcMessageUtils {
     }
 
     public static DataType toDataType(PbDataType type) {
-        switch (type.getRoot()) {
+        switch (PbDataTypeRoot.valueOf(type.getRoot())) {
             case BOOLEAN:
                 return new BooleanType(type.isNullable());
             case INT:
@@ -308,44 +308,44 @@ public class CommonRpcMessageUtils {
         PbDataType pbDataType = new PbDataType();
         pbDataType.setNullable(dataType.isNullable());
         if (dataType instanceof BooleanType) {
-            pbDataType.setRoot(PbDataTypeRoot.BOOLEAN);
+            pbDataType.setRoot(PbDataTypeRoot.BOOLEAN.getValue());
         } else if (dataType instanceof IntType) {
-            pbDataType.setRoot(PbDataTypeRoot.INT);
+            pbDataType.setRoot(PbDataTypeRoot.INT.getValue());
         } else if (dataType instanceof TinyIntType) {
-            pbDataType.setRoot(PbDataTypeRoot.TINYINT);
+            pbDataType.setRoot(PbDataTypeRoot.TINYINT.getValue());
         } else if (dataType instanceof SmallIntType) {
-            pbDataType.setRoot(PbDataTypeRoot.SMALLINT);
+            pbDataType.setRoot(PbDataTypeRoot.SMALLINT.getValue());
         } else if (dataType instanceof BigIntType) {
-            pbDataType.setRoot(PbDataTypeRoot.BIGINT);
+            pbDataType.setRoot(PbDataTypeRoot.BIGINT.getValue());
         } else if (dataType instanceof FloatType) {
-            pbDataType.setRoot(PbDataTypeRoot.FLOAT);
+            pbDataType.setRoot(PbDataTypeRoot.FLOAT.getValue());
         } else if (dataType instanceof DoubleType) {
-            pbDataType.setRoot(PbDataTypeRoot.DOUBLE);
+            pbDataType.setRoot(PbDataTypeRoot.DOUBLE.getValue());
         } else if (dataType instanceof CharType) {
-            pbDataType.setRoot(PbDataTypeRoot.CHAR);
+            pbDataType.setRoot(PbDataTypeRoot.CHAR.getValue());
             pbDataType.setLength(((CharType) dataType).getLength());
         } else if (dataType instanceof StringType) {
-            pbDataType.setRoot(PbDataTypeRoot.VARCHAR);
+            pbDataType.setRoot(PbDataTypeRoot.VARCHAR.getValue());
         } else if (dataType instanceof DecimalType) {
-            pbDataType.setRoot(PbDataTypeRoot.DECIMAL);
+            pbDataType.setRoot(PbDataTypeRoot.DECIMAL.getValue());
             pbDataType.setPrecision(((DecimalType) dataType).getPrecision());
             pbDataType.setScale(((DecimalType) dataType).getScale());
         } else if (dataType instanceof DateType) {
-            pbDataType.setRoot(PbDataTypeRoot.DATE);
+            pbDataType.setRoot(PbDataTypeRoot.DATE.getValue());
         } else if (dataType instanceof TimeType) {
-            pbDataType.setRoot(PbDataTypeRoot.TIME_WITHOUT_TIME_ZONE);
+            pbDataType.setRoot(PbDataTypeRoot.TIME_WITHOUT_TIME_ZONE.getValue());
             pbDataType.setPrecision(((TimeType) dataType).getPrecision());
         } else if (dataType instanceof TimestampType) {
-            pbDataType.setRoot(PbDataTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE);
+            pbDataType.setRoot(PbDataTypeRoot.TIMESTAMP_WITHOUT_TIME_ZONE.getValue());
             pbDataType.setPrecision(((TimestampType) dataType).getPrecision());
         } else if (dataType instanceof LocalZonedTimestampType) {
-            pbDataType.setRoot(PbDataTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE);
+            pbDataType.setRoot(PbDataTypeRoot.TIMESTAMP_WITH_LOCAL_TIME_ZONE.getValue());
             pbDataType.setPrecision(((LocalZonedTimestampType) dataType).getPrecision());
         } else if (dataType instanceof BinaryType) {
-            pbDataType.setRoot(PbDataTypeRoot.BINARY);
+            pbDataType.setRoot(PbDataTypeRoot.BINARY.getValue());
             pbDataType.setLength(((BinaryType) dataType).getLength());
         } else if (dataType instanceof BytesType) {
-            pbDataType.setRoot(PbDataTypeRoot.BYTES);
+            pbDataType.setRoot(PbDataTypeRoot.BYTES.getValue());
         } else {
             throw new IllegalArgumentException("Unknown data type: " + dataType.getClass());
         }

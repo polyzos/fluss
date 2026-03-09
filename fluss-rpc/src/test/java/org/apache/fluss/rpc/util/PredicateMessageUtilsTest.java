@@ -27,12 +27,10 @@ import org.apache.fluss.predicate.LeafPredicate;
 import org.apache.fluss.predicate.LessThan;
 import org.apache.fluss.predicate.Or;
 import org.apache.fluss.predicate.Predicate;
-import org.apache.fluss.record.Filter;
 import org.apache.fluss.row.BinaryString;
 import org.apache.fluss.row.Decimal;
 import org.apache.fluss.row.TimestampLtz;
 import org.apache.fluss.row.TimestampNtz;
-import org.apache.fluss.rpc.messages.PbFilter;
 import org.apache.fluss.rpc.messages.PbPredicate;
 import org.apache.fluss.types.BigIntType;
 import org.apache.fluss.types.BinaryType;
@@ -516,27 +514,5 @@ public class PredicateMessageUtilsTest {
             assertThat(lp.type().getClass()).isEqualTo(predicate.type().getClass());
             assertThat(lp.literals().get(0)).isNull();
         }
-    }
-
-    @Test
-    public void testFilterSerde() {
-        DataType type = new IntType(false);
-        Predicate predicate =
-                new LeafPredicate(Equal.INSTANCE, type, 0, "id", Collections.singletonList(123));
-        int schemaId = 1;
-
-        // test toPbFilter
-        PbFilter pbFilter = PredicateMessageUtils.toPbFilter(predicate, schemaId);
-        assertThat(pbFilter.getSchemaId()).isEqualTo(schemaId);
-        assertThat(pbFilter.hasPredicate()).isTrue();
-
-        // test toFilter
-        Filter filter = PredicateMessageUtils.toFilter(pbFilter);
-        assertThat(filter.getSchemaId()).isEqualTo(schemaId);
-        assertThat(filter.getPredicate()).isInstanceOf(LeafPredicate.class);
-        LeafPredicate lp = (LeafPredicate) filter.getPredicate();
-        assertThat(lp.function()).isEqualTo(Equal.INSTANCE);
-        assertThat(lp.fieldName()).isEqualTo("id");
-        assertThat(lp.literals().get(0)).isEqualTo(123);
     }
 }
