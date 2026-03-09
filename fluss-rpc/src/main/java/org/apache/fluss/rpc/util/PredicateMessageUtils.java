@@ -37,7 +37,6 @@ import org.apache.fluss.predicate.Or;
 import org.apache.fluss.predicate.Predicate;
 import org.apache.fluss.predicate.PredicateVisitor;
 import org.apache.fluss.predicate.StartsWith;
-import org.apache.fluss.record.Filter;
 import org.apache.fluss.row.BinaryString;
 import org.apache.fluss.row.Decimal;
 import org.apache.fluss.row.TimestampLtz;
@@ -45,7 +44,6 @@ import org.apache.fluss.row.TimestampNtz;
 import org.apache.fluss.rpc.messages.PbCompoundPredicate;
 import org.apache.fluss.rpc.messages.PbDataType;
 import org.apache.fluss.rpc.messages.PbFieldRef;
-import org.apache.fluss.rpc.messages.PbFilter;
 import org.apache.fluss.rpc.messages.PbLeafPredicate;
 import org.apache.fluss.rpc.messages.PbLiteralValue;
 import org.apache.fluss.rpc.messages.PbPredicate;
@@ -355,23 +353,6 @@ public class PredicateMessageUtils {
                 throw new IllegalArgumentException("Unknown data type: " + type.getTypeRoot());
         }
         return pbLiteral;
-    }
-
-    // -------------------------------------------------------------------------
-    //  Filter conversion
-    // -------------------------------------------------------------------------
-
-    public static PbFilter toPbFilter(Predicate predicate, int schemaId) {
-        PbFilter pbFilter = new PbFilter();
-        pbFilter.setPredicate(toPbPredicate(predicate));
-        pbFilter.setSchemaId(schemaId);
-        return pbFilter;
-    }
-
-    public static Filter toFilter(PbFilter pbFilter) {
-        Predicate predicate = toPredicate(pbFilter.getPredicate());
-        int schemaId = pbFilter.getSchemaId();
-        return new Filter(predicate, schemaId);
     }
 
     // -------------------------------------------------------------------------

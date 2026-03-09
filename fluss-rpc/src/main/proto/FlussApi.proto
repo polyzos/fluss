@@ -721,11 +721,6 @@ message DeleteProducerOffsetsResponse {
 
 
 // --------------- Inner classes ----------------
-message PbFilter {
-  required PbPredicate predicate = 1;
-  required int32 schema_id = 2;
-}
-
 message PbApiVersion {
   required int32 api_key = 1;
   required int32 min_version = 2;
@@ -808,7 +803,6 @@ message PbFetchLogReqForTable {
   required bool projection_pushdown_enabled = 2;
   repeated int32 projected_fields = 3 [packed = true];
   repeated PbFetchLogReqForBucket buckets_req = 4;
-  optional PbFilter filter = 5;
 }
 
 message PbFetchLogReqForBucket {
@@ -832,7 +826,6 @@ message PbFetchLogRespForBucket {
   optional int64 log_start_offset = 6; // TODO now we don't introduce log start offset, but remain it in protobuf
   optional PbRemoteLogFetchInfo remote_log_fetch_info = 7;
   optional bytes records = 8;
-  optional int64 skip_to_next_fetch_offset = 9; // Will be set when all bathes filtered out
 }
 
 message PbPutKvReqForBucket {
@@ -1243,15 +1236,6 @@ message PbTableStatsRespForBucket {
 * Definition of predicate system related message
 */
 
-enum PbPredicateType {
-  LEAF = 0;
-  COMPOUND = 1;
-}
-
-/**
-* Definition of predicate system related message
-*/
-
 // PbPredicateType constants (using int32 instead of enum for proto3 compatibility)
 // LEAF = 0, COMPOUND = 1
 
@@ -1316,25 +1300,6 @@ message PbDataType {
 // CHAR=7, VARCHAR=8, DECIMAL=9, DATE=10, TIME_WITHOUT_TIME_ZONE=11,
 // TIMESTAMP_WITHOUT_TIME_ZONE=12, TIMESTAMP_WITH_LOCAL_TIME_ZONE=13,
 // BINARY=14, BYTES=15
-// Root of data types
-enum PbDataTypeRoot {
-  BOOLEAN = 0;
-  TINYINT = 1;
-  SMALLINT = 2;
-  INT = 3;
-  BIGINT = 4;
-  FLOAT = 5;
-  DOUBLE = 6;
-  CHAR = 7;
-  VARCHAR = 8;
-  DECIMAL = 9;
-  DATE = 10;
-  TIME_WITHOUT_TIME_ZONE = 11;
-  TIMESTAMP_WITHOUT_TIME_ZONE = 12;
-  TIMESTAMP_WITH_LOCAL_TIME_ZONE = 13;
-  BINARY = 14;
-  BYTES = 15;
-}
 
 // Represents a literal value
 message PbLiteralValue {
