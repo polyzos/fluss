@@ -125,7 +125,7 @@ public class PredicateMessageUtilsTest {
         assertThat(result).isInstanceOf(LeafPredicate.class);
         LeafPredicate lp = (LeafPredicate) result;
         assertThat(lp.function()).isEqualTo(Equal.INSTANCE);
-        // 这里只能判断类型和字段名，decimal反序列化后equals未必一致
+
         assertThat(lp.fieldName()).isEqualTo("amount");
     }
 
