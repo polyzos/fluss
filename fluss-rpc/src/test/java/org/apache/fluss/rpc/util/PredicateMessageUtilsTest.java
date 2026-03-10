@@ -386,7 +386,6 @@ public class PredicateMessageUtilsTest {
 
     @Test
     public void testAllDataTypesWithNullValues() {
-        // 测试所有数据类型与null值的序列化和反序列化
         List<LeafPredicate> nullPredicates =
                 Arrays.asList(
                         // Boolean null
