@@ -49,8 +49,7 @@ class KvBatchScannerTest {
 
     // Bucket 0 is assigned to NODE1 (id=1) by TestingMetadataUpdater.
     private static final TableBucket BUCKET = new TableBucket(DATA1_TABLE_ID, 0);
-    private static final SchemaInfo SCHEMA_INFO =
-            new SchemaInfo(DATA1_SCHEMA, DEFAULT_SCHEMA_ID);
+    private static final SchemaInfo SCHEMA_INFO = new SchemaInfo(DATA1_SCHEMA, DEFAULT_SCHEMA_ID);
 
     /**
      * When the server returns a response with a non-zero {@code error_code}, {@link
