@@ -80,6 +80,7 @@ import org.apache.fluss.server.entity.StopReplicaResultForBucket;
 import org.apache.fluss.server.entity.UserContext;
 import org.apache.fluss.server.kv.KvManager;
 import org.apache.fluss.server.kv.KvSnapshotResource;
+import org.apache.fluss.server.kv.scan.ScannerManager;
 import org.apache.fluss.server.kv.KvTablet;
 import org.apache.fluss.server.kv.snapshot.CompletedKvSnapshotCommitter;
 import org.apache.fluss.server.kv.snapshot.DefaultSnapshotContext;
@@ -211,6 +212,8 @@ public class ReplicaManager implements ServerReconfigurable {
 
     private final Clock clock;
 
+    @Nullable private ScannerManager scannerManager;
+
     public ReplicaManager(
             Configuration conf,
             Scheduler scheduler,
@@ -324,6 +327,10 @@ public class ReplicaManager implements ServerReconfigurable {
                 this::maybeShrinkIsr,
                 0L,
                 conf.get(ConfigOptions.LOG_REPLICA_MAX_LAG_TIME).toMillis() / 2);
+    }
+
+    public void setScannerManager(ScannerManager scannerManager) {
+        this.scannerManager = scannerManager;
     }
 
     public RemoteLogManager getRemoteLogManager() {
@@ -1153,6 +1160,9 @@ public class ReplicaManager implements ServerReconfigurable {
                 Replica replica = getReplicaOrException(data.getTableBucket());
                 if (replica.makeFollower(data)) {
                     replicasBecomeFollower.add(replica);
+                    if (scannerManager != null) {
+                        scannerManager.closeScannersForBucket(tb);
+                    }
                 }
                 // stop the remote log tiering tasks for followers
                 remoteLogManager.stopLogTiering(replica);
@@ -1830,6 +1840,10 @@ public class ReplicaManager implements ServerReconfigurable {
             Map<Long, Path> deletedPartitionIds) {
         // First stop fetchers for this table bucket.
         replicaFetcherManager.removeFetcherForBuckets(Collections.singleton(tb));
+
+        if (scannerManager != null) {
+            scannerManager.closeScannersForBucket(tb);
+        }
 
         HostedReplica replica = getReplica(tb);
         if (replica instanceof OnlineReplica) {

@@ -285,6 +285,7 @@ public class TabletServer extends ServerBase {
             dynamicConfigManager.startup();
 
             this.scannerManager = new ScannerManager(conf, scheduler);
+            replicaManager.setScannerManager(scannerManager);
 
             this.tabletService =
                     new TabletService(
