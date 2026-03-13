@@ -281,6 +281,7 @@ public class TabletServer extends ServerBase {
             replicaManager.startup();
 
             this.scannerManager = new ScannerManager(conf, scheduler);
+            replicaManager.setScannerManager(scannerManager);
 
             this.tabletService =
                     new TabletService(

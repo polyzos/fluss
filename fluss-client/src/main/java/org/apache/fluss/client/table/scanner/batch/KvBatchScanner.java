@@ -32,8 +32,12 @@ import org.apache.fluss.rpc.gateway.TabletServerGateway;
 import org.apache.fluss.rpc.messages.PbScanReqForBucket;
 import org.apache.fluss.rpc.messages.ScanKvRequest;
 import org.apache.fluss.rpc.messages.ScanKvResponse;
+import org.apache.fluss.rpc.protocol.Errors;
 import org.apache.fluss.utils.CloseableIterator;
 import org.apache.fluss.utils.SchemaUtil;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
@@ -63,6 +67,7 @@ import java.util.concurrent.TimeoutException;
  * <p>Not reusable and not thread-safe.
  */
 public class KvBatchScanner implements BatchScanner {
+    private static final Logger LOG = LoggerFactory.getLogger(KvBatchScanner.class);
     private static final int BATCH_SIZE_BYTES = 4 * 1024 * 1024;
 
     private final TablePath tablePath;
@@ -136,6 +141,16 @@ public class KvBatchScanner implements BatchScanner {
         }
         prefetchFuture = null;
 
+        if (response.hasErrorCode() && response.getErrorCode() != 0) {
+            done = true;
+            throw new IOException(
+                    Errors.forCode(response.getErrorCode())
+                            .exception(
+                                    response.hasErrorMessage()
+                                            ? response.getErrorMessage()
+                                            : null));
+        }
+
         if (response.hasScannerId()) {
             scannerId = response.getScannerId();
         }
@@ -170,8 +185,18 @@ public class KvBatchScanner implements BatchScanner {
             prefetchFuture = null;
         }
         if (scannerId != null && gateway != null) {
-            // Fire-and-forget: the server will close the session on receipt.
-            gateway.scanKv(new ScanKvRequest().setScannerId(scannerId).setCloseScanner(true));
+            gateway.scanKv(new ScanKvRequest().setScannerId(scannerId).setCloseScanner(true))
+                    .whenComplete(
+                            (resp, ex) -> {
+                                if (ex != null) {
+                                    LOG.debug(
+                                            "close_scanner RPC failed for scanner {},"
+                                                    + " server-side TTL cleanup will"
+                                                    + " reclaim resources.",
+                                            scannerId,
+                                            ex);
+                                }
+                            });
         }
     }
 
