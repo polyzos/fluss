@@ -37,6 +37,7 @@ import org.apache.fluss.record.ChangeType;
 import org.apache.fluss.record.DefaultValueRecordBatch;
 import org.apache.fluss.record.KvRecord;
 import org.apache.fluss.record.KvRecordBatch;
+import org.apache.fluss.record.KvRecordTestUtils;
 import org.apache.fluss.record.LogRecord;
 import org.apache.fluss.record.LogRecordBatch;
 import org.apache.fluss.record.LogRecordReadContext;
@@ -62,11 +63,9 @@ import org.apache.fluss.server.entity.NotifyLeaderAndIsrData;
 import org.apache.fluss.server.entity.NotifyLeaderAndIsrResultForBucket;
 import org.apache.fluss.server.entity.StopReplicaData;
 import org.apache.fluss.server.entity.StopReplicaResultForBucket;
-import org.apache.fluss.record.KvRecordTestUtils;
 import org.apache.fluss.server.kv.KvTablet;
 import org.apache.fluss.server.kv.rocksdb.RocksDBKv;
 import org.apache.fluss.server.kv.snapshot.CompletedSnapshot;
-import org.apache.fluss.server.zk.NOPErrorHandler;
 import org.apache.fluss.server.log.FetchParams;
 import org.apache.fluss.server.log.ListOffsetsParam;
 import org.apache.fluss.server.metadata.BucketMetadata;
@@ -75,6 +74,7 @@ import org.apache.fluss.server.metadata.PartitionMetadata;
 import org.apache.fluss.server.metadata.ServerInfo;
 import org.apache.fluss.server.metadata.TableMetadata;
 import org.apache.fluss.server.testutils.KvTestUtils;
+import org.apache.fluss.server.zk.NOPErrorHandler;
 import org.apache.fluss.server.zk.data.LeaderAndIsr;
 import org.apache.fluss.server.zk.data.TableRegistration;
 import org.apache.fluss.testutils.DataTestUtils;
@@ -2367,8 +2367,8 @@ class ReplicaManagerTest extends ReplicaTestBase {
 
     /**
      * When a bucket transitions from leader to follower, {@link
-     * org.apache.fluss.server.kv.scan.ScannerManager#closeScannersForBucket} must be called so
-     * that open scanner sessions are released immediately rather than waiting for TTL expiry.
+     * org.apache.fluss.server.kv.scan.ScannerManager#closeScannersForBucket} must be called so that
+     * open scanner sessions are released immediately rather than waiting for TTL expiry.
      */
     @Test
     void testMakeFollowers_closesScanners() throws Exception {
@@ -2423,8 +2423,8 @@ class ReplicaManagerTest extends ReplicaTestBase {
 
     /**
      * When a replica is stopped, {@link
-     * org.apache.fluss.server.kv.scan.ScannerManager#closeScannersForBucket} must be called so
-     * that open scanner sessions are released before the KV store is destroyed.
+     * org.apache.fluss.server.kv.scan.ScannerManager#closeScannersForBucket} must be called so that
+     * open scanner sessions are released before the KV store is destroyed.
      */
     @Test
     void testStopReplicas_closesScanners() throws Exception {
@@ -2453,13 +2453,15 @@ class ReplicaManagerTest extends ReplicaTestBase {
             scannerManager.createScanner(kvTablet, tb, null);
             assertThat(scannerManager.activeScannerCount()).isEqualTo(1);
 
-            CompletableFuture<List<StopReplicaResultForBucket>> future =
-                    new CompletableFuture<>();
+            CompletableFuture<List<StopReplicaResultForBucket>> future = new CompletableFuture<>();
             replicaManager.stopReplicas(
                     INITIAL_COORDINATOR_EPOCH,
                     Collections.singletonList(
                             new StopReplicaData(
-                                    tb, false, false, INITIAL_COORDINATOR_EPOCH,
+                                    tb,
+                                    false,
+                                    false,
+                                    INITIAL_COORDINATOR_EPOCH,
                                     INITIAL_LEADER_EPOCH)),
                     future::complete);
             future.get();
