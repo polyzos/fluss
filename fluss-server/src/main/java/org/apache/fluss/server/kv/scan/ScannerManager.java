@@ -71,9 +71,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <h3>TTL eviction</h3>
  *
- * <p>A background reaper task runs every {@code kv.scanner.expiration-interval} and evicts
- * sessions idle longer than {@code kv.scanner.ttl}. Recently evicted IDs are retained for
- * {@code 2 × ttl} so callers can distinguish "expired" from "never existed."
+ * <p>A background reaper task runs every {@code kv.scanner.expiration-interval} and evicts sessions
+ * idle longer than {@code kv.scanner.ttl}. Recently evicted IDs are retained for {@code 2 × ttl} so
+ * callers can distinguish "expired" from "never existed."
  *
  * <h3>Leadership change</h3>
  *

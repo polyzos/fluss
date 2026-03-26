@@ -72,5 +72,4 @@ public interface Table extends AutoCloseable {
      * this table (requires to be a Primary Key Table).
      */
     Upsert newUpsert();
-
 }
