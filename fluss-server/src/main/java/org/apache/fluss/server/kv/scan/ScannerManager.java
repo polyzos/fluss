@@ -71,8 +71,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <h3>TTL eviction</h3>
  *
- * <p>A background reaper task runs every {@code server.scanner.expiration-interval} and evicts
- * sessions idle longer than {@code server.scanner.ttl}. Recently evicted IDs are retained for
+ * <p>A background reaper task runs every {@code kv.scanner.expiration-interval} and evicts
+ * sessions idle longer than {@code kv.scanner.ttl}. Recently evicted IDs are retained for
  * {@code 2 × ttl} so callers can distinguish "expired" from "never existed."
  *
  * <h3>Leadership change</h3>
@@ -108,13 +108,13 @@ public class ScannerManager implements AutoCloseableAsync {
     @VisibleForTesting
     ScannerManager(Configuration conf, Scheduler scheduler, Clock clock) {
         this.clock = clock;
-        this.scannerTtlMs = conf.get(ConfigOptions.SERVER_SCANNER_TTL).toMillis();
+        this.scannerTtlMs = conf.get(ConfigOptions.KV_SCANNER_TTL).toMillis();
         this.recentlyExpiredRetentionMs = 2 * scannerTtlMs;
-        this.maxPerBucket = conf.get(ConfigOptions.SERVER_SCANNER_MAX_PER_BUCKET);
-        this.maxPerServer = conf.get(ConfigOptions.SERVER_SCANNER_MAX_PER_SERVER);
+        this.maxPerBucket = conf.get(ConfigOptions.KV_SCANNER_MAX_PER_BUCKET);
+        this.maxPerServer = conf.get(ConfigOptions.KV_SCANNER_MAX_PER_SERVER);
 
         long expirationIntervalMs =
-                conf.get(ConfigOptions.SERVER_SCANNER_EXPIRATION_INTERVAL).toMillis();
+                conf.get(ConfigOptions.KV_SCANNER_EXPIRATION_INTERVAL).toMillis();
         this.cleanupTask =
                 scheduler.schedule(
                         "scanner-expiration",
