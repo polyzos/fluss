@@ -140,8 +140,7 @@ public class KvBatchScanner implements BatchScanner {
             } catch (Exception e) {
                 done = true;
                 // TODO: handle LeaderNotAvailableException with retry (see LimitBatchScanner).
-                throw new IOException(
-                        "Failed to open scanner for bucket " + currentBucket(), e);
+                throw new IOException("Failed to open scanner for bucket " + currentBucket(), e);
             }
         }
 
