@@ -515,24 +515,24 @@ public class ConfigOptions {
                                     + WRITER_ID_EXPIRATION_TIME.key()
                                     + " passing. The default value is 10 minutes.");
 
-    public static final ConfigOption<Duration> SERVER_SCANNER_TTL =
-            key("server.scanner.ttl")
+    public static final ConfigOption<Duration> KV_SCANNER_TTL =
+            key("kv.scanner.ttl")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(10))
                     .withDescription(
                             "The time that the tablet server will wait without receiving any scan request from "
                                     + "a client before expiring the related status. The default value is 10 minutes.");
 
-    public static final ConfigOption<Duration> SERVER_SCANNER_EXPIRATION_INTERVAL =
-            key("server.scanner.expiration-interval")
+    public static final ConfigOption<Duration> KV_SCANNER_EXPIRATION_INTERVAL =
+            key("kv.scanner.expiration-interval")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(30))
                     .withDescription(
                             "How often the TTL reaper runs to close idle scanner sessions. "
                                     + "The default value is 30 seconds.");
 
-    public static final ConfigOption<Integer> SERVER_SCANNER_MAX_PER_BUCKET =
-            key("server.scanner.max-per-bucket")
+    public static final ConfigOption<Integer> KV_SCANNER_MAX_PER_BUCKET =
+            key("kv.scanner.max-per-bucket")
                     .intType()
                     .defaultValue(8)
                     .withDescription(
@@ -540,8 +540,8 @@ public class ConfigOptions {
                                     + "Exceeding this limit returns TOO_MANY_SCANNERS. "
                                     + "The default value is 8.");
 
-    public static final ConfigOption<Integer> SERVER_SCANNER_MAX_PER_SERVER =
-            key("server.scanner.max-per-server")
+    public static final ConfigOption<Integer> KV_SCANNER_MAX_PER_SERVER =
+            key("kv.scanner.max-per-server")
                     .intType()
                     .defaultValue(200)
                     .withDescription(

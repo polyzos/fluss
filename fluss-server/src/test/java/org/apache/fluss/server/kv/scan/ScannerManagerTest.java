@@ -159,32 +159,32 @@ class ScannerManagerTest {
     /** Creates a {@link ScannerManager} with a long TTL so the reaper never fires during tests. */
     private ScannerManager createManager() {
         Configuration c = new Configuration();
-        c.set(ConfigOptions.SERVER_SCANNER_TTL, Duration.ofHours(1));
-        c.set(ConfigOptions.SERVER_SCANNER_EXPIRATION_INTERVAL, Duration.ofHours(1));
-        c.set(ConfigOptions.SERVER_SCANNER_MAX_PER_BUCKET, 8);
-        c.set(ConfigOptions.SERVER_SCANNER_MAX_PER_SERVER, 200);
+        c.set(ConfigOptions.KV_SCANNER_TTL, Duration.ofHours(1));
+        c.set(ConfigOptions.KV_SCANNER_EXPIRATION_INTERVAL, Duration.ofHours(1));
+        c.set(ConfigOptions.KV_SCANNER_MAX_PER_BUCKET, 8);
+        c.set(ConfigOptions.KV_SCANNER_MAX_PER_SERVER, 200);
         return new ScannerManager(c, scheduler, clock);
     }
 
     /** Creates a {@link ScannerManager} with configurable limits and a long reaper interval. */
     private ScannerManager createManager(int maxPerBucket, int maxPerServer) {
         Configuration c = new Configuration();
-        c.set(ConfigOptions.SERVER_SCANNER_TTL, Duration.ofHours(1));
-        c.set(ConfigOptions.SERVER_SCANNER_EXPIRATION_INTERVAL, Duration.ofHours(1));
-        c.set(ConfigOptions.SERVER_SCANNER_MAX_PER_BUCKET, maxPerBucket);
-        c.set(ConfigOptions.SERVER_SCANNER_MAX_PER_SERVER, maxPerServer);
+        c.set(ConfigOptions.KV_SCANNER_TTL, Duration.ofHours(1));
+        c.set(ConfigOptions.KV_SCANNER_EXPIRATION_INTERVAL, Duration.ofHours(1));
+        c.set(ConfigOptions.KV_SCANNER_MAX_PER_BUCKET, maxPerBucket);
+        c.set(ConfigOptions.KV_SCANNER_MAX_PER_SERVER, maxPerServer);
         return new ScannerManager(c, scheduler, clock);
     }
 
     /** Creates a {@link ScannerManager} with a short TTL and reaper interval for eviction tests. */
     private ScannerManager createManagerWithShortTtl(long ttlMs, long expirationIntervalMs) {
         Configuration c = new Configuration();
-        c.set(ConfigOptions.SERVER_SCANNER_TTL, Duration.ofMillis(ttlMs));
+        c.set(ConfigOptions.KV_SCANNER_TTL, Duration.ofMillis(ttlMs));
         c.set(
-                ConfigOptions.SERVER_SCANNER_EXPIRATION_INTERVAL,
+                ConfigOptions.KV_SCANNER_EXPIRATION_INTERVAL,
                 Duration.ofMillis(expirationIntervalMs));
-        c.set(ConfigOptions.SERVER_SCANNER_MAX_PER_BUCKET, 8);
-        c.set(ConfigOptions.SERVER_SCANNER_MAX_PER_SERVER, 200);
+        c.set(ConfigOptions.KV_SCANNER_MAX_PER_BUCKET, 8);
+        c.set(ConfigOptions.KV_SCANNER_MAX_PER_SERVER, 200);
         return new ScannerManager(c, scheduler, clock);
     }
 
