@@ -45,6 +45,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,12 +54,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * A {@link BatchScanner} that streams all live rows from a single KV bucket by iterating the tablet
- * server's RocksDB instance via a sequence of ScanKv RPCs.
+ * A {@link BatchScanner} that streams all live rows from one or more KV buckets by iterating each
+ * tablet server's RocksDB instance via a sequence of ScanKv RPCs.
  *
- * <p>The remote scanner is opened lazily on the first {@link #pollBatch} call. Once the bucket is
- * exhausted the scanner closes itself on the server. If the caller needs to abort early it must
- * call {@link #close} explicitly.
+ * <p>Buckets are scanned sequentially. When one bucket is fully consumed the scanner automatically
+ * advances to the next. The remote scanner for each bucket is opened lazily on the first {@link
+ * #pollBatch} call for that bucket. If the caller needs to abort early it must call {@link #close}
+ * explicitly.
  *
  * <p>After each response with {@code has_more_results = true} the next RPC is fired immediately,
  * overlapping network latency with the caller's row processing. At most one request is in-flight at
@@ -71,7 +73,7 @@ public class KvBatchScanner implements BatchScanner {
     private static final int BATCH_SIZE_BYTES = 4 * 1024 * 1024;
 
     private final TablePath tablePath;
-    private final TableBucket tableBucket;
+    private final List<TableBucket> buckets;
     private final SchemaGetter schemaGetter;
     private final MetadataUpdater metadataUpdater;
     private final int targetSchemaId;
@@ -79,14 +81,17 @@ public class KvBatchScanner implements BatchScanner {
     /** Cache for schema evolution index mappings. */
     private final Map<Short, int[]> schemaMappingCache = new HashMap<>();
 
-    /** Reused across all batches; schemaGetter and kvFormat never change. */
+    /** Reused across all batches and buckets; schemaGetter and kvFormat never change. */
     private final ValueRecordReadContext readContext;
 
+    private int currentBucketIndex = 0;
     private boolean done = false;
+
+    // Per-bucket mutable state — reset each time the scanner advances to a new bucket.
     @Nullable private TabletServerGateway gateway;
     @Nullable private byte[] scannerId;
 
-    /** Monotonically increasing ID sent with each continuation request, starting at 0. */
+    /** Monotonically increasing ID sent with each continuation request, reset per bucket. */
     private int callSeqId = 0;
 
     @Nullable private CompletableFuture<ScanKvResponse> prefetchFuture;
@@ -96,8 +101,16 @@ public class KvBatchScanner implements BatchScanner {
             TableBucket tableBucket,
             SchemaGetter schemaGetter,
             MetadataUpdater metadataUpdater) {
+        this(tableInfo, Collections.singletonList(tableBucket), schemaGetter, metadataUpdater);
+    }
+
+    public KvBatchScanner(
+            TableInfo tableInfo,
+            List<TableBucket> buckets,
+            SchemaGetter schemaGetter,
+            MetadataUpdater metadataUpdater) {
         this.tablePath = tableInfo.getTablePath();
-        this.tableBucket = tableBucket;
+        this.buckets = buckets;
         this.schemaGetter = schemaGetter;
         this.metadataUpdater = metadataUpdater;
         this.targetSchemaId = tableInfo.getSchemaId();
@@ -112,7 +125,7 @@ public class KvBatchScanner implements BatchScanner {
      * <ul>
      *   <li>Returns an empty iterator if the in-flight RPC has not completed within {@code
      *       timeout}.
-     *   <li>Returns {@code null} when the bucket is exhausted or the scanner has been closed.
+     *   <li>Returns {@code null} when all buckets are exhausted or the scanner has been closed.
      * </ul>
      */
     @Nullable
@@ -127,7 +140,8 @@ public class KvBatchScanner implements BatchScanner {
             } catch (Exception e) {
                 done = true;
                 // TODO: handle LeaderNotAvailableException with retry (see LimitBatchScanner).
-                throw new IOException("Failed to open scanner for bucket " + tableBucket, e);
+                throw new IOException(
+                        "Failed to open scanner for bucket " + currentBucket(), e);
             }
         }
 
@@ -159,7 +173,7 @@ public class KvBatchScanner implements BatchScanner {
         if (hasMore) {
             sendContinuation();
         } else {
-            done = true;
+            advanceBucket();
         }
 
         if (!response.hasRecords()) {
@@ -200,11 +214,31 @@ public class KvBatchScanner implements BatchScanner {
         }
     }
 
-    private void openScanner() {
-        if (tableBucket.getPartitionId() != null) {
-            metadataUpdater.checkAndUpdateMetadata(tablePath, tableBucket);
+    private TableBucket currentBucket() {
+        return buckets.get(currentBucketIndex);
+    }
+
+    /**
+     * Resets per-bucket state and advances to the next bucket. Sets {@link #done} when all buckets
+     * have been consumed. The server already closed the scanner when {@code hasMore = false}, so no
+     * explicit close RPC is needed here.
+     */
+    private void advanceBucket() {
+        gateway = null;
+        scannerId = null;
+        callSeqId = 0;
+        currentBucketIndex++;
+        if (currentBucketIndex >= buckets.size()) {
+            done = true;
         }
-        int leader = metadataUpdater.leaderFor(tablePath, tableBucket);
+    }
+
+    private void openScanner() {
+        TableBucket bucket = currentBucket();
+        if (bucket.getPartitionId() != null) {
+            metadataUpdater.checkAndUpdateMetadata(tablePath, bucket);
+        }
+        int leader = metadataUpdater.leaderFor(tablePath, bucket);
         gateway = metadataUpdater.newTabletServerClientForNode(leader);
         if (gateway == null) {
             throw new LeaderNotAvailableException(
@@ -213,10 +247,10 @@ public class KvBatchScanner implements BatchScanner {
 
         PbScanReqForBucket bucketReq =
                 new PbScanReqForBucket()
-                        .setTableId(tableBucket.getTableId())
-                        .setBucketId(tableBucket.getBucket());
-        if (tableBucket.getPartitionId() != null) {
-            bucketReq.setPartitionId(tableBucket.getPartitionId());
+                        .setTableId(bucket.getTableId())
+                        .setBucketId(bucket.getBucket());
+        if (bucket.getPartitionId() != null) {
+            bucketReq.setPartitionId(bucket.getPartitionId());
         }
 
         ScanKvRequest request =

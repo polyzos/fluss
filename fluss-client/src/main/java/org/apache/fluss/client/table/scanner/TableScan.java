@@ -30,6 +30,7 @@ import org.apache.fluss.client.table.scanner.log.TypedLogScanner;
 import org.apache.fluss.client.table.scanner.log.TypedLogScannerImpl;
 import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.exception.FlussRuntimeException;
+import org.apache.fluss.metadata.PartitionInfo;
 import org.apache.fluss.metadata.SchemaGetter;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableInfo;
@@ -37,6 +38,7 @@ import org.apache.fluss.types.RowType;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /** API for configuring and creating {@link LogScanner} and {@link BatchScanner}. */
@@ -141,6 +143,32 @@ public class TableScan implements Scan {
                 conn.getMetadataUpdater(),
                 projectedColumns,
                 limit);
+    }
+
+    @Override
+    public BatchScanner createBatchScanner() {
+        long tableId = tableInfo.getTableId();
+        int numBuckets = tableInfo.getNumBuckets();
+        List<TableBucket> buckets = new ArrayList<>();
+        if (!tableInfo.isPartitioned()) {
+            for (int b = 0; b < numBuckets; b++) {
+                buckets.add(new TableBucket(tableId, b));
+            }
+        } else {
+            try {
+                List<PartitionInfo> partitions =
+                        conn.getAdmin().listPartitionInfos(tableInfo.getTablePath()).get();
+                for (PartitionInfo partition : partitions) {
+                    for (int b = 0; b < numBuckets; b++) {
+                        buckets.add(new TableBucket(tableId, partition.getPartitionId(), b));
+                    }
+                }
+            } catch (Exception e) {
+                throw new FlussRuntimeException(
+                        "Failed to list partitions for table " + tableInfo.getTablePath(), e);
+            }
+        }
+        return new KvBatchScanner(tableInfo, buckets, schemaGetter, conn.getMetadataUpdater());
     }
 
     @Override

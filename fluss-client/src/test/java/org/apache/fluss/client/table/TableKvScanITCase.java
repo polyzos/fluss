@@ -18,7 +18,8 @@
 package org.apache.fluss.client.table;
 
 import org.apache.fluss.client.admin.ClientToServerITCaseBase;
-import org.apache.fluss.client.table.scanner.KvScan;
+import org.apache.fluss.client.table.scanner.Scan;
+import org.apache.fluss.client.table.scanner.batch.BatchScanUtils;
 import org.apache.fluss.client.table.writer.UpsertWriter;
 import org.apache.fluss.metadata.PartitionInfo;
 import org.apache.fluss.metadata.PartitionSpec;
@@ -28,11 +29,9 @@ import org.apache.fluss.metadata.TableDescriptor;
 import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.types.DataTypes;
-import org.apache.fluss.utils.CloseableIterator;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -40,9 +39,8 @@ import java.util.List;
 import static org.apache.fluss.testutils.DataTestUtils.row;
 import static org.apache.fluss.testutils.InternalRowAssert.assertThatRow;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** IT case for {@link KvScan}. */
+/** IT case for full KV scan via {@link Scan#createBatchScanner()}. */
 class TableKvScanITCase extends ClientToServerITCaseBase {
 
     private static final int NUM_BUCKETS = 3;
@@ -285,25 +283,6 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
         }
     }
 
-    @Test
-    void testNonPrimaryKeyTableThrows() throws Exception {
-        TablePath tablePath = TablePath.of("test_db", "test_log_table");
-        Schema schema =
-                Schema.newBuilder()
-                        .column("id", DataTypes.INT())
-                        .column("name", DataTypes.STRING())
-                        .build();
-        TableDescriptor descriptor =
-                TableDescriptor.builder().schema(schema).distributedBy(NUM_BUCKETS).build();
-
-        createTable(tablePath, descriptor, false);
-        try (Table table = conn.getTable(tablePath)) {
-            assertThatThrownBy(() -> table.newKvScan())
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("not a Primary Key Table");
-        }
-    }
-
     private void createPkTable(TablePath path) throws Exception {
         TableDescriptor descriptor =
                 TableDescriptor.builder()
@@ -335,13 +314,11 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
         }
     }
 
+    /**
+     * Scans all rows from all buckets of a primary-key table using {@link
+     * Scan#createBatchScanner()}.
+     */
     private List<InternalRow> kvScanAll(Table table) throws Exception {
-        List<InternalRow> rows = new ArrayList<>();
-        try (CloseableIterator<InternalRow> iterator = table.newKvScan().execute()) {
-            while (iterator.hasNext()) {
-                rows.add(iterator.next());
-            }
-        }
-        return rows;
+        return BatchScanUtils.collectRows(table.newScan().createBatchScanner());
     }
 }

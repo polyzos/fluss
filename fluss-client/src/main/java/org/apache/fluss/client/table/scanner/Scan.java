@@ -76,9 +76,26 @@ public interface Scan {
     /**
      * Creates a {@link BatchScanner} to read current data in the given table bucket for this scan.
      *
+     * <p>For Primary Key Tables, this performs a full live KV scan of the bucket from the tablet
+     * server's RocksDB state and does not require {@link #limit(int)} to be set.
+     *
+     * <p>For Log Tables, {@link #limit(int)} must be set before calling this method.
+     *
      * <p>Note: this API doesn't support pre-configured with {@link #project}.
      */
     BatchScanner createBatchScanner(TableBucket tableBucket);
+
+    /**
+     * Creates a {@link BatchScanner} that performs a full live KV scan across all buckets of this
+     * Primary Key Table, automatically discovering all partitions for partitioned tables.
+     *
+     * <p>This is a convenience alternative to {@link #createBatchScanner(TableBucket)} that removes
+     * the need to manually enumerate table buckets and partitions.
+     *
+     * <p>Note: this method is only supported for Primary Key Tables and does not support
+     * pre-configured with {@link #project} or {@link #limit(int)}.
+     */
+    BatchScanner createBatchScanner();
 
     /**
      * Creates a {@link BatchScanner} to read given snapshot data in the given table bucket for this
