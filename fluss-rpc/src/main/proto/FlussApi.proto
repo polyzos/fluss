@@ -317,7 +317,7 @@ message ScanKvRequest {
   // Monotonically increasing sequence number for in-order delivery validation.
   optional int32 call_seq_id = 3;
   // Maximum number of bytes of record data to return in this batch.
-  required int32 batch_size_bytes = 4;
+  optional int32 batch_size_bytes = 4;
   // If true, the server closes the scanner session immediately.
   optional bool close_scanner = 5;
 }
