@@ -371,6 +371,10 @@ LEFT JOIN (SELECT members FROM risk_groups WHERE group_key = 'velocity_breach:24
 LEFT JOIN (SELECT members FROM risk_groups WHERE group_key = 'under_review')         AS fr ON TRUE;
 ```
 
+### Flagged Profiles
+
+![](assets/realtime_profiles/results.png)
+
 ### What You End Up With
 Real-time entity profiles are not a separate system that gets batch-refreshed. 
 They are a continuous view over group membership state that Fluss maintains incrementally, merges correctly, and serves with the latency that inline decisioning requires. 
