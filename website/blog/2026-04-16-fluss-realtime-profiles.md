@@ -35,7 +35,7 @@ the profile is maintained inside Fluss as events arrive, using the Aggregation M
 The stream and the profile are the same system, with the same consistency model and the same recovery guarantees.
 
 This has a meaningful downstream effect: any consumer that can read Fluss gets profiles for free. 
-An OLAP engine like StarRocks or DucksDB can query the profile tables directly, nothing changes about how they work,
+An OLAP engine like StarRocks or DuckDB can query the profile tables directly, nothing changes about how they work,
 they simply no longer have to own the profile state. 
 
 AI applications and feature stores can read the same bitmap-structured groups for real-time feature serving. 
