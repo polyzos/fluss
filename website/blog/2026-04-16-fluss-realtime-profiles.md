@@ -127,12 +127,249 @@ When the Flink sink restarts, the `UndoRecoveryOperator` compares bucket offsets
 For buckets with post-checkpoint writes, it scans the changelog, computes per-key inverse operations, and applies them via `AggMode.OVERWRITE`, bypassing the merge engine and directly restoring prior state. 
 For failure before the first checkpoint, a producer offset snapshot registered at job startup provides the rollback baseline.
 
-### Real-time Risk Profiles In Financial Services
-#### Show Me The Code 👨‍💻
+### Show Me The Code 👨‍💻-- Real-time Risk Profiles In Financial Services
 
-### End-to-end Architecture
+> The complete working example, Docker setup, and all source code are available in the
+> [github repository](https://github.com/ververica/ververica-fluss-examples/tree/main/realtime_profiles) 
+> along with a [detailed guide](https://github.com/ververica/ververica-fluss-examples/blob/main/realtime_profiles/guide.md).
 
 ![](assets/realtime_profiles/system.png)
+
+
+#### Step 1: Register the Fluss catalog
+
+```sql
+CREATE CATALOG fluss_catalog WITH (
+  'type'              = 'fluss',
+  'bootstrap.servers' = 'coordinator-server:9123'
+);
+
+USE CATALOG fluss_catalog;
+```
+
+#### Register the bitmap UDFs before use:
+
+```sql
+ADD JAR '/opt/flink/jars/fluss-flink-realtime-profile-0.1.0.jar';
+
+CREATE TEMPORARY FUNCTION to_bitmap64        AS 'io.ipolyzos.udfs.ToBitmap64';
+CREATE TEMPORARY FUNCTION bitmap_contains    AS 'io.ipolyzos.udfs.BitmapContains';
+CREATE TEMPORARY FUNCTION bitmap_cardinality AS 'io.ipolyzos.udfs.BitmapCardinality';
+CREATE TEMPORARY FUNCTION bitmap_or          AS 'io.ipolyzos.udfs.BitmapOr';
+CREATE TEMPORARY FUNCTION bitmap_and_not     AS 'io.ipolyzos.udfs.BitmapAndNot';
+CREATE TEMPORARY FUNCTION bitmap_or_agg      AS 'io.ipolyzos.udfs.BitmapOrAgg';
+CREATE TEMPORARY FUNCTION bitmap_to_string   AS 'io.ipolyzos.udfs.BitmapToString';
+```
+
+---
+
+#### Step 2: The input event stream as a Fluss log table
+
+```sql
+CREATE TABLE transaction_events (
+    account_id        STRING,
+    counterparty_id   STRING,
+    jurisdiction_code STRING,
+    channel           STRING,
+    amount_eur        DECIMAL(18, 2),
+    event_type        STRING,
+    ts                TIMESTAMP(3),
+    WATERMARK FOR ts AS ts - INTERVAL '5' SECOND
+) WITH (
+    'table.log.ttl' = '7d',
+    'bucket.num'    = '8'
+);
+```
+
+---
+
+#### Step 3: Entity mapping with auto-increment integers
+
+```sql
+CREATE TABLE entity_mapping (
+    entity_id     STRING NOT NULL,
+    entity_type   STRING NOT NULL,
+    entity_int64  BIGINT,
+    PRIMARY KEY (entity_id, entity_type) NOT ENFORCED
+) WITH (
+    'auto-increment.fields'                   = 'entity_int64',
+    'lookup.insert-if-not-exists'             = 'true',
+    'lookup.cache'                            = 'PARTIAL',
+    'lookup.partial-cache.max-rows'           = '500000',
+    'lookup.partial-cache.expire-after-write' = '1h',
+    'bucket.num'                              = '4'
+);
+```
+
+---
+
+#### Step 4: Enriched events table
+
+```sql
+CREATE TABLE enriched_transactions (
+    account_id         STRING,
+    account_int64      BIGINT,
+    counterparty_id    STRING,
+    counterparty_int64 BIGINT,
+    jurisdiction_code  STRING,
+    channel            STRING,
+    amount_eur         DECIMAL(18, 2),
+    event_type         STRING,
+    ts                 TIMESTAMP(3),
+    WATERMARK FOR ts AS ts - INTERVAL '5' SECOND
+) WITH (
+    'table.log.ttl' = '7d',
+    'bucket.num'    = '4'
+);
+```
+
+Populate it via a temporal lookup join that resolves entity IDs inline and registers unknown
+entities on first encounter:
+
+```sql
+INSERT INTO enriched_transactions
+SELECT
+    t.account_id,
+    a.entity_int64      AS account_int64,
+    t.counterparty_id,
+    c.entity_int64      AS counterparty_int64,
+    t.jurisdiction_code,
+    t.channel,
+    t.amount_eur,
+    t.event_type,
+    t.ts
+FROM (SELECT *, proctime() AS ptime FROM transaction_events) AS t
+JOIN entity_mapping FOR SYSTEM_TIME AS OF t.ptime AS a
+  ON t.account_id = a.entity_id AND a.entity_type = 'account'
+JOIN entity_mapping FOR SYSTEM_TIME AS OF t.ptime AS c
+  ON t.counterparty_id = c.entity_id AND c.entity_type = 'counterparty';
+```
+
+---
+
+#### Step 5: The risk groups table (Aggregation Merge Engine)
+
+```sql
+CREATE TABLE risk_groups (
+  group_key      STRING,
+  members        BYTES,
+  last_update_ts TIMESTAMP(3),
+  PRIMARY KEY (group_key) NOT ENFORCED
+) WITH (
+  'table.merge-engine'         = 'aggregation',
+  'fields.members.agg'         = 'rbm64',
+  'fields.last_update_ts.agg'  = 'last_value_ignore_nulls',
+  'bucket.num'                 = '3'
+);
+```
+
+Inspect the bitmap contents:
+
+```sql
+SELECT
+    group_key,
+    bitmap_to_string(members) AS members,
+    last_update_ts
+FROM risk_groups;
+```
+
+---
+
+#### Step 6: Writing high-risk jurisdiction group updates
+
+Each event writes a single-element bitmap. Fluss handles accumulation via `rbm64` at the
+storage layer — no windowed aggregation required in Flink.
+
+```sql
+INSERT INTO risk_groups
+SELECT
+  CONCAT('high_risk_jurisdiction:', jurisdiction_code)  AS group_key,
+  to_bitmap64(account_int64)                            AS members,
+  ts                                                    AS last_update_ts
+FROM enriched_transactions
+WHERE jurisdiction_code IN ('IR', 'KP', 'SY', 'CU', 'VE')
+  AND event_type IN ('debit', 'credit');
+```
+
+---
+
+### Step 7: Writing counterparty velocity group updates
+
+**Pipeline A:** Accumulate per-account counterparty bitmaps per 24h tumbling window:
+
+```sql
+CREATE TABLE account_counterparty_sets (
+  window_start    TIMESTAMP(3),
+  account_int64   BIGINT,
+  counterparties  BYTES,
+  last_update_ts  TIMESTAMP(3),
+  PRIMARY KEY (window_start, account_int64) NOT ENFORCED
+) WITH (
+  'table.merge-engine'        = 'aggregation',
+  'fields.counterparties.agg' = 'rbm64',
+  'fields.last_update_ts.agg' = 'last_value_ignore_nulls',
+  'bucket.num'                = '3'
+);
+
+INSERT INTO account_counterparty_sets
+SELECT
+  TUMBLE_START(ts, INTERVAL '24' HOUR)           AS window_start,
+  account_int64,
+  bitmap_or_agg(to_bitmap64(counterparty_int64)) AS counterparties,
+  MAX(ts)                                        AS last_update_ts
+FROM enriched_transactions
+GROUP BY
+  TUMBLE(ts, INTERVAL '24' HOUR),
+  account_int64;
+```
+
+**Pipeline B:** Detect velocity breaches and write directly to `risk_groups`:
+
+```sql
+INSERT INTO risk_groups
+SELECT
+  'velocity_breach:24h'                      AS group_key,
+  to_bitmap64(account_int64)                 AS members,
+  TUMBLE_END(ts, INTERVAL '24' HOUR)         AS last_update_ts
+FROM enriched_transactions
+GROUP BY
+  TUMBLE(ts, INTERVAL '24' HOUR),
+  account_int64
+HAVING COUNT(DISTINCT counterparty_int64) > 10;
+```
+
+Advance the watermark to close the window (insert after both pipeline jobs are running):
+
+```sql
+INSERT INTO transaction_events VALUES
+  ('ACC-001', 'CP-IBAN-001', 'DE', 'sepa', 0.00, 'watermark_flush', TIMESTAMP '2026-03-16 00:01:00');
+```
+
+---
+
+### Step 8: Deriving the client risk profile via set algebra
+
+```sql
+-- Replace CAST(1 AS BIGINT) with the account's entity_int64 from entity_mapping.
+SELECT
+  a.id                                                                  AS account_id,
+  COALESCE(bitmap_contains(hj.members, a.id), FALSE)                    AS high_risk_jurisdiction,
+  COALESCE(bitmap_contains(vb.members, a.id), FALSE)                    AS high_velocity,
+  COALESCE(bitmap_contains(fr.members, a.id), FALSE)                    AS flagged_for_review,
+  COALESCE(bitmap_contains(hj.members, a.id), FALSE)
+    OR COALESCE(bitmap_contains(vb.members, a.id), FALSE)               AS risk_signal_active,
+  (COALESCE(bitmap_contains(hj.members, a.id), FALSE)
+    OR  COALESCE(bitmap_contains(vb.members, a.id), FALSE))
+    AND NOT COALESCE(bitmap_contains(fr.members, a.id), FALSE)          AS requires_escalation
+FROM
+  (VALUES (CAST(1 AS BIGINT)))                                          AS a(id)
+CROSS JOIN
+  (SELECT bitmap_or_agg(members) AS members
+   FROM risk_groups
+   WHERE group_key LIKE 'high_risk_jurisdiction:%')                     AS hj
+LEFT JOIN (SELECT members FROM risk_groups WHERE group_key = 'velocity_breach:24h') AS vb ON TRUE
+LEFT JOIN (SELECT members FROM risk_groups WHERE group_key = 'under_review')         AS fr ON TRUE;
+```
 
 ### What You End Up With
 Real-time entity profiles are not a separate system that gets batch-refreshed. 
