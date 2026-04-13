@@ -252,5 +252,4 @@ public class TableScan implements Scan {
                 tableInfo.getTableConfig().getKvFormat(),
                 conn.getOrCreateRemoteFileDownloader());
     }
-
 }
