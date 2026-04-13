@@ -21,6 +21,7 @@ import org.apache.fluss.client.FlussConnection;
 import org.apache.fluss.client.admin.Admin;
 import org.apache.fluss.client.metadata.KvSnapshotMetadata;
 import org.apache.fluss.client.table.scanner.batch.BatchScanner;
+import org.apache.fluss.client.table.scanner.batch.CompositeBatchScanner;
 import org.apache.fluss.client.table.scanner.batch.KvBatchScanner;
 import org.apache.fluss.client.table.scanner.batch.KvSnapshotBatchScanner;
 import org.apache.fluss.client.table.scanner.batch.LimitBatchScanner;
@@ -156,7 +157,7 @@ public class TableScan implements Scan {
                             "BatchScanner doesn't support filter pushdown. Table: %s, bucket: %s",
                             tableInfo.getTablePath(), tableBucket));
         }
-        if (tableInfo.hasPrimaryKey() && limit == null) {
+        if (tableInfo.hasPrimaryKey()) {
             return new KvBatchScanner(
                     tableInfo,
                     tableBucket,
@@ -187,11 +188,6 @@ public class TableScan implements Scan {
                     "createBatchScanner() is only supported for Primary Key Tables. Table: "
                             + tableInfo.getTablePath());
         }
-        if (limit != null) {
-            throw new UnsupportedOperationException(
-                    "KV BatchScanner doesn't support limit pushdown. Table: "
-                            + tableInfo.getTablePath());
-        }
         long tableId = tableInfo.getTableId();
         int numBuckets = tableInfo.getNumBuckets();
         List<TableBucket> buckets = new ArrayList<>();
@@ -215,13 +211,11 @@ public class TableScan implements Scan {
                         "Failed to list partitions for table " + tableInfo.getTablePath(), e);
             }
         }
-        return new KvBatchScanner(
-                tableInfo,
-                buckets,
-                schemaGetter,
-                conn.getMetadataUpdater(),
-                kvBatchSizeBytes(),
-                projectedColumns);
+        List<BatchScanner> scanners = new ArrayList<>();
+        for (TableBucket bucket : buckets) {
+            scanners.add(createBatchScanner(bucket));
+        }
+        return new CompositeBatchScanner(scanners, limit);
     }
 
     @Override
