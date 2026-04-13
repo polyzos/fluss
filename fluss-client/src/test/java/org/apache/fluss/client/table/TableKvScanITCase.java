@@ -326,9 +326,7 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
                 TableBucket bucket = new TableBucket(tableId, b);
                 projected.addAll(
                         BatchScanUtils.collectRows(
-                                table.newScan()
-                                        .project(List.of("id"))
-                                        .createBatchScanner(bucket)));
+                                table.newScan().project(List.of("id")).createBatchScanner(bucket)));
             }
 
             // Unprojected full scan should have same row count.

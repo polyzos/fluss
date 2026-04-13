@@ -94,8 +94,8 @@ public interface Scan {
      *
      * <p>For Log Tables, {@link #limit(int)} must be set before calling this method.
      *
-     * @throws UnsupportedOperationException if the table is a Log Table and {@link #limit(int)}
-     *     was not set
+     * @throws UnsupportedOperationException if the table is a Log Table and {@link #limit(int)} was
+     *     not set
      */
     BatchScanner createBatchScanner(TableBucket tableBucket);
 
