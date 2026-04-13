@@ -2378,8 +2378,8 @@ class ReplicaManagerTest extends ReplicaTestBase {
 
     /**
      * When a bucket transitions from leader to follower, {@link
-     * ScannerManager#closeScannersForBucket} must be called so that
-     * open scanner sessions are released immediately rather than waiting for TTL expiry.
+     * ScannerManager#closeScannersForBucket} must be called so that open scanner sessions are
+     * released immediately rather than waiting for TTL expiry.
      */
     @Test
     void testMakeFollowers_closesScanners() throws Exception {
@@ -2402,11 +2402,9 @@ class ReplicaManagerTest extends ReplicaTestBase {
                 null);
         kvTablet.flush(Long.MAX_VALUE, NOPErrorHandler.INSTANCE);
 
-        FlussScheduler testScheduler =
-                new FlussScheduler(1);
+        FlussScheduler testScheduler = new FlussScheduler(1);
         testScheduler.startup();
-        try (ScannerManager scannerManager =
-                new ScannerManager(conf, testScheduler)) {
+        try (ScannerManager scannerManager = new ScannerManager(conf, testScheduler)) {
 
             replicaManager.setScannerManager(scannerManager);
             scannerManager.createScanner(kvTablet, tb, null);
@@ -2436,9 +2434,8 @@ class ReplicaManagerTest extends ReplicaTestBase {
     }
 
     /**
-     * When a replica is stopped, {@link
-     * ScannerManager#closeScannersForBucket} must be called so that
-     * open scanner sessions are released before the KV store is destroyed.
+     * When a replica is stopped, {@link ScannerManager#closeScannersForBucket} must be called so
+     * that open scanner sessions are released before the KV store is destroyed.
      */
     @Test
     void testStopReplicas_closesScanners() throws Exception {
@@ -2460,11 +2457,9 @@ class ReplicaManagerTest extends ReplicaTestBase {
                 null);
         kvTablet.flush(Long.MAX_VALUE, NOPErrorHandler.INSTANCE);
 
-        FlussScheduler testScheduler =
-                new FlussScheduler(1);
+        FlussScheduler testScheduler = new FlussScheduler(1);
         testScheduler.startup();
-        try (ScannerManager scannerManager =
-                new ScannerManager(conf, testScheduler)) {
+        try (ScannerManager scannerManager = new ScannerManager(conf, testScheduler)) {
 
             replicaManager.setScannerManager(scannerManager);
             scannerManager.createScanner(kvTablet, tb, null);

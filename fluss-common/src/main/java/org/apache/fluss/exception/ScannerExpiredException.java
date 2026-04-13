@@ -17,10 +17,15 @@
 
 package org.apache.fluss.exception;
 
+import org.apache.fluss.annotation.PublicEvolving;
+
 /**
  * Thrown when a scanner session has expired due to TTL elapsing on the server. The client must
  * restart the scan from the beginning.
+ *
+ * @since 0.7
  */
+@PublicEvolving
 public class ScannerExpiredException extends ApiException {
     private static final long serialVersionUID = 1L;
 

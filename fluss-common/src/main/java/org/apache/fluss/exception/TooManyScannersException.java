@@ -17,10 +17,15 @@
 
 package org.apache.fluss.exception;
 
+import org.apache.fluss.annotation.PublicEvolving;
+
 /**
  * Thrown when the per-bucket or per-server scanner session limit is reached. The client should back
  * off and retry after a delay.
+ *
+ * @since 0.7
  */
+@PublicEvolving
 public class TooManyScannersException extends ApiException {
     private static final long serialVersionUID = 1L;
 

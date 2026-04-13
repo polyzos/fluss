@@ -338,6 +338,18 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
     }
 
     @Test
+    void testLimitGuardOnKvBatchScanner() throws Exception {
+        TablePath path = TablePath.of("test_db", "test_limit_guard");
+        createPkTable(path);
+
+        try (Table table = conn.getTable(path)) {
+            assertThatThrownBy(() -> table.newScan().limit(5).createBatchScanner())
+                    .isInstanceOf(UnsupportedOperationException.class)
+                    .hasMessageContaining("limit");
+        }
+    }
+
+    @Test
     void testLogTableGuardOnCreateBatchScanner() throws Exception {
         TablePath path = TablePath.of("test_db", "test_log_table_guard");
         Schema logSchema =

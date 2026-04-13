@@ -17,11 +17,16 @@
 
 package org.apache.fluss.exception;
 
+import org.apache.fluss.annotation.PublicEvolving;
+
 /**
  * Thrown when a ScanKv request is malformed, for example when both {@code scanner_id} and {@code
  * bucket_scan_req} are set simultaneously, or when neither is set, or when the {@code call_seq_id}
  * is out of order.
+ *
+ * @since 0.7
  */
+@PublicEvolving
 public class InvalidScanRequestException extends ApiException {
     private static final long serialVersionUID = 1L;
 

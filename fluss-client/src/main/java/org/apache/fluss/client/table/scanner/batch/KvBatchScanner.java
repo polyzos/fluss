@@ -17,6 +17,7 @@
 
 package org.apache.fluss.client.table.scanner.batch;
 
+import org.apache.fluss.annotation.Internal;
 import org.apache.fluss.client.metadata.MetadataUpdater;
 import org.apache.fluss.exception.LeaderNotAvailableException;
 import org.apache.fluss.metadata.SchemaGetter;
@@ -68,6 +69,7 @@ import java.util.concurrent.TimeoutException;
  *
  * <p>Not reusable and not thread-safe.
  */
+@Internal
 public class KvBatchScanner implements BatchScanner {
     private static final Logger LOG = LoggerFactory.getLogger(KvBatchScanner.class);
 
@@ -204,7 +206,6 @@ public class KvBatchScanner implements BatchScanner {
                 openScanner();
             } catch (Exception e) {
                 done = true;
-                // TODO: handle LeaderNotAvailableException with retry (see LimitBatchScanner).
                 throw new IOException("Failed to open scanner for bucket " + currentBucket(), e);
             }
         }

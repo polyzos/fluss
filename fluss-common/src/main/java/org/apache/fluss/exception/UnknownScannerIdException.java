@@ -17,11 +17,16 @@
 
 package org.apache.fluss.exception;
 
+import org.apache.fluss.annotation.PublicEvolving;
+
 /**
  * Thrown when a scanner ID is not found on the server and the session was not TTL-expired (e.g.,
  * server restarted, leadership changed, or the session was explicitly closed). The client must
  * restart the scan from the beginning.
+ *
+ * @since 0.7
  */
+@PublicEvolving
 public class UnknownScannerIdException extends ApiException {
     private static final long serialVersionUID = 1L;
 
