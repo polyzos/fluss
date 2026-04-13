@@ -259,14 +259,13 @@ public class ScannerManager implements AutoCloseableAsync {
             }
         }
         for (String key : toRemove) {
-            ScannerContext context = scanners.remove(key);
+            ScannerContext context = scanners.get(key);
             if (context != null) {
-                decrementCounts(tableBucket);
                 LOG.info(
                         "Closing scanner {} for bucket {} due to leadership change.",
                         key,
                         tableBucket);
-                closeScannerContext(context);
+                removeScanner(context);
             }
         }
     }

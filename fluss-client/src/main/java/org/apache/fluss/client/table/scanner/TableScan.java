@@ -162,7 +162,8 @@ public class TableScan implements Scan {
                     tableBucket,
                     schemaGetter,
                     conn.getMetadataUpdater(),
-                    kvBatchSizeBytes());
+                    kvBatchSizeBytes(),
+                    projectedColumns);
         }
         if (limit == null) {
             throw new UnsupportedOperationException(
@@ -184,6 +185,11 @@ public class TableScan implements Scan {
         if (!tableInfo.hasPrimaryKey()) {
             throw new UnsupportedOperationException(
                     "createBatchScanner() is only supported for Primary Key Tables. Table: "
+                            + tableInfo.getTablePath());
+        }
+        if (limit != null) {
+            throw new UnsupportedOperationException(
+                    "KV BatchScanner doesn't support limit pushdown. Table: "
                             + tableInfo.getTablePath());
         }
         long tableId = tableInfo.getTableId();
@@ -210,7 +216,12 @@ public class TableScan implements Scan {
             }
         }
         return new KvBatchScanner(
-                tableInfo, buckets, schemaGetter, conn.getMetadataUpdater(), kvBatchSizeBytes());
+                tableInfo,
+                buckets,
+                schemaGetter,
+                conn.getMetadataUpdater(),
+                kvBatchSizeBytes(),
+                projectedColumns);
     }
 
     @Override

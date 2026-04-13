@@ -89,11 +89,13 @@ public interface Scan {
      * Creates a {@link BatchScanner} to read current data in the given table bucket for this scan.
      *
      * <p>For Primary Key Tables, this performs a full live KV scan of the bucket from the tablet
-     * server's RocksDB state and does not require {@link #limit(int)} to be set.
+     * server's RocksDB state and does not require {@link #limit(int)} to be set. Column projection
+     * configured via {@link #project} is applied client-side.
      *
      * <p>For Log Tables, {@link #limit(int)} must be set before calling this method.
      *
-     * <p>Note: this API doesn't support pre-configured with {@link #project}.
+     * @throws UnsupportedOperationException if the table is a Log Table and {@link #limit(int)}
+     *     was not set
      */
     BatchScanner createBatchScanner(TableBucket tableBucket);
 
@@ -102,10 +104,15 @@ public interface Scan {
      * Primary Key Table, automatically discovering all partitions for partitioned tables.
      *
      * <p>This is a convenience alternative to {@link #createBatchScanner(TableBucket)} that removes
-     * the need to manually enumerate table buckets and partitions.
+     * the need to manually enumerate table buckets and partitions. Column projection configured via
+     * {@link #project} is applied client-side.
      *
      * <p>Note: this method is only supported for Primary Key Tables and does not support
-     * pre-configured with {@link #project} or {@link #limit(int)}.
+     * pre-configured with {@link #limit(int)}.
+     *
+     * @throws UnsupportedOperationException if the table is not a Primary Key Table, or if {@link
+     *     #limit(int)} was configured
+     * @since 0.7
      */
     BatchScanner createBatchScanner();
 

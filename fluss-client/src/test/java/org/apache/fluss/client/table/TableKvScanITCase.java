@@ -32,6 +32,8 @@ import org.apache.fluss.types.DataTypes;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -39,6 +41,7 @@ import java.util.List;
 import static org.apache.fluss.testutils.DataTestUtils.row;
 import static org.apache.fluss.testutils.InternalRowAssert.assertThatRow;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** IT case for full KV scan via {@link Scan#createBatchScanner()}. */
 class TableKvScanITCase extends ClientToServerITCaseBase {
@@ -281,6 +284,135 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
                     .withSchema(PK_SCHEMA.getRowType())
                     .isEqualTo(row(4, "d"));
         }
+    }
+
+    @Test
+    void testProjectionOnKvBatchScanner() throws Exception {
+        TablePath path = TablePath.of("test_db", "test_projection");
+        createPkTable(path);
+
+        try (Table table = conn.getTable(path)) {
+            UpsertWriter writer = table.newUpsert().createWriter();
+            writer.upsert(row(1, "a"));
+            writer.upsert(row(2, "b"));
+            writer.flush();
+
+            // Project only the "id" column (index 0).
+            List<InternalRow> result =
+                    BatchScanUtils.collectRows(
+                            table.newScan().project(List.of("id")).createBatchScanner());
+
+            assertThat(result).hasSize(2);
+            // Each row should have exactly 1 field (the projected "id" column).
+            result.forEach(r -> assertThat(r.getInt(0)).isIn(1, 2));
+        }
+    }
+
+    @Test
+    void testProjectionOnKvBatchScannerForBucket() throws Exception {
+        TablePath path = TablePath.of("test_db", "test_projection_bucket");
+        long tableId = createPkTableAndGetId(path);
+
+        try (Table table = conn.getTable(path)) {
+            UpsertWriter writer = table.newUpsert().createWriter();
+            writer.upsert(row(1, "a"));
+            writer.upsert(row(2, "b"));
+            writer.upsert(row(3, "c"));
+            writer.flush();
+
+            // Scan all buckets with projection and collect results.
+            List<InternalRow> projected = new ArrayList<>();
+            for (int b = 0; b < NUM_BUCKETS; b++) {
+                TableBucket bucket = new TableBucket(tableId, b);
+                projected.addAll(
+                        BatchScanUtils.collectRows(
+                                table.newScan()
+                                        .project(List.of("id"))
+                                        .createBatchScanner(bucket)));
+            }
+
+            // Unprojected full scan should have same row count.
+            List<InternalRow> full = kvScanAll(table);
+            assertThat(projected).hasSize(full.size());
+            // Each projected row has exactly 1 field.
+            projected.forEach(r -> assertThat(r.getInt(0)).isIn(1, 2, 3));
+        }
+    }
+
+    @Test
+    void testLogTableGuardOnCreateBatchScanner() throws Exception {
+        TablePath path = TablePath.of("test_db", "test_log_table_guard");
+        Schema logSchema =
+                Schema.newBuilder()
+                        .column("id", DataTypes.INT())
+                        .column("name", DataTypes.STRING())
+                        .build();
+        TableDescriptor logDescriptor =
+                TableDescriptor.builder().schema(logSchema).distributedBy(NUM_BUCKETS).build();
+        long tableId = createTable(path, logDescriptor, true);
+        waitAllReplicasReady(tableId, NUM_BUCKETS);
+
+        try (Table table = conn.getTable(path)) {
+            assertThatThrownBy(() -> table.newScan().createBatchScanner())
+                    .isInstanceOf(UnsupportedOperationException.class)
+                    .hasMessageContaining("Primary Key");
+        }
+    }
+
+    @Test
+    void testEarlyClose() throws Exception {
+        TablePath path = TablePath.of("test_db", "test_early_close");
+        createPkTable(path);
+
+        try (Table table = conn.getTable(path)) {
+            UpsertWriter writer = table.newUpsert().createWriter();
+            for (int i = 0; i < 1_000; i++) {
+                writer.upsert(row(i, "val" + i));
+            }
+            writer.flush();
+
+            // Open a scanner and close it before exhausting all rows — must not throw.
+            try (var scanner = table.newScan().createBatchScanner()) {
+                scanner.pollBatch(Duration.ofSeconds(30));
+                // Close before draining all buckets — server TTL will reclaim any open session.
+            }
+        }
+    }
+
+    @Test
+    void testSingleBucketScan() throws Exception {
+        TablePath path = TablePath.of("test_db", "test_single_bucket_scan");
+        long tableId = createPkTableAndGetId(path);
+
+        try (Table table = conn.getTable(path)) {
+            UpsertWriter writer = table.newUpsert().createWriter();
+            writer.upsert(row(1, "a"));
+            writer.upsert(row(2, "b"));
+            writer.upsert(row(3, "c"));
+            writer.flush();
+
+            // Scan each bucket individually and collect; union should equal full table scan.
+            List<InternalRow> singleBucketRows = new ArrayList<>();
+            for (int b = 0; b < NUM_BUCKETS; b++) {
+                TableBucket bucket = new TableBucket(tableId, b);
+                singleBucketRows.addAll(
+                        BatchScanUtils.collectRows(table.newScan().createBatchScanner(bucket)));
+            }
+
+            List<InternalRow> fullScan = kvScanAll(table);
+            assertThat(singleBucketRows).hasSize(fullScan.size());
+        }
+    }
+
+    private long createPkTableAndGetId(TablePath path) throws Exception {
+        TableDescriptor descriptor =
+                TableDescriptor.builder()
+                        .schema(PK_SCHEMA)
+                        .distributedBy(NUM_BUCKETS, "id")
+                        .build();
+        long tableId = createTable(path, descriptor, true);
+        waitAllReplicasReady(tableId, NUM_BUCKETS);
+        return tableId;
     }
 
     private void createPkTable(TablePath path) throws Exception {

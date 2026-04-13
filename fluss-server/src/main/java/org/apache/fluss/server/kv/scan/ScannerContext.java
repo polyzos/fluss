@@ -59,6 +59,8 @@ public class ScannerContext implements Closeable {
     private long remainingLimit;
     // Initial value -1 so that the first client call_seq_id of 0 satisfies the server's
     // in-order check: expectedSeqId = callSeqId + 1 = -1 + 1 = 0.
+    // callSeqId validation is only performed for continuation requests (those carrying a
+    // scanner_id), never for the initial open request (those carrying a bucket_scan_req).
     private int callSeqId = -1;
 
     /**

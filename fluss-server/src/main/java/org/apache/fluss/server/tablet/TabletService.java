@@ -20,6 +20,7 @@ package org.apache.fluss.server.tablet;
 import org.apache.fluss.cluster.ServerType;
 import org.apache.fluss.exception.AuthorizationException;
 import org.apache.fluss.exception.InvalidScanRequestException;
+import org.apache.fluss.exception.ScannerExpiredException;
 import org.apache.fluss.exception.UnknownScannerIdException;
 import org.apache.fluss.exception.UnknownTableOrBucketException;
 import org.apache.fluss.fs.FileSystem;
@@ -485,13 +486,15 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 byte[] scannerId = request.getScannerId();
                 context = scannerManager.getScanner(scannerId);
                 if (context == null) {
-                    String msg =
-                            scannerManager.isRecentlyExpired(scannerId)
-                                    ? "Scanner session has expired due to inactivity. "
-                                            + "Please start a new scan."
-                                    : "Unknown scanner ID. The session may have expired or "
-                                            + "never existed.";
-                    throw new UnknownScannerIdException(msg);
+                    if (scannerManager.isRecentlyExpired(scannerId)) {
+                        throw new ScannerExpiredException(
+                                "Scanner session has expired due to inactivity. "
+                                        + "Please start a new scan.");
+                    } else {
+                        throw new UnknownScannerIdException(
+                                "Unknown scanner ID. The session may have expired or "
+                                        + "never existed.");
+                    }
                 }
                 // Validate call-sequence ordering to detect duplicate or out-of-order requests.
                 // getScanner() already refreshed the last-access timestamp.

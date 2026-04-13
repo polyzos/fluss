@@ -82,6 +82,9 @@ public class KvBatchScanner implements BatchScanner {
     private final MetadataUpdater metadataUpdater;
     private final int targetSchemaId;
 
+    /** User-requested column projection applied after schema evolution, or {@code null}. */
+    @Nullable private final int[] projectedColumns;
+
     /** Cache for schema evolution index mappings. */
     private final Map<Short, int[]> schemaMappingCache = new HashMap<>();
 
@@ -110,7 +113,8 @@ public class KvBatchScanner implements BatchScanner {
                 Collections.singletonList(tableBucket),
                 schemaGetter,
                 metadataUpdater,
-                DEFAULT_BATCH_SIZE_BYTES);
+                DEFAULT_BATCH_SIZE_BYTES,
+                null);
     }
 
     public KvBatchScanner(
@@ -124,7 +128,24 @@ public class KvBatchScanner implements BatchScanner {
                 Collections.singletonList(tableBucket),
                 schemaGetter,
                 metadataUpdater,
-                batchSizeBytes);
+                batchSizeBytes,
+                null);
+    }
+
+    public KvBatchScanner(
+            TableInfo tableInfo,
+            TableBucket tableBucket,
+            SchemaGetter schemaGetter,
+            MetadataUpdater metadataUpdater,
+            int batchSizeBytes,
+            @Nullable int[] projectedColumns) {
+        this(
+                tableInfo,
+                Collections.singletonList(tableBucket),
+                schemaGetter,
+                metadataUpdater,
+                batchSizeBytes,
+                projectedColumns);
     }
 
     public KvBatchScanner(
@@ -132,7 +153,7 @@ public class KvBatchScanner implements BatchScanner {
             List<TableBucket> buckets,
             SchemaGetter schemaGetter,
             MetadataUpdater metadataUpdater) {
-        this(tableInfo, buckets, schemaGetter, metadataUpdater, DEFAULT_BATCH_SIZE_BYTES);
+        this(tableInfo, buckets, schemaGetter, metadataUpdater, DEFAULT_BATCH_SIZE_BYTES, null);
     }
 
     public KvBatchScanner(
@@ -141,12 +162,23 @@ public class KvBatchScanner implements BatchScanner {
             SchemaGetter schemaGetter,
             MetadataUpdater metadataUpdater,
             int batchSizeBytes) {
+        this(tableInfo, buckets, schemaGetter, metadataUpdater, batchSizeBytes, null);
+    }
+
+    public KvBatchScanner(
+            TableInfo tableInfo,
+            List<TableBucket> buckets,
+            SchemaGetter schemaGetter,
+            MetadataUpdater metadataUpdater,
+            int batchSizeBytes,
+            @Nullable int[] projectedColumns) {
         this.tablePath = tableInfo.getTablePath();
         this.buckets = buckets;
         this.schemaGetter = schemaGetter;
         this.metadataUpdater = metadataUpdater;
         this.targetSchemaId = tableInfo.getSchemaId();
         this.batchSizeBytes = Math.max(1, batchSizeBytes);
+        this.projectedColumns = projectedColumns;
         this.readContext =
                 ValueRecordReadContext.createReadContext(
                         schemaGetter, tableInfo.getTableConfig().getKvFormat());
@@ -267,14 +299,12 @@ public class KvBatchScanner implements BatchScanner {
 
     private void openScanner() {
         TableBucket bucket = currentBucket();
-        if (bucket.getPartitionId() != null) {
-            metadataUpdater.checkAndUpdateMetadata(tablePath, bucket);
-        }
+        metadataUpdater.checkAndUpdateMetadata(tablePath, bucket);
         int leader = metadataUpdater.leaderFor(tablePath, bucket);
         gateway = metadataUpdater.newTabletServerClientForNode(leader);
         if (gateway == null) {
             throw new LeaderNotAvailableException(
-                    "Server " + leader + " is not found in metadata cache.");
+                    "Leader for bucket " + bucket + " is not available. Please retry the scan.");
         }
 
         PbScanReqForBucket bucketReq =
@@ -315,6 +345,9 @@ public class KvBatchScanner implements BatchScanner {
                                                 schemaGetter.getSchema(sourceSchemaId),
                                                 schemaGetter.getSchema(targetSchemaId)));
                 row = ProjectedRow.from(indexMapping).replaceRow(row);
+            }
+            if (projectedColumns != null) {
+                row = ProjectedRow.from(projectedColumns).replaceRow(row);
             }
             rows.add(row);
         }
