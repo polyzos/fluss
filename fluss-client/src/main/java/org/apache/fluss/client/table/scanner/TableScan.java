@@ -41,6 +41,7 @@ import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /** API for configuring and creating {@link LogScanner} and {@link BatchScanner}. */
 public class TableScan implements Scan {
@@ -139,6 +140,14 @@ public class TableScan implements Scan {
         return new TypedLogScannerImpl<>(base, pojoClass, tableInfo, projectedColumns);
     }
 
+    /** Returns the configured KV scanner batch size in bytes. */
+    private int kvBatchSizeBytes() {
+        return (int)
+                conn.getConfiguration()
+                        .get(ConfigOptions.CLIENT_SCANNER_KV_FETCH_MAX_BYTES)
+                        .getBytes();
+    }
+
     @Override
     public BatchScanner createBatchScanner(TableBucket tableBucket) {
         if (recordBatchFilter != null) {
@@ -149,7 +158,11 @@ public class TableScan implements Scan {
         }
         if (tableInfo.hasPrimaryKey() && limit == null) {
             return new KvBatchScanner(
-                    tableInfo, tableBucket, schemaGetter, conn.getMetadataUpdater());
+                    tableInfo,
+                    tableBucket,
+                    schemaGetter,
+                    conn.getMetadataUpdater(),
+                    kvBatchSizeBytes());
         }
         if (limit == null) {
             throw new UnsupportedOperationException(
@@ -168,6 +181,11 @@ public class TableScan implements Scan {
 
     @Override
     public BatchScanner createBatchScanner() {
+        if (!tableInfo.hasPrimaryKey()) {
+            throw new UnsupportedOperationException(
+                    "createBatchScanner() is only supported for Primary Key Tables. Table: "
+                            + tableInfo.getTablePath());
+        }
         long tableId = tableInfo.getTableId();
         int numBuckets = tableInfo.getNumBuckets();
         List<TableBucket> buckets = new ArrayList<>();
@@ -178,7 +196,9 @@ public class TableScan implements Scan {
         } else {
             try {
                 List<PartitionInfo> partitions =
-                        conn.getAdmin().listPartitionInfos(tableInfo.getTablePath()).get();
+                        conn.getAdmin()
+                                .listPartitionInfos(tableInfo.getTablePath())
+                                .get(30, TimeUnit.SECONDS);
                 for (PartitionInfo partition : partitions) {
                     for (int b = 0; b < numBuckets; b++) {
                         buckets.add(new TableBucket(tableId, partition.getPartitionId(), b));
@@ -189,7 +209,8 @@ public class TableScan implements Scan {
                         "Failed to list partitions for table " + tableInfo.getTablePath(), e);
             }
         }
-        return new KvBatchScanner(tableInfo, buckets, schemaGetter, conn.getMetadataUpdater());
+        return new KvBatchScanner(
+                tableInfo, buckets, schemaGetter, conn.getMetadataUpdater(), kvBatchSizeBytes());
     }
 
     @Override

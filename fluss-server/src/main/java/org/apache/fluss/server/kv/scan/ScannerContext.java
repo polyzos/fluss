@@ -57,6 +57,8 @@ public class ScannerContext implements Closeable {
     private final Snapshot snapshot;
     private final ResourceGuard.Lease resourceLease;
     private long remainingLimit;
+    // Initial value -1 so that the first client call_seq_id of 0 satisfies the server's
+    // in-order check: expectedSeqId = callSeqId + 1 = -1 + 1 = 0.
     private int callSeqId = -1;
 
     /**

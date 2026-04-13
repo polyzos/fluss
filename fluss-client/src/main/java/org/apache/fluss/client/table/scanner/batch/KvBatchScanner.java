@@ -70,7 +70,11 @@ import java.util.concurrent.TimeoutException;
  */
 public class KvBatchScanner implements BatchScanner {
     private static final Logger LOG = LoggerFactory.getLogger(KvBatchScanner.class);
-    private static final int BATCH_SIZE_BYTES = 4 * 1024 * 1024;
+
+    /** Batch size used when no explicit value is provided (matches the config default of 4 MiB). */
+    static final int DEFAULT_BATCH_SIZE_BYTES = 4 * 1024 * 1024;
+
+    private final int batchSizeBytes;
 
     private final TablePath tablePath;
     private final List<TableBucket> buckets;
@@ -101,7 +105,26 @@ public class KvBatchScanner implements BatchScanner {
             TableBucket tableBucket,
             SchemaGetter schemaGetter,
             MetadataUpdater metadataUpdater) {
-        this(tableInfo, Collections.singletonList(tableBucket), schemaGetter, metadataUpdater);
+        this(
+                tableInfo,
+                Collections.singletonList(tableBucket),
+                schemaGetter,
+                metadataUpdater,
+                DEFAULT_BATCH_SIZE_BYTES);
+    }
+
+    public KvBatchScanner(
+            TableInfo tableInfo,
+            TableBucket tableBucket,
+            SchemaGetter schemaGetter,
+            MetadataUpdater metadataUpdater,
+            int batchSizeBytes) {
+        this(
+                tableInfo,
+                Collections.singletonList(tableBucket),
+                schemaGetter,
+                metadataUpdater,
+                batchSizeBytes);
     }
 
     public KvBatchScanner(
@@ -109,11 +132,21 @@ public class KvBatchScanner implements BatchScanner {
             List<TableBucket> buckets,
             SchemaGetter schemaGetter,
             MetadataUpdater metadataUpdater) {
+        this(tableInfo, buckets, schemaGetter, metadataUpdater, DEFAULT_BATCH_SIZE_BYTES);
+    }
+
+    public KvBatchScanner(
+            TableInfo tableInfo,
+            List<TableBucket> buckets,
+            SchemaGetter schemaGetter,
+            MetadataUpdater metadataUpdater,
+            int batchSizeBytes) {
         this.tablePath = tableInfo.getTablePath();
         this.buckets = buckets;
         this.schemaGetter = schemaGetter;
         this.metadataUpdater = metadataUpdater;
         this.targetSchemaId = tableInfo.getSchemaId();
+        this.batchSizeBytes = Math.max(1, batchSizeBytes);
         this.readContext =
                 ValueRecordReadContext.createReadContext(
                         schemaGetter, tableInfo.getTableConfig().getKvFormat());
@@ -253,7 +286,7 @@ public class KvBatchScanner implements BatchScanner {
         }
 
         ScanKvRequest request =
-                new ScanKvRequest().setBucketScanReq(bucketReq).setBatchSizeBytes(BATCH_SIZE_BYTES);
+                new ScanKvRequest().setBucketScanReq(bucketReq).setBatchSizeBytes(batchSizeBytes);
         prefetchFuture = gateway.scanKv(request);
     }
 
@@ -261,7 +294,7 @@ public class KvBatchScanner implements BatchScanner {
         ScanKvRequest request =
                 new ScanKvRequest()
                         .setScannerId(scannerId)
-                        .setBatchSizeBytes(BATCH_SIZE_BYTES)
+                        .setBatchSizeBytes(batchSizeBytes)
                         .setCallSeqId(callSeqId++);
         prefetchFuture = gateway.scanKv(request);
     }

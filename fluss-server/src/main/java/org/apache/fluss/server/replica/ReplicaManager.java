@@ -1957,6 +1957,9 @@ public class ReplicaManager implements ServerReconfigurable {
                                 bucketMetricGroup,
                                 tableInfo,
                                 clock);
+                // Inject the ScannerManager so that Replica.dropKv() can eagerly close scanner
+                // sessions as a safety net on unexpected shutdown paths.
+                replica.setScannerManager(scannerManager);
                 allReplicas.put(tb, new OnlineReplica(replica));
                 replicaOpt = Optional.of(replica);
             } else if (hostedReplica instanceof OnlineReplica) {

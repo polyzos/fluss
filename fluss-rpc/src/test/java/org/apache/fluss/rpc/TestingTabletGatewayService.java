@@ -262,6 +262,10 @@ public class TestingTabletGatewayService extends TestingGatewayService
 
     @Override
     public CompletableFuture<ScanKvResponse> scanKv(ScanKvRequest request) {
-        return null;
+        CompletableFuture<ScanKvResponse> future = new CompletableFuture<>();
+        future.completeExceptionally(
+                new UnsupportedOperationException(
+                        "scanKv is not supported in TestingTabletGatewayService."));
+        return future;
     }
 }

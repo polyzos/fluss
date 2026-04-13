@@ -91,6 +91,7 @@ import org.apache.fluss.server.replica.delay.DelayedFetchLog;
 import org.apache.fluss.server.replica.delay.DelayedOperationManager;
 import org.apache.fluss.server.replica.delay.DelayedTableBucketKey;
 import org.apache.fluss.server.replica.delay.DelayedWrite;
+import org.apache.fluss.server.kv.scan.ScannerManager;
 import org.apache.fluss.server.utils.FatalErrorHandler;
 import org.apache.fluss.server.zk.ZkSequenceIDCounter;
 import org.apache.fluss.server.zk.ZooKeeperClient;
@@ -206,6 +207,15 @@ public final class Replica {
     private volatile @Nullable KvTablet kvTablet;
     private volatile @Nullable CloseableRegistry closeableRegistryForKv;
     private @Nullable PeriodicSnapshotManager kvSnapshotManager;
+
+    /**
+     * Optional reference to the server-wide {@link ScannerManager}. When set, active scanner
+     * sessions for this bucket are closed eagerly in {@link #dropKv()} as a safety net, even on
+     * code paths that do not go through {@link
+     * org.apache.fluss.server.replica.ReplicaManager#makeFollowers} or {@link
+     * org.apache.fluss.server.replica.ReplicaManager#stopReplicas}.
+     */
+    @Nullable private volatile ScannerManager scannerManager;
 
     // ------- metrics
     private Counter isrShrinks;
@@ -370,6 +380,11 @@ public final class Replica {
 
     public @Nullable KvTablet getKvTablet() {
         return kvTablet;
+    }
+
+    /** Injects the {@link ScannerManager} so that {@link #dropKv()} can close active scanners. */
+    public void setScannerManager(@Nullable ScannerManager scannerManager) {
+        this.scannerManager = scannerManager;
     }
 
     public TablePath getTablePath() {
@@ -656,6 +671,15 @@ public final class Replica {
     }
 
     private void dropKv() {
+        // Safety net: close any lingering scanner sessions for this bucket before tearing down
+        // the KV tablet. The main cleanup paths (makeFollowers, stopReplica) call
+        // ScannerManager.closeScannersForBucket directly on ReplicaManager, but this guard
+        // ensures ResourceGuard leases are released even on unexpected code paths, preventing
+        // KvTablet.close() from blocking indefinitely on resourceGuard.close().
+        ScannerManager sm = this.scannerManager;
+        if (sm != null) {
+            sm.closeScannersForBucket(tableBucket);
+        }
         // close any closeable registry for kv
         if (closeableRegistry.unregisterCloseable(closeableRegistryForKv)) {
             IOUtils.closeQuietly(closeableRegistryForKv);

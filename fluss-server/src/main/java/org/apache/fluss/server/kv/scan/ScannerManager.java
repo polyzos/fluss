@@ -219,14 +219,18 @@ public class ScannerManager implements AutoCloseableAsync {
     /**
      * Looks up and removes a scanner session by its raw ID bytes.
      *
+     * <p>Delegates to {@link #removeScanner(ScannerContext)} to ensure a conditional {@link
+     * java.util.concurrent.ConcurrentHashMap#remove(Object, Object)} is used, which prevents a
+     * double-decrement of {@code perBucketCount} when the TTL reaper races with an explicit close
+     * request for the same scanner.
+     *
      * <p>No-op if the ID is not found (already removed or expired).
      */
     public void removeScanner(byte[] scannerId) {
         String key = new String(scannerId, StandardCharsets.UTF_8);
-        ScannerContext context = scanners.remove(key);
+        ScannerContext context = scanners.get(key);
         if (context != null) {
-            decrementCounts(context.getTableBucket());
-            closeScannerContext(context);
+            removeScanner(context);
         }
     }
 
