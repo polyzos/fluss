@@ -158,6 +158,15 @@ public class TableScan implements Scan {
                             tableInfo.getTablePath(), tableBucket));
         }
         if (tableInfo.hasPrimaryKey()) {
+            if (limit != null) {
+                return new LimitBatchScanner(
+                        tableInfo,
+                        tableBucket,
+                        schemaGetter,
+                        conn.getMetadataUpdater(),
+                        projectedColumns,
+                        limit);
+            }
             return new KvBatchScanner(
                     tableInfo,
                     tableBucket,
