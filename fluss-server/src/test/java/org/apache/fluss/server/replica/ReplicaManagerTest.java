@@ -2385,7 +2385,10 @@ class ReplicaManagerTest extends ReplicaTestBase {
         makeKvTableAsLeader(DATA1_TABLE_ID_PK, DATA1_TABLE_PATH_PK, tb.getBucket());
 
         // Write one row and flush so openScan() returns a non-null ScannerContext.
-        KvTablet kvTablet = kvManager.getKv(tb).orElseThrow();
+        KvTablet kvTablet =
+                kvManager
+                        .getKv(tb)
+                        .orElseThrow(() -> new IllegalStateException("KvTablet not found"));
         KvRecordTestUtils.KvRecordBatchFactory batchFactory =
                 KvRecordTestUtils.KvRecordBatchFactory.of(DEFAULT_SCHEMA_ID);
         KvRecordTestUtils.KvRecordFactory recordFactory =
@@ -2440,7 +2443,10 @@ class ReplicaManagerTest extends ReplicaTestBase {
         TableBucket tb = new TableBucket(DATA1_TABLE_ID_PK, 0);
         makeKvTableAsLeader(DATA1_TABLE_ID_PK, DATA1_TABLE_PATH_PK, tb.getBucket());
 
-        KvTablet kvTablet = kvManager.getKv(tb).orElseThrow();
+        KvTablet kvTablet =
+                kvManager
+                        .getKv(tb)
+                        .orElseThrow(() -> new IllegalStateException("KvTablet not found"));
         KvRecordTestUtils.KvRecordBatchFactory batchFactory =
                 KvRecordTestUtils.KvRecordBatchFactory.of(DEFAULT_SCHEMA_ID);
         KvRecordTestUtils.KvRecordFactory recordFactory =
