@@ -81,7 +81,9 @@ import org.apache.fluss.testutils.DataTestUtils;
 import org.apache.fluss.types.DataField;
 import org.apache.fluss.types.DataTypes;
 import org.apache.fluss.types.RowType;
+import ScannerManager;
 import org.apache.fluss.utils.CloseableIterator;
+import FlussScheduler;
 import org.apache.fluss.utils.types.Tuple2;
 
 import org.junit.jupiter.api.Test;
@@ -2376,7 +2378,7 @@ class ReplicaManagerTest extends ReplicaTestBase {
 
     /**
      * When a bucket transitions from leader to follower, {@link
-     * org.apache.fluss.server.kv.scan.ScannerManager#closeScannersForBucket} must be called so that
+     * ScannerManager#closeScannersForBucket} must be called so that
      * open scanner sessions are released immediately rather than waiting for TTL expiry.
      */
     @Test
@@ -2400,11 +2402,11 @@ class ReplicaManagerTest extends ReplicaTestBase {
                 null);
         kvTablet.flush(Long.MAX_VALUE, NOPErrorHandler.INSTANCE);
 
-        org.apache.fluss.utils.concurrent.FlussScheduler testScheduler =
-                new org.apache.fluss.utils.concurrent.FlussScheduler(1);
+        FlussScheduler testScheduler =
+                new FlussScheduler(1);
         testScheduler.startup();
-        try (org.apache.fluss.server.kv.scan.ScannerManager scannerManager =
-                new org.apache.fluss.server.kv.scan.ScannerManager(conf, testScheduler)) {
+        try (ScannerManager scannerManager =
+                new ScannerManager(conf, testScheduler)) {
 
             replicaManager.setScannerManager(scannerManager);
             scannerManager.createScanner(kvTablet, tb, null);
@@ -2435,7 +2437,7 @@ class ReplicaManagerTest extends ReplicaTestBase {
 
     /**
      * When a replica is stopped, {@link
-     * org.apache.fluss.server.kv.scan.ScannerManager#closeScannersForBucket} must be called so that
+     * ScannerManager#closeScannersForBucket} must be called so that
      * open scanner sessions are released before the KV store is destroyed.
      */
     @Test
@@ -2458,11 +2460,11 @@ class ReplicaManagerTest extends ReplicaTestBase {
                 null);
         kvTablet.flush(Long.MAX_VALUE, NOPErrorHandler.INSTANCE);
 
-        org.apache.fluss.utils.concurrent.FlussScheduler testScheduler =
-                new org.apache.fluss.utils.concurrent.FlussScheduler(1);
+        FlussScheduler testScheduler =
+                new FlussScheduler(1);
         testScheduler.startup();
-        try (org.apache.fluss.server.kv.scan.ScannerManager scannerManager =
-                new org.apache.fluss.server.kv.scan.ScannerManager(conf, testScheduler)) {
+        try (ScannerManager scannerManager =
+                new ScannerManager(conf, testScheduler)) {
 
             replicaManager.setScannerManager(scannerManager);
             scannerManager.createScanner(kvTablet, tb, null);
