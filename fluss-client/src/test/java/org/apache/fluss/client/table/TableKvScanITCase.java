@@ -19,6 +19,7 @@ package org.apache.fluss.client.table;
 
 import org.apache.fluss.client.admin.ClientToServerITCaseBase;
 import org.apache.fluss.client.table.scanner.Scan;
+import org.apache.fluss.client.table.scanner.batch.BatchScanner;
 import org.apache.fluss.client.table.scanner.batch.BatchScanUtils;
 import org.apache.fluss.client.table.writer.UpsertWriter;
 import org.apache.fluss.metadata.PartitionInfo;
@@ -300,7 +301,7 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
             // Project only the "id" column (index 0).
             List<InternalRow> result =
                     BatchScanUtils.collectRows(
-                            table.newScan().project(List.of("id")).createBatchScanner());
+                            table.newScan().project(Collections.singletonList("id")).createBatchScanner());
 
             assertThat(result).hasSize(2);
             // Each row should have exactly 1 field (the projected "id" column).
@@ -326,7 +327,7 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
                 TableBucket bucket = new TableBucket(tableId, b);
                 projected.addAll(
                         BatchScanUtils.collectRows(
-                                table.newScan().project(List.of("id")).createBatchScanner(bucket)));
+                                table.newScan().project(Collections.singletonList("id")).createBatchScanner(bucket)));
             }
 
             // Unprojected full scan should have same row count.
@@ -382,7 +383,7 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
             writer.flush();
 
             // Open a scanner and close it before exhausting all rows — must not throw.
-            try (var scanner = table.newScan().createBatchScanner()) {
+            try (BatchScanner scanner = table.newScan().createBatchScanner()) {
                 scanner.pollBatch(Duration.ofSeconds(30));
                 // Close before draining all buckets — server TTL will reclaim any open session.
             }
