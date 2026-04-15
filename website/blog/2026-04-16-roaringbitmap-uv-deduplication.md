@@ -66,10 +66,10 @@ The deduplication scheme based on RoaringBitmap requires three basic conditions:
 
 The auto-increment column feature of Fluss allows you to directly declare a field in the table definition. When a new user is written for the first time, Fluss automatically assigns an incremental integer ID to it. No external ID service is required and no historical data migration is needed.
 
-```sql
+```sql title="Flink SQL"
 CREATE TABLE uid_dictionary (
-User_id STRING,
-UID INT,
+    user_id STRING,
+    uid INT,
     PRIMARY KEY (user_id) NOT ENFORCED
 ) WITH (
     'auto-increment.Fields' = 'uid'
@@ -90,7 +90,7 @@ For append-only aggregation operations such as bitmap union (UV deduplication), 
 
 Fluss supports RoaringBitmap as a first-class aggregation type. `rbm32` (32-bit) and `rbm64` (64-bit) perform the native bitmap union operation on write.
 
-```sql
+```sql title="Flink SQL"
 CREATE TABLE uv_agg (
     channel STRING,
     city STRING,
@@ -164,7 +164,7 @@ The UDF JAR is a self-contained fat JAR. Placing it in Flink's `lib/` directory 
 
 **2. Create `docker-compose.yml`**
 
-```yaml
+```yaml title="docker-compose.yml"
 services:
   zookeeper:
     restart: always
@@ -273,7 +273,7 @@ docker compose exec jobmanager ./bin/sql-client.sh
 
 **Create a Catalog and register the UDFs**
 
-```sql
+```sql title="Flink SQL"
 CREATE CATALOG fluss_catalog WITH (
   'type'              = 'fluss',
   'bootstrap.servers' = 'coordinator-server:9123'
@@ -284,7 +284,7 @@ USE CATALOG fluss_catalog;
 
 Register the RoaringBitmap UDFs. The JAR contains three functions: `RB_BUILD` is a scalar function that wraps a single integer as a bitmap; `RB_CARDINALITY` extracts the deduplication count from the bitmap; `RB_OR_AGG` executes bitmap `OR` aggregation for roll-up queries. The deduplication merge at write time is performed by Fluss's `rbm32` aggregation. These UDFs handle bitmap construction on the Flink side and analysis on the query side.
 
-```sql
+```sql title="Flink SQL"
 CREATE TEMPORARY FUNCTION RB_BUILD
   AS 'org.apache.flink.udfs.bitmap.RbBuildFunction';
 CREATE TEMPORARY FUNCTION RB_CARDINALITY
@@ -295,7 +295,7 @@ CREATE TEMPORARY FUNCTION RB_OR_AGG
 
 **Create dictionary and aggregation tables**
 
-```sql
+```sql title="Flink SQL"
 -- Dictionary table: sparse user_id -> dense uid
 CREATE TABLE uid_dictionary (
   user_id STRING,
@@ -325,7 +325,7 @@ CREATE TABLE uv_agg (
 
 **Write sample data**
 
-```sql
+```sql title="Flink SQL"
 -- Simulate page browsing events: users appear across channels, cities, and time periods
 CREATE TEMPORARY VIEW page_views AS
 SELECT * FROM (
@@ -369,7 +369,7 @@ Each event is written as one row carrying a single-element bitmap. Fluss merges 
 
 After writing the data, wait approximately 60 seconds for the data to tier into Paimon. For PK tables, the tiering service uses the **KV snapshot** as a synchronization checkpoint. It reads the snapshot state first, then replays subsequent **CDC events** from that point. The wait time covers one KV snapshot period (30 seconds) plus one tiering checkpoint period. Switch to **batch mode** to query the tiered data. Batch mode supports `ORDER BY` and does not involve streaming retraction semantics.
 
-```sql
+```sql title="Flink SQL"
 SET 'execution.runtime-mode' = 'batch';
 SET 'sql-client.execution.result-mode' = 'tableau';
 
@@ -408,7 +408,7 @@ The preceding query directly reads the finest-granularity pre-aggregation result
 
 Roll up by channel, overall UV across all cities, dates, and hours:
 
-```sql
+```sql title="Flink SQL"
 SELECT
   channel,
   RB_CARDINALITY(RB_OR_AGG(uv_bitmap)) AS uv,
@@ -431,7 +431,7 @@ GROUP BY channel;
 
 Roll up by date, daily UV across all channels and cities:
 
-```sql
+```sql title="Flink SQL"
 SELECT
   ymd,
   RB_CARDINALITY(RB_OR_AGG(uv_bitmap)) AS uv,
@@ -453,7 +453,7 @@ Active users are users 1-4 on March 1 and users 1, 2, 4, and 5 on March 2. Simpl
 
 Roll up by channel x date, a common dashboard view:
 
-```sql
+```sql title="Flink SQL"
 SELECT
   channel,
   ymd,
@@ -476,7 +476,7 @@ GROUP BY channel, ymd;
 
 Global UV, total distinct users across all dimensions:
 
-```sql
+```sql title="Flink SQL"
 SELECT
   RB_CARDINALITY(RB_OR_AGG(uv_bitmap)) AS total_uv,
   SUM(pv) AS total_pv
