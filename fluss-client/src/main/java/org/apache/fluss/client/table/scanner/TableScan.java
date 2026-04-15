@@ -38,6 +38,9 @@ import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.predicate.Predicate;
 import org.apache.fluss.types.RowType;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
@@ -46,6 +49,8 @@ import java.util.concurrent.TimeUnit;
 
 /** API for configuring and creating {@link LogScanner} and {@link BatchScanner}. */
 public class TableScan implements Scan {
+    private static final Logger LOG = LoggerFactory.getLogger(TableScan.class);
+
     private final FlussConnection conn;
     private final TableInfo tableInfo;
     private final SchemaGetter schemaGetter;
@@ -141,12 +146,22 @@ public class TableScan implements Scan {
         return new TypedLogScannerImpl<>(base, pojoClass, tableInfo, projectedColumns);
     }
 
-    /** Returns the configured KV scanner batch size in bytes. */
+    /**
+     * Returns the configured KV scanner batch size in bytes, capped at {@link Integer#MAX_VALUE}.
+     */
     private int kvBatchSizeBytes() {
-        return (int)
+        long bytes =
                 conn.getConfiguration()
                         .get(ConfigOptions.CLIENT_SCANNER_KV_FETCH_MAX_BYTES)
                         .getBytes();
+        if (bytes > Integer.MAX_VALUE) {
+            LOG.warn(
+                    "client.scanner.kv.fetch.max-bytes ({} bytes) exceeds Integer.MAX_VALUE; "
+                            + "capping at Integer.MAX_VALUE.",
+                    bytes);
+            return Integer.MAX_VALUE;
+        }
+        return (int) bytes;
     }
 
     @Override

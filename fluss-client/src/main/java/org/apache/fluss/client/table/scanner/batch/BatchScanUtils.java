@@ -29,7 +29,12 @@ import java.util.Queue;
 /** Utility class for batch scan. */
 public class BatchScanUtils {
 
-    private static final Duration DEFAULT_POLL_TIMEOUT = Duration.ofMillis(10);
+    /**
+     * Default poll timeout passed to {@link BatchScanner#pollBatch}. 100 ms is a reasonable
+     * balance: short enough not to add perceptible latency when the response is ready, but long
+     * enough to avoid busy-wait spin loops when the round-trip exceeds the old 10 ms value.
+     */
+    private static final Duration DEFAULT_POLL_TIMEOUT = Duration.ofMillis(100);
 
     /** Collect all rows from the scanner. */
     public static List<InternalRow> collectRows(BatchScanner scanner) {
