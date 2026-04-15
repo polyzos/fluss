@@ -100,18 +100,18 @@ public interface Scan {
     BatchScanner createBatchScanner(TableBucket tableBucket);
 
     /**
-     * Creates a {@link BatchScanner} that performs a full live KV scan across all buckets of this
-     * Primary Key Table, automatically discovering all partitions for partitioned tables.
+     * Creates a {@link BatchScanner} that scans across all buckets of this table, automatically
+     * discovering all partitions for partitioned tables.
      *
      * <p>This is a convenience alternative to {@link #createBatchScanner(TableBucket)} that removes
      * the need to manually enumerate table buckets and partitions. Column projection configured via
      * {@link #project} is applied client-side.
      *
-     * <p>Note: this method is only supported for Primary Key Tables and does not support
-     * pre-configured with {@link #limit(int)}.
+     * <p>Note: for Log Tables (tables without a primary key), this method requires {@link
+     * #limit(int)} to be configured; a full unbounded scan of a Log Table is not supported.
      *
-     * @throws UnsupportedOperationException if the table is not a Primary Key Table, or if {@link
-     *     #limit(int)} was configured
+     * @throws UnsupportedOperationException if the table is a Log Table and no {@link #limit(int)}
+     *     was configured
      * @since 0.7
      */
     BatchScanner createBatchScanner();

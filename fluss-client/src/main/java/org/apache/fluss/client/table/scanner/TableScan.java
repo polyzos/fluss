@@ -192,9 +192,9 @@ public class TableScan implements Scan {
 
     @Override
     public BatchScanner createBatchScanner() {
-        if (!tableInfo.hasPrimaryKey()) {
+        if (!tableInfo.hasPrimaryKey() && limit == null) {
             throw new UnsupportedOperationException(
-                    "createBatchScanner() is only supported for Primary Key Tables. Table: "
+                    "createBatchScanner() without limit is only supported for Primary Key Tables. Table: "
                             + tableInfo.getTablePath());
         }
         long tableId = tableInfo.getTableId();
