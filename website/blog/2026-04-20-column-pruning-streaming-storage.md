@@ -1,6 +1,6 @@
 ---
 slug: column-pruning-streaming-storage
-title: "Column Pruning Is No Longer an OLAP Exclusive: How Apache Fluss Achieves True Pruning in Streaming Storage"
+title: "How Apache Fluss Achieves True Pruning in Streaming Storage"
 date: 2026-04-20
 authors: [yunhongzheng]
 tags: [fluss, column-pruning, arrow, streaming, kafka, performance]
