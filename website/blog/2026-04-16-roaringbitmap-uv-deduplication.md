@@ -295,6 +295,8 @@ CREATE TEMPORARY FUNCTION RB_OR_AGG
   AS 'org.apache.flink.udfs.bitmap.RbOrAggFunction';
 ```
 
+> **Note:** These functions are currently provided by the external [flink-roaringbitmap](https://github.com/flink-extended/flink-roaringbitmap) library. Once [FIP-37: Native RoaringBitmap Integration for Apache Fluss](https://cwiki.apache.org/confluence/display/FLUSS/FIP-37%3A+Native+RoaringBitmap+Integration+for+Apache+Fluss) is completed, they will be built directly into Fluss — no external JAR or manual UDF registration will be required.
+
 ### Create Dictionary and Aggregation Tables
 
 ```sql title="Flink SQL"
