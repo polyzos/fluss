@@ -1,70 +1,70 @@
 ---
 slug: roaringbitmap-uv-deduplication
 date: 2026-04-16
-title: "Real-Time UV Deduplication with RoaringBitmap in Fluss"
+title: "Real-Time Unique User Counting at Scale with Apache Fluss"
 authors: [yangwang]
 ---
 
-**UV (Unique Visitors)** is the count of distinct users who visited a page or triggered an event within a given time window. Unlike **PV (Page Views)**, which counts every request, UV deduplicates repeat visits from the same user, making it a core metric for measuring real audience reach.
+**UV (Unique Visitors)** measures the count of distinct users who visited a page or triggered an event within a given time window — unlike **PV (Page Views)**, which counts every request regardless of who made it. For any product or platform, accurate real-time UV statistics across dimensions like channel, city, date, and hour are a core analytical requirement.
+The full combination of four dimensions means **16 grouping methods**; when the dimension count increases to seven, the number of possible groupings reaches **128**.
 
-There is a high-frequency demand for **real-time traffic analysis**: accurate **UV statistics** by channel, city, date, and hour, and flexible query by analysts based on any combination of dimensions.
-The full combination of four dimensions means **16 grouping methods**; when the dimension is increased to seven, the grouping method becomes **128**.
-
-How to make multi-dimensional precise deduplication both accurate and flexible while maintaining real-time? Behind this are two very different computing paradigms: direct deduplication of raw data, or set operations based on bitmaps.
-
-<!-- truncate -->
+How can multi-dimensional deduplication be both accurate and flexible while maintaining real-time performance? Behind this challenge lie two very different computing paradigms: direct deduplication of raw data, or set operations based on bitmaps.
 
 ## Problems with Traditional Deduplication Schemes
 
 Direct deduplication of raw data (e.g. `COUNT(DISTINCT user_id)`) is the most intuitive and accurate deduplication method: maintain a **hash set** for each dimension combination and record all user IDs that have appeared under the group.
 
-This approach works well when there are fewer data volumes and dimensions, but as the scale of the business grows, three core limitations emerge.
+This approach works well with smaller data volumes and fewer dimensions, but as business scale grows, three core limitations emerge.
 
-**Performance increases linearly with the amount of data.** Each dimension combination needs to store all user identities that have occurred independently. When the number of page browsing logs in a single day reaches billions and the number of independent users reaches tens of millions or even hundreds of millions, the hash set of each group requires a large amount of memory and CPU to insert and search. The product of the number of dimension combinations and the amount of data determines the total computational overhead, which is especially noticeable during peak periods.
+**Performance increases linearly with the amount of data.** Each dimension combination needs to independently store all user identities that have occurred. When daily page view logs reach billions and distinct users number in the tens or hundreds of millions, each group's hash set demands significant memory and CPU for insertion and lookup. Total compute cost scales with the product of dimension combinations and data volume, which is especially noticeable during peak periods.
 
-**Multidimensional extensibility is limited.** If the analyst needs to view the UV by the combination of the two dimensions of **Channel x City** and **Channel x Date**, the traditional scheme needs to calculate two sets of deduplication results separately. The existing **Channel x City** deduplication result cannot directly roll up to get the UV of the **Channel** dimension, because user sets in different cities may overlap, and simple summation will result in double counting. With each additional analysis dimension, the computational task multiplies, and the existing intermediate results cannot be reused.
+**Multidimensional extensibility is limited.** If an analyst needs UV by **Channel x City** and **Channel x Date**, the traditional scheme must calculate two separate deduplication results. The existing **Channel x City** result cannot be rolled up to get the **Channel**-level UV, because user sets across cities may overlap and simple summation leads to double counting. With each additional dimension, the computational task multiplies and existing intermediate results cannot be reused.
 
-**Insufficient query flexibility.** The pre-aggregation scheme must decide the dimension combination in advance. When a business team temporarily needs a new dimension (such as adding a new **device type**), it is often necessary to adjust the entire data processing pipeline instead of simply modifying a query.
+**Insufficient query flexibility.** Pre-aggregation schemes must fix dimension combinations in advance. When a business team needs a new dimension on the fly (such as adding **device type**), adjusting the entire data processing pipeline is often required instead of simply modifying a query.
 
-Put it another way: what if instead of storing the raw ID of each user, we represented it as a compact set, one bit for each user?
+These three limitations share a root cause: storing and computing on raw user identities at every dimension combination does not scale.
 
-In the bitmap scheme, deduplication count equals counting the number of 1s in the bitmap (`popcount`), merging two user sets equals a bitwise `OR`, and cross analysis equals a bitwise `AND`. All operations are bit operations native to the CPU, blisteringly fast.
+<!-- truncate -->
 
-More importantly, the bitmap naturally supports roll-up: the bitmap of `Channel = app, City = Shanghai` and the bitmap of `Channel = app, City = Beijing` combined with an `OR` operation yields the user set of `Channel = app`. There is no need to go back to the original data to recalculate.
+Put it another way: what if instead of storing the raw ID of each user, we represented the entire user set as a compact structure — one bit per user?
 
-This is a fundamental difference between the two computing paradigms: **direct deduplication** requires independent calculations for each dimension combination, while the intermediate results of **bitmap deduplication** are naturally combinable.
+In the bitmap scheme, deduplication count equals counting the number of 1s in the bitmap (`popcount`), merging two user sets equals a bitwise `OR`, and cross-dimensional analysis equals a bitwise `AND`. All operations are CPU-native bit operations, blisteringly fast.
 
-But the original bitmap has a problem: if the user ID is sparse (such as `UUID` or hash value), the bitmap will be very large and waste space. We need a compressed bitmap format that works efficiently on sparse data. This is where **RoaringBitmap** comes in.
+More importantly, bitmaps naturally support roll-up: the bitmap of `Channel = app, City = Shanghai` combined with `OR` with the bitmap of `Channel = app, City = Beijing` yields the user set for `Channel = app` — no need to re-scan the original data.
+
+This is a fundamental difference between the two computing paradigms: **direct deduplication** requires independent calculations for each dimension combination, while the intermediate results of **bitmap deduplication** are naturally composable.
+
+But the raw bitmap has a problem: if the user ID space is sparse (such as `UUID` or hash values), the bitmap will be very large and waste memory. A compressed bitmap format that works efficiently on sparse data is needed. This is where **RoaringBitmap** comes in.
 
 ![](assets/realtime_uv/figure1.png)
 
-## Analysis of the Principle of RoaringBitmap Deduplication
+## How RoaringBitmap Works
 
-The core idea of a bitmap is simple: use an array of bits to represent a collection of integers. If the user ID is `k`, set the `k`-th position to 1. Deduplication count is how many 1s there are, and set merging is a bitwise `OR`. These operations map directly to CPU instructions, which is extremely efficient.
+The core idea of a bitmap is simple: use an array of bits to represent a collection of integers. If the user ID is `k`, set the `k`-th position to 1. The deduplication count is the number of 1s, and set merging is a bitwise `OR`. These operations map directly to CPU instructions, which is extremely efficient.
 
-However, the size of the original bitmap depends on the maximum ID value. If the ID space is a **32-bit integer** (about 2.1 billion), a full bitmap takes **256 MB**. When the ID distribution is sparse, most of the bits are 0, and almost all of the memory is wasted.
+However, the size of a raw bitmap depends on the maximum ID value. If the ID space is a **32-bit integer** (about 2.1 billion), a full bitmap takes **256 MB**. When the ID distribution is sparse, most bits are 0, and almost all memory is wasted.
 
-**RoaringBitmap** solves this problem with a layered, adaptive compression strategy. It divides the 32-bit integer space into **65,536 partitions** by the upper 16 bits, and each partition holds up to 65,536 values (the lower 16 bits), called a **Container**. Each container automatically selects the optimal storage format based on its own data density:
+**RoaringBitmap** solves this with a layered, adaptive compression strategy. It divides the 32-bit integer space into **65,536 partitions** by the upper 16 bits, and each partition holds up to 65,536 values (the lower 16 bits), called a **Container**. Each container automatically selects the optimal storage format based on its data density:
 
-* **ArrayContainer:** When the number of elements in the container is less than 4,096, it is stored in a sorted array of 16-bit integers. For sparse data, this saves tens of times more space than the original bitmap.
-* **BitmapContainer:** When the number of elements reaches 4,096 or more, the original bitmap is switched to 8 KB. For dense data, bitmaps are more compact than arrays.
-* **RunContainer:** When the data presents continuous interval characteristics (such as ID 100-500), it is stored in run-length encoding and only the start and end values are recorded.
+* **ArrayContainer:** When the number of elements is less than 4,096, values are stored in a sorted array of 16-bit integers. For sparse data, this saves tens of times more space than a raw bitmap.
+* **BitmapContainer:** When the number of elements reaches 4,096 or more, the container switches to a raw 8 KB bitmap. For dense data, bitmaps are more compact than arrays.
+* **RunContainer:** When data presents continuous interval characteristics (such as IDs 100–500), values are stored using run-length encoding, recording only the start and end of each run.
 
-This adaptive strategy allows RoaringBitmap to remain efficient across a variety of data distributions: as compact as an array when sparse, as fast as a bitmap when dense, and as economical as run-length encoding when continuous. In practice, its memory footprint is usually only one-tenth to 1% of the original hash set.
+This adaptive strategy allows RoaringBitmap to remain efficient across a variety of data distributions: as compact as an array when sparse, as fast as a bitmap when dense, and as economical as run-length encoding when continuous. In practice, its memory footprint is usually only one-tenth to one-hundredth of the original hash set.
 
-For deduplication scenarios, the set operations of RoaringBitmap directly correspond to the analysis requirements: `OR` is used to merge user sets, `AND` is used for cross analysis, `ANDNOT` is used for exclusion analysis, and cardinality returns the deduplication count. All operations are accelerated by **SIMD instructions**, which can be completed in milliseconds even on hundreds of millions of records.
+For deduplication scenarios, RoaringBitmap set operations map directly to analytical requirements: `OR` merges user sets, `AND` performs cross-dimensional analysis, `ANDNOT` performs exclusion analysis, and cardinality returns the deduplication count. All operations are accelerated by **SIMD instructions** and can be completed in milliseconds even on hundreds of millions of records.
 
-A prerequisite to note: the input of RoaringBitmap must be an integer, and the denser the ID, the better the compression effect and the more efficient the operation. If the original user ID is a string (such as `UUID` or phone number), you need to create a dictionary table to map sparse IDs to continuous integer IDs.
+One prerequisite: the input to RoaringBitmap must be an integer, and the denser the ID space, the better the compression and efficiency. If the original user ID is a string (such as a `UUID` or phone number), a dictionary table is needed to map sparse IDs to dense integer IDs.
 
 ![](assets/realtime_uv/figure2.png)
 
-## Introduction to Fluss RoaringBitmap Capabilities
+## How Apache Fluss Enables RoaringBitmap Deduplication
 
-The deduplication scheme based on RoaringBitmap requires three basic conditions: **dense integer ID space**, **bitmap merging capability of the storage layer**, and **native bitmap aggregation functions**. Apache Fluss provides all three as built-in capabilities.
+A RoaringBitmap-based deduplication scheme requires three things: **a dense integer ID space**, **bitmap merging at the storage layer**, and **native bitmap aggregation functions**. Apache Fluss provides all three as built-in capabilities.
 
-### Self-Increasing Columns: Zero-Code Dictionary Tables
+### Auto-Increment Columns: Zero-Code Dictionary Tables
 
-The auto-increment column feature of Fluss allows you to directly declare a field in the table definition. When a new user is written for the first time, Fluss automatically assigns an incremental integer ID to it. No external ID service is required and no historical data migration is needed.
+The auto-increment column feature of Fluss lets you declare a field directly in the table definition. When a new user is written for the first time, Fluss automatically assigns an incrementing integer ID. No external ID service or historical data migration is required.
 
 ```sql title="Flink SQL"
 CREATE TABLE uid_dictionary (
@@ -72,61 +72,63 @@ CREATE TABLE uid_dictionary (
     uid INT,
     PRIMARY KEY (user_id) NOT ENFORCED
 ) WITH (
-    'auto-increment.Fields' = 'uid'
+  'auto-increment.fields' = 'uid'
 );
 ```
 
-One line `INSERT`. The mapping of sparse identities to dense integers is complete. `int32` covers about 2.1 billion users, which is sufficient for most business scenarios. The generated ID is unique and monotonically increasing in the table range, which is naturally suitable for the compression strategy of RoaringBitmap.
+A single `INSERT` statement is all that is needed to map sparse identities to dense integers. `int32` covers about 2.1 billion users, which is sufficient for most business scenarios. The generated ID is unique and monotonically increasing, which is naturally suited to RoaringBitmap's compression strategy.
 
 ### Aggregate Merge Engine: Merge on Write
 
-The **Aggregation Merge Engine** of Fluss allows you to define aggregation rules for each column. When rows with the same primary key arrive, Fluss automatically merges according to rules on the server side instead of overwriting or appending.
+The **Aggregation Merge Engine** of Fluss allows you to define aggregation rules for each column. When rows with the same primary key arrive, Fluss automatically merges them on the server side instead of overwriting or appending.
 
-This means that the compute layer only needs to send raw events and does not need to maintain any aggregate intermediate state. With **exactly-once semantics** based on Flink Checkpoint, the write path is compact and reliable.
+This means the compute layer only needs to send raw events and does not need to maintain any aggregated intermediate state. With **exactly-once semantics** based on Flink Checkpoint, the write path is compact and reliable.
 
-For append-only aggregation operations such as bitmap union (UV deduplication), merging is naturally **idempotent** during writing. The same `uid` will not change the result if it is added to the bitmap multiple times. Therefore, in such scenarios, Flink jobs are only responsible for forwarding, and do not need to write complex `UDAFs` or process retraction messages. For scenarios involving data recall (such as order cancellation), the rollback support for the aggregate merge engine is currently under development and is expected to be available in a future release.
+For append-only aggregation operations such as bitmap union (UV deduplication), merging is naturally **idempotent** during writing. Adding the same `uid` to a bitmap multiple times does not change the result. In such scenarios, Flink jobs are only responsible for forwarding — no complex `UDAFs` or retraction messages are needed. For scenarios involving data retraction (such as order cancellation), rollback support for the aggregation merge engine is currently under development and is expected in a future release.
 
 ### Built-in `rbm32` / `rbm64` Aggregate Functions
 
-Fluss supports RoaringBitmap as a first-class aggregation type. `rbm32` (32-bit) and `rbm64` (64-bit) perform the native bitmap union operation on write.
+Fluss supports RoaringBitmap as a first-class aggregation type. `rbm32` (32-bit) and `rbm64` (64-bit) perform native bitmap union on write.
 
 ```sql title="Flink SQL"
 CREATE TABLE uv_agg (
-    channel STRING,
-    city STRING,
-    ymd STRING,
-    hh STRING,
+    channel   STRING,
+    city      STRING,
+    ymd       STRING,  -- format: YYYYMMDD
+    hh        STRING,  -- format: HH (00-23)
     uv_bitmap BYTES,
-    pv BIGINT,
+    pv        BIGINT,
     PRIMARY KEY (channel, city, ymd, hh) NOT ENFORCED
 ) WITH (
-    'table.merge-engine' = 'aggregation',
+    'table.merge-engine'    = 'aggregation',
     'fields.uv_bitmap.agg' = 'rbm32',
-    'fields.pv.agg' = 'sum'
+    'fields.pv.agg'        = 'sum'
 );
 ```
 
-Each event carries a single-element bitmap, which is merged by Fluss into the existing bitmap of the corresponding primary key on the server side. The deduplication logic is completely handled by the storage layer without the need for the user to write any merge code.
+> Note: the quickstart section extends this table with `'table.datalake.enabled' = 'true'` and `'table.datalake.freshness' = '30s'` to enable lake tiering for batch queries. The core deduplication behaviour is identical.
 
-### A Combination of the Three
+Each event carries a single-element bitmap, which Fluss merges into the existing bitmap of the corresponding primary key on the server side. The deduplication logic is entirely handled by the storage layer without requiring any custom merge code.
 
-These three capabilities are interlinked: the auto-increment column of the dictionary table provides a **dense ID** (a prerequisite for bitmap deduplication), the aggregation engine automatically merges when writing (deduplication is completed in the storage layer), and `rbm32` makes bitmap merging a native operation (no custom logic needed).
+### Putting It Together: The Full Data Flow
 
-The data flow is clear: after the original event arrives, Flink obtains the dense `uid` by querying the dictionary table through a lookup join, and calls `RB_BUILD(uid)` to build a single-element bitmap and write it to the aggregation table. Fluss automatically executes bitmap union on the server side. During query, `RB_CARDINALITY()` directly extracts the UV count.
+These three capabilities are interlinked: the auto-increment column provides a **dense ID** (the prerequisite for bitmap deduplication), the aggregation engine merges on write (deduplication is completed in the storage layer), and `rbm32` makes bitmap merging a native storage operation (no custom logic needed).
 
-The responsibilities of each component are clear: **Flink** is responsible for mapping, associating, and forwarding, and does not hold a long-term state; **Fluss** holds the persistent merge result; the query directly reads the merged bitmap and extracts the count. Deduplication is done at write time, and the query side does not require any aggregation operations.
+The data flow is straightforward: when an event arrives, Flink obtains the dense `uid` by querying the dictionary table via a lookup join, calls `RB_BUILD(uid)` to build a single-element bitmap, and writes it to the aggregation table. Fluss automatically executes bitmap union on the server side. At query time, `RB_CARDINALITY()` extracts the UV count directly.
 
-### Lake-Stream Integration: A Natural Extension for Long-Period Analysis
+The responsibilities are clearly separated: **Flink** handles mapping, joining, and forwarding without holding long-lived state; **Fluss** holds the persistent merged result; queries read the merged bitmap and extract the count. Deduplication happens at write time — the query side requires no aggregation at all.
 
-When the amount of data grows to require analysis across a longer time window, the above architecture can be seamlessly expanded through Fluss's **Lake-Stream integration** capabilities. In the daily partitioning scenario, the daily UV data is stored as a bitmap partition. Historical partitions (e.g., 30 days ago) can be offloaded to **Data Lake** storage (Paimon or Iceberg), while recent partitions remain in Fluss for real-time updates.
+### Streaming Lakehouse Unification
 
-When you need to count the UV for the whole year, you only need to perform `OR` operations on the 365-day bitmap partitions and calculate the cardinality. Regardless of whether the data is stored in Fluss or the data lake, the union semantics of bitmap are exactly the same. This architecture balances storage costs and query flexibility, allowing users to perform accurate deduplication analysis on any time span.
+When data volumes grow to require analysis across longer time windows, this architecture can be seamlessly extended through Fluss's **Lake-Stream integration** capabilities. In a daily partitioning scenario, each day's UV data is stored as a bitmap partition. Historical partitions (e.g., older than 30 days) can be offloaded to **Data Lake** storage (Paimon or Iceberg), while recent partitions remain in Fluss for real-time updates.
+
+To count UV for an entire year, you only need to `OR` the 365 daily bitmap partitions and compute the cardinality. Regardless of whether data is in Fluss or the data lake, the bitmap union semantics are identical. This architecture balances storage cost and query flexibility, enabling accurate deduplication analysis across any time span.
 
 ![](assets/realtime_uv/figure3.png)
 
-## Based on the Actual Case of Fluss RoaringBitmap
+## End-to-End Quickstart
 
-This section shows the complete workflow of the above scenario with a minimal end-to-end example.
+This section walks through the complete workflow with a minimal working example you can run locally.
 
 ### Environment Preparation
 
@@ -271,7 +273,7 @@ docker compose exec -d jobmanager \
 docker compose exec jobmanager ./bin/sql-client.sh
 ```
 
-**Create a Catalog and register the UDFs**
+### Create a Catalog and Register the UDFs
 
 ```sql title="Flink SQL"
 CREATE CATALOG fluss_catalog WITH (
@@ -282,7 +284,7 @@ CREATE CATALOG fluss_catalog WITH (
 USE CATALOG fluss_catalog;
 ```
 
-Register the RoaringBitmap UDFs. The JAR contains three functions: `RB_BUILD` is a scalar function that wraps a single integer as a bitmap; `RB_CARDINALITY` extracts the deduplication count from the bitmap; `RB_OR_AGG` executes bitmap `OR` aggregation for roll-up queries. The deduplication merge at write time is performed by Fluss's `rbm32` aggregation. These UDFs handle bitmap construction on the Flink side and analysis on the query side.
+Register the RoaringBitmap UDFs. The JAR contains three functions: `RB_BUILD` wraps a single integer as a bitmap; `RB_CARDINALITY` extracts the deduplication count from a bitmap; `RB_OR_AGG` executes bitmap `OR` aggregation for roll-up queries. The deduplication merge at write time is performed by Fluss's `rbm32` aggregation — these UDFs handle bitmap construction on the Flink side and analysis on the query side.
 
 ```sql title="Flink SQL"
 CREATE TEMPORARY FUNCTION RB_BUILD
@@ -293,7 +295,7 @@ CREATE TEMPORARY FUNCTION RB_OR_AGG
   AS 'org.apache.flink.udfs.bitmap.RbOrAggFunction';
 ```
 
-**Create dictionary and aggregation tables**
+### Create Dictionary and Aggregation Tables
 
 ```sql title="Flink SQL"
 -- Dictionary table: sparse user_id -> dense uid
@@ -309,8 +311,8 @@ CREATE TABLE uid_dictionary (
 CREATE TABLE uv_agg (
   channel    STRING,
   city       STRING,
-  ymd        STRING,
-  hh         STRING,
+  ymd        STRING,  -- format: YYYYMMDD
+  hh         STRING,  -- format: HH (00-23)
   uv_bitmap  BYTES,
   pv         BIGINT,
   PRIMARY KEY (channel, city, ymd, hh) NOT ENFORCED
@@ -323,7 +325,7 @@ CREATE TABLE uv_agg (
 );
 ```
 
-**Write sample data**
+### Write Sample Data
 
 ```sql title="Flink SQL"
 -- Simulate page browsing events: users appear across channels, cities, and time periods
@@ -361,13 +363,13 @@ FROM page_views AS pv
 JOIN uid_dictionary AS d ON pv.user_id = d.user_id;
 ```
 
-Each event is written as one row carrying a single-element bitmap. Fluss merges it server-side via `rbm32` union into the existing bitmap of the corresponding primary key. Flink jobs are only responsible for mapping and forwarding. They hold no aggregation state, require no `GROUP BY`, and do not process retraction messages.
+Each event is written as one row carrying a single-element bitmap. Fluss merges it server-side via `rbm32` union into the existing bitmap of the corresponding primary key. Flink jobs are only responsible for mapping and forwarding — they hold no aggregation state, require no `GROUP BY`, and do not process retraction messages.
 
 ![](assets/realtime_uv/figure4.png)
 
-**Query deduplication results**
+### Query Deduplication Results
 
-After writing the data, wait approximately 60 seconds for the data to tier into Paimon. For PK tables, the tiering service uses the **KV snapshot** as a synchronization checkpoint. It reads the snapshot state first, then replays subsequent **CDC events** from that point. The wait time covers one KV snapshot period (30 seconds) plus one tiering checkpoint period. Switch to **batch mode** to query the tiered data. Batch mode supports `ORDER BY` and does not involve streaming retraction semantics.
+After writing the data, wait approximately 60 seconds for the data to tier into Paimon. For PK tables, the tiering service uses the **KV snapshot** as a synchronization checkpoint — it reads the snapshot state first, then replays subsequent **CDC events** from that point. The wait covers one KV snapshot period (30 seconds) plus one tiering checkpoint period. Switch to **batch mode** to query the tiered data. Batch mode supports `ORDER BY` and does not involve streaming retraction semantics.
 
 ```sql title="Flink SQL"
 SET 'execution.runtime-mode' = 'batch';
@@ -400,11 +402,11 @@ Result:
 +--------------+----------+----------+----+----+----+
 ```
 
-Note the `(app, Shanghai, 20260301, 10)` row: `user_1` appeared twice and `user_2` appeared once, yielding `uv = 2`. The three single-element bitmaps were merged by Fluss into a deduplicated set containing two distinct users. `pv = 3` is the raw event count from the sum aggregation. The query side requires no aggregation. Results are ready at write time.
+Note the `(app, Shanghai, 20260301, 10)` row: `user_1` appeared twice and `user_2` appeared once, yielding `uv = 2`. The three single-element bitmaps were merged by Fluss into a deduplicated set containing two distinct users. `pv = 3` is the raw event count from the sum aggregation. The query side requires no aggregation — results are ready at write time.
 
-**Multi-dimensional roll-up queries**
+### Multi-Dimensional Roll-Up Queries
 
-The preceding query directly reads the finest-granularity pre-aggregation results (`channel × city × ymd × hh`). The real power of bitmaps lies in supporting flexible roll-up: performing `OR` operations across fine-grained bitmaps yields coarse-grained deduplication counts without returning to the original data.
+The preceding query reads the finest-granularity pre-aggregation results (`channel × city × ymd × hh`). The real power of bitmaps is supporting flexible roll-up: performing `OR` operations across fine-grained bitmaps yields coarse-grained deduplication counts without returning to the original data.
 
 Roll up by channel, overall UV across all cities, dates, and hours:
 
@@ -427,7 +429,7 @@ GROUP BY channel;
 +--------------+----+----+
 ```
 
-`user_1` visited the `app` channel from both Shanghai and Beijing at multiple times. `RB_OR_AGG` combines all fine-grained bitmaps under the same channel into a single deduplicated set. Each user is counted only once. The `app` channel has four distinct users (1, 2, 3, 5), not a simple sum of each group's UV.
+`user_1` visited the `app` channel from both Shanghai and Beijing at multiple times. `RB_OR_AGG` combines all fine-grained bitmaps under the same channel into a single deduplicated set — each user is counted only once. The `app` channel has four distinct users (1, 2, 3, 5), not a simple sum of per-group UV counts.
 
 Roll up by date, daily UV across all channels and cities:
 
@@ -449,7 +451,7 @@ GROUP BY ymd;
 +----------+----+----+
 ```
 
-Active users are users 1-4 on March 1 and users 1, 2, 4, and 5 on March 2. Simply summing the UV of each group would result in double counting, but the bitmap `OR` operation gives accurate results.
+Active users are users 1–4 on March 1 and users 1, 2, 4, and 5 on March 2. Simply summing per-group UV counts would result in double counting, but the bitmap `OR` operation gives accurate results.
 
 Roll up by channel x date, a common dashboard view:
 
@@ -491,13 +493,13 @@ FROM uv_agg;
 +----------+----------+
 ```
 
-Five distinct users generated a total of 12 page views. One query, one full bitmap `OR`. No need to re-scan the original events.
+Five distinct users generated a total of 12 page views. One query, one full bitmap `OR` — no need to re-scan the original events.
 
 All roll-up queries follow the same pattern: `GROUP BY` the target dimensions, apply `RB_OR_AGG` on the bitmap column, and use `RB_CARDINALITY` to extract the count. The finest-granularity pre-aggregated bitmap is the building block for all coarser-grained analysis.
 
 > In a production environment, replace the bounded `page_views` view with a streaming data source and add the `/*+ OPTIONS('lookup.insert-if-not-exists' = 'true') */` hint to automatically register new users and enable a real-time bitmap write pipeline. The storage-side schema remains identical.
 
-**Clean up the environment**
+### Clean Up the Environment
 
 After exiting the SQL Client, run the following to stop and remove all containers:
 
@@ -505,9 +507,9 @@ After exiting the SQL Client, run the following to stop and remove all container
 docker compose down -v
 ```
 
-## RoaringBitmap Deduplication Applicable Scenarios
+## Beyond UV: Other Use Cases
 
-The storage-layer deduplication scheme based on Fluss RoaringBitmap is not limited to UV computation. It extends naturally to a variety of analytical scenarios. The core pattern is consistent: select the appropriate primary key granularity, and bitmap merging is handled by the storage layer at write time.
+This pattern is not limited to UV counting. It extends naturally to a variety of analytical scenarios. The core structure is consistent: choose the appropriate primary key granularity, and bitmap merging is handled by the storage layer at write time.
 
 **Real-time multi-dimensional UV analysis.** The main scenario in this post. Accurate UV statistics based on any combination of dimensions such as channel, city, date, and hour, with flexible dimension roll-up via bitmap union. Applicable to traffic dashboards, advertising effectiveness analysis, and activity monitoring.
 
@@ -521,9 +523,15 @@ The storage-layer deduplication scheme based on Fluss RoaringBitmap is not limit
 
 ## Getting Started
 
-If you are evaluating real-time multi-dimensional exact deduplication schemes, Fluss's RoaringBitmap capability is a worthwhile starting point. The core steps are: use an auto-increment dictionary table to map to dense IDs, use `rbm32` aggregation tables to deduplicate at write time, and use `RB_CARDINALITY()` to read results directly in queries.
+If you are evaluating real-time multi-dimensional exact deduplication schemes, Fluss's RoaringBitmap capability is a worthwhile starting point. The architecture follows a clear three-step pattern:
 
-`rbm32` / `rbm64` aggregation and the auto-increment dictionary scheme are available from **Apache Fluss 0.9**.
+1. **Map** sparse user identities to dense integers using an auto-increment `uid_dictionary` table.
+2. **Deduplicate at write time** using an `rbm32` aggregation table — no stateful Flink jobs, no complex UDAFs.
+3. **Query directly** using `RB_CARDINALITY()` for point reads or `RB_OR_AGG()` + `RB_CARDINALITY()` for any roll-up combination.
+
+The result is a system where deduplication is handled entirely by the storage layer, and the query side reads pre-computed results with no additional aggregation overhead.
+
+`rbm32` / `rbm64` aggregation and the auto-increment dictionary scheme are available from **Apache Fluss 0.9**. See the [Fluss documentation](https://fluss.apache.org) for the full configuration reference.
 
 ## Join the Community
 
