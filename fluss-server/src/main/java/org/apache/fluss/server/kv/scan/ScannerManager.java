@@ -411,7 +411,10 @@ public class ScannerManager implements AutoCloseableAsync {
             }
         }
 
+        // Note: totalScanners and perBucketCount are not forcibly reset here. Because both
+        // shutdown and the evictor use conditional remove(key, value), each scanner is
+        // decremented exactly once, so the counters naturally reach zero. A forced reset
+        // would risk driving counters negative if the evictor wins a remove during close().
         recentlyExpiredIds.clear();
-        totalScanners.set(0);
     }
 }

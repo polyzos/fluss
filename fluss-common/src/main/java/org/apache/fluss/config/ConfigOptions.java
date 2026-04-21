@@ -520,8 +520,9 @@ public class ConfigOptions {
                     .durationType()
                     .defaultValue(Duration.ofMinutes(10))
                     .withDescription(
-                            "The time that the tablet server will wait without receiving any scan request from "
-                                    + "a client before expiring the related status. The default value is 10 minutes.");
+                            "The time-to-live for an idle KV scanner session on the server. A scanner that has not "
+                                    + "received a request within this duration will be automatically expired and its "
+                                    + "resources released. The default value is 10 minutes.");
 
     public static final ConfigOption<Duration> KV_SCANNER_EXPIRATION_INTERVAL =
             key("kv.scanner.expiration-interval")

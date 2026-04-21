@@ -534,7 +534,7 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 throw new InvalidScanRequestException("batch_size_bytes must be greater than 0.");
             }
             DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
-            int totalBytes = 0;
+            long totalBytes = 0L;
 
             while (context.isValid() && totalBytes < batchSizeBytes) {
                 byte[] value = context.currentValue();
