@@ -446,6 +446,12 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
     @Override
     public CompletableFuture<ScanKvResponse> scanKv(ScanKvRequest request) {
         ScanKvResponse response = new ScanKvResponse();
+        // Tracks a live session that must be force-closed if anything after it throws.
+        // A scan that produced a partial but un-returned batch is not resumable: the RocksDB
+        // cursor has already advanced past rows whose data never reached the client, so we
+        // tear the session down and force the client to restart. This matches the non-resumable
+        // contract documented on ScannerExpiredException.
+        ScannerContext openedContext = null;
         try {
             ScannerContext context;
 
@@ -477,6 +483,7 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                     response.setHasMoreResults(false);
                     return CompletableFuture.completedFuture(response);
                 }
+                openedContext = context;
             } else {
                 if (!request.hasScannerId()) {
                     throw new InvalidScanRequestException(
@@ -497,22 +504,25 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                     }
                 }
                 // Validate call-sequence ordering to detect duplicate or out-of-order requests.
-                // getScanner() already refreshed the last-access timestamp.
+                // getScanner() already refreshed the last-access timestamp. Use long arithmetic to
+                // avoid a silent 32-bit overflow at Integer.MAX_VALUE continuations.
                 if (request.hasCallSeqId()) {
-                    int expectedSeqId = context.getCallSeqId() + 1;
+                    long expectedSeqId = (long) context.getCallSeqId() + 1L;
                     int requestSeqId = request.getCallSeqId();
-                    if (requestSeqId != expectedSeqId) {
+                    if ((long) requestSeqId != expectedSeqId) {
                         throw new InvalidScanRequestException(
                                 String.format(
                                         "Out-of-order scan request: expected callSeqId=%d but got %d.",
                                         expectedSeqId, requestSeqId));
                     }
                 }
+                openedContext = context;
             }
 
             // Handle explicit close request
             if (request.hasCloseScanner() && request.isCloseScanner()) {
                 scannerManager.removeScanner(context);
+                openedContext = null;
                 response.setScannerId(context.getScannerId());
                 response.setHasMoreResults(false);
                 return CompletableFuture.completedFuture(response);
@@ -552,10 +562,26 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
             if (!hasMore) {
                 scannerManager.removeScanner(context);
             }
+            // Response successfully prepared — session state is consistent; do not force-close.
+            openedContext = null;
 
         } catch (Exception e) {
+            // Restore the interrupt flag if a lower-level call wrapped an InterruptedException.
+            // No method in the try block declares `throws InterruptedException` directly, but a
+            // future refactor or a rethrown wrapper should not silently lose the signal.
+            if (e instanceof InterruptedException || e.getCause() instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             response.setErrorCode(Errors.forException(e).code());
             response.setErrorMessage(e.getMessage() != null ? e.getMessage() : "");
+        } finally {
+            // If we made it past createScanner/getScanner but failed to deliver a complete
+            // response, close the session rather than leaking it to TTL. The cursor has
+            // already advanced past rows whose values were never sent; resuming would drop
+            // data. Forcing a restart is the safe option.
+            if (openedContext != null) {
+                scannerManager.removeScanner(openedContext);
+            }
         }
 
         return CompletableFuture.completedFuture(response);

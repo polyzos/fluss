@@ -37,6 +37,7 @@ import org.apache.fluss.record.ChangeType;
 import org.apache.fluss.record.DefaultValueRecordBatch;
 import org.apache.fluss.record.KvRecord;
 import org.apache.fluss.record.KvRecordBatch;
+import org.apache.fluss.record.KvRecordTestUtils;
 import org.apache.fluss.record.LogRecord;
 import org.apache.fluss.record.LogRecordBatch;
 import org.apache.fluss.record.LogRecordReadContext;
@@ -62,7 +63,9 @@ import org.apache.fluss.server.entity.NotifyLeaderAndIsrData;
 import org.apache.fluss.server.entity.NotifyLeaderAndIsrResultForBucket;
 import org.apache.fluss.server.entity.StopReplicaData;
 import org.apache.fluss.server.entity.StopReplicaResultForBucket;
+import org.apache.fluss.server.kv.KvTablet;
 import org.apache.fluss.server.kv.rocksdb.RocksDBKv;
+import org.apache.fluss.server.kv.scan.ScannerManager;
 import org.apache.fluss.server.kv.snapshot.CompletedSnapshot;
 import org.apache.fluss.server.log.FetchParams;
 import org.apache.fluss.server.log.ListOffsetsParam;
@@ -72,6 +75,7 @@ import org.apache.fluss.server.metadata.PartitionMetadata;
 import org.apache.fluss.server.metadata.ServerInfo;
 import org.apache.fluss.server.metadata.TableMetadata;
 import org.apache.fluss.server.testutils.KvTestUtils;
+import org.apache.fluss.server.zk.NOPErrorHandler;
 import org.apache.fluss.server.zk.data.LeaderAndIsr;
 import org.apache.fluss.server.zk.data.TableRegistration;
 import org.apache.fluss.testutils.DataTestUtils;
@@ -79,6 +83,7 @@ import org.apache.fluss.types.DataField;
 import org.apache.fluss.types.DataTypes;
 import org.apache.fluss.types.RowType;
 import org.apache.fluss.utils.CloseableIterator;
+import org.apache.fluss.utils.concurrent.FlussScheduler;
 import org.apache.fluss.utils.types.Tuple2;
 
 import org.junit.jupiter.api.Test;
@@ -2369,5 +2374,57 @@ class ReplicaManagerTest extends ReplicaTestBase {
                         assertThat(serverMetadataCache.getPartitionMetadata(k)).isEmpty();
                     }
                 });
+    }
+
+    /**
+     * When a replica is stopped, {@link ScannerManager#closeScannersForBucket} must be called so
+     * that open scanner sessions are released before the KV store is destroyed.
+     */
+    @Test
+    void testStopReplicas_closesScanners() throws Exception {
+        TableBucket tb = new TableBucket(DATA1_TABLE_ID_PK, 0);
+        makeKvTableAsLeader(DATA1_TABLE_ID_PK, DATA1_TABLE_PATH_PK, tb.getBucket());
+
+        KvTablet kvTablet =
+                kvManager
+                        .getKv(tb)
+                        .orElseThrow(() -> new IllegalStateException("KvTablet not found"));
+        KvRecordTestUtils.KvRecordBatchFactory batchFactory =
+                KvRecordTestUtils.KvRecordBatchFactory.of(DEFAULT_SCHEMA_ID);
+        KvRecordTestUtils.KvRecordFactory recordFactory =
+                KvRecordTestUtils.KvRecordFactory.of(DATA1_ROW_TYPE);
+        kvTablet.putAsLeader(
+                batchFactory.ofRecords(
+                        Collections.singletonList(
+                                recordFactory.ofRecord("k1".getBytes(), new Object[] {1, "v1"}))),
+                null);
+        kvTablet.flush(Long.MAX_VALUE, NOPErrorHandler.INSTANCE);
+
+        FlussScheduler testScheduler = new FlussScheduler(1);
+        testScheduler.startup();
+        try (ScannerManager scannerManager = new ScannerManager(conf, testScheduler)) {
+
+            replicaManager.setScannerManager(scannerManager);
+            scannerManager.createScanner(kvTablet, tb, null);
+            assertThat(scannerManager.activeScannerCount()).isEqualTo(1);
+
+            CompletableFuture<List<StopReplicaResultForBucket>> future = new CompletableFuture<>();
+            replicaManager.stopReplicas(
+                    INITIAL_COORDINATOR_EPOCH,
+                    Collections.singletonList(
+                            new StopReplicaData(
+                                    tb,
+                                    false,
+                                    false,
+                                    INITIAL_COORDINATOR_EPOCH,
+                                    INITIAL_LEADER_EPOCH)),
+                    future::complete);
+            future.get();
+
+            assertThat(scannerManager.activeScannerCount()).isEqualTo(0);
+        } finally {
+            testScheduler.shutdown();
+            replicaManager.setScannerManager(null);
+        }
     }
 }

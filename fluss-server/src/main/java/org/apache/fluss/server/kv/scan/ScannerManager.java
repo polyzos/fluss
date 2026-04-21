@@ -71,9 +71,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <h3>TTL eviction</h3>
  *
- * <p>A background reaper task runs every {@code kv.scanner.expiration-interval} and evicts sessions
- * idle longer than {@code kv.scanner.ttl}. Recently evicted IDs are retained for {@code 2 × ttl} so
- * callers can distinguish "expired" from "never existed."
+ * <p>A background evictor task runs every {@code kv.scanner.expiration-interval} and removes
+ * sessions idle longer than {@code kv.scanner.ttl}. Recently evicted IDs are retained for {@code 2
+ * × ttl} so callers can distinguish "expired" from "never existed."
  *
  * <h3>Leadership change</h3>
  *
@@ -99,7 +99,7 @@ public class ScannerManager implements AutoCloseableAsync {
     private final int maxPerBucket;
     private final int maxPerServer;
 
-    @Nullable private ScheduledFuture<?> cleanupTask;
+    @Nullable private ScheduledFuture<?> evictorTask;
 
     public ScannerManager(Configuration conf, Scheduler scheduler) {
         this(conf, scheduler, SystemClock.getInstance());
@@ -115,10 +115,10 @@ public class ScannerManager implements AutoCloseableAsync {
 
         long expirationIntervalMs =
                 conf.get(ConfigOptions.KV_SCANNER_EXPIRATION_INTERVAL).toMillis();
-        this.cleanupTask =
+        this.evictorTask =
                 scheduler.schedule(
                         "scanner-expiration",
-                        this::cleanupExpiredScanners,
+                        this::evictExpiredScanners,
                         expirationIntervalMs,
                         expirationIntervalMs);
 
@@ -192,7 +192,7 @@ public class ScannerManager implements AutoCloseableAsync {
 
     /**
      * Returns {@code true} if the given scanner ID belongs to a session that was recently evicted
-     * by the TTL reaper (within the last {@code 2 × ttlMs}).
+     * by the TTL evictor (within the last {@code 2 × ttlMs}).
      *
      * <p>Callers can use this to distinguish "scanner expired" from "unknown scanner ID."
      */
@@ -204,13 +204,13 @@ public class ScannerManager implements AutoCloseableAsync {
      * Removes and closes a known scanner context directly, avoiding a map lookup.
      *
      * <p>Uses a conditional remove ({@link java.util.concurrent.ConcurrentHashMap#remove(Object,
-     * Object)}) so that concurrent calls — e.g. from the TTL reaper and a close-scanner RPC
+     * Object)}) so that concurrent calls — e.g. from the TTL evictor and a close-scanner RPC
      * arriving simultaneously — result in exactly one winner closing the context, preventing
      * double-release of the non-idempotent {@link
      * org.apache.fluss.server.utils.ResourceGuard.Lease}.
      */
     public void removeScanner(ScannerContext context) {
-        if (scanners.remove(context.getId(), context)) {
+        if (scanners.remove(context.getIdString(), context)) {
             decrementCounts(context.getTableBucket());
             closeScannerContext(context);
         }
@@ -221,7 +221,7 @@ public class ScannerManager implements AutoCloseableAsync {
      *
      * <p>Delegates to {@link #removeScanner(ScannerContext)} to ensure a conditional {@link
      * java.util.concurrent.ConcurrentHashMap#remove(Object, Object)} is used, which prevents a
-     * double-decrement of {@code perBucketCount} when the TTL reaper races with an explicit close
+     * double-decrement of {@code perBucketCount} when the TTL evictor races with an explicit close
      * request for the same scanner.
      *
      * <p>No-op if the ID is not found (already removed or expired).
@@ -320,18 +320,18 @@ public class ScannerManager implements AutoCloseableAsync {
                             tableBucket, maxPerBucket));
         }
 
-        scanners.put(context.getId(), context);
+        scanners.put(context.getIdString(), context);
 
         LOG.debug(
                 "Registered scanner {} for bucket {} (total={}, perBucket={})",
-                context.getId(),
+                context.getIdString(),
                 tableBucket,
                 newTotal,
                 newBucketCount);
     }
 
-    /** TTL reaper — invoked periodically by the background scheduler. */
-    private void cleanupExpiredScanners() {
+    /** TTL evictor — invoked periodically by the background scheduler. */
+    private void evictExpiredScanners() {
         long now = clock.milliseconds();
 
         // Prune stale entries from the recently-expired cache to bound memory usage.
@@ -373,7 +373,7 @@ public class ScannerManager implements AutoCloseableAsync {
         } catch (Exception e) {
             LOG.warn(
                     "Error closing scanner {} for bucket {}.",
-                    context.getId(),
+                    context.getIdString(),
                     context.getTableBucket(),
                     e);
         }
@@ -395,9 +395,13 @@ public class ScannerManager implements AutoCloseableAsync {
 
     @Override
     public void close() {
-        if (cleanupTask != null) {
-            cleanupTask.cancel(false);
-            cleanupTask = null;
+        // Note: we cancel but do not join the evictor. The evictor may still be mid-iteration
+        // when close() begins. This is safe because (a) scanners is a ConcurrentHashMap, and
+        // (b) both shutdown and the evictor use conditional remove(key, value) to mutate it,
+        // so at most one side ever closes a given ScannerContext.
+        if (evictorTask != null) {
+            evictorTask.cancel(false);
+            evictorTask = null;
         }
 
         for (Map.Entry<String, ScannerContext> entry : scanners.entrySet()) {

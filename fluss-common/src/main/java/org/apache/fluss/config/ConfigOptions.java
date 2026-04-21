@@ -528,7 +528,7 @@ public class ConfigOptions {
                     .durationType()
                     .defaultValue(Duration.ofSeconds(30))
                     .withDescription(
-                            "How often the TTL reaper runs to close idle scanner sessions. "
+                            "How often the TTL evictor runs to close idle scanner sessions. "
                                     + "The default value is 30 seconds.");
 
     public static final ConfigOption<Integer> KV_SCANNER_MAX_PER_BUCKET =

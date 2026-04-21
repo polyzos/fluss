@@ -97,7 +97,12 @@ public class ScannerContext implements Closeable {
         return scannerIdBytes;
     }
 
-    String getId() {
+    /**
+     * Returns the scanner ID as a UTF-8 {@link String}. Package-private: used by {@link
+     * ScannerManager} as the key in its internal {@code scanners} map. The wire-format
+     * representation is always {@link #getScannerId()} (raw bytes).
+     */
+    String getIdString() {
         return scannerId;
     }
 
