@@ -156,7 +156,7 @@ class ScannerManagerTest {
     //  Helpers
     // -------------------------------------------------------------------------
 
-    /** Creates a {@link ScannerManager} with a long TTL so the reaper never fires during tests. */
+    /** Creates a {@link ScannerManager} with a long TTL so the evictor never fires during tests. */
     private ScannerManager createManager() {
         Configuration c = new Configuration();
         c.set(ConfigOptions.KV_SCANNER_TTL, Duration.ofHours(1));
@@ -166,7 +166,7 @@ class ScannerManagerTest {
         return new ScannerManager(c, scheduler, clock);
     }
 
-    /** Creates a {@link ScannerManager} with configurable limits and a long reaper interval. */
+    /** Creates a {@link ScannerManager} with configurable limits and a long evictor interval. */
     private ScannerManager createManager(int maxPerBucket, int maxPerServer) {
         Configuration c = new Configuration();
         c.set(ConfigOptions.KV_SCANNER_TTL, Duration.ofHours(1));
@@ -176,7 +176,9 @@ class ScannerManagerTest {
         return new ScannerManager(c, scheduler, clock);
     }
 
-    /** Creates a {@link ScannerManager} with a short TTL and reaper interval for eviction tests. */
+    /**
+     * Creates a {@link ScannerManager} with a short TTL and evictor interval for eviction tests.
+     */
     private ScannerManager createManagerWithShortTtl(long ttlMs, long expirationIntervalMs) {
         Configuration c = new Configuration();
         c.set(ConfigOptions.KV_SCANNER_TTL, Duration.ofMillis(ttlMs));
@@ -258,7 +260,7 @@ class ScannerManagerTest {
     @Test
     void testTtlEviction() throws Exception {
         putAndFlush(3);
-        // TTL = 200 ms, reaper every 200 ms — wide enough for slow CI schedulers.
+        // TTL = 200 ms, evictor every 200 ms — wide enough for slow CI schedulers.
         ScannerManager manager = createManagerWithShortTtl(200, 200);
         try {
             TableBucket tableBucket = kvTablet.getTableBucket();
@@ -267,7 +269,7 @@ class ScannerManagerTest {
             assertThat(context).isNotNull();
             byte[] scannerId = context.getScannerId();
 
-            // Advance ManualClock past TTL so the reaper considers the session idle.
+            // Advance ManualClock past TTL so the evictor considers the session idle.
             clock.advanceTime(500, TimeUnit.MILLISECONDS);
 
             // Wait for the real scheduler to invoke the cleanup task.

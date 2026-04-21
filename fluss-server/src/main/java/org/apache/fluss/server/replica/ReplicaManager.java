@@ -1845,6 +1845,12 @@ public class ReplicaManager implements ServerReconfigurable {
         // First stop fetchers for this table bucket.
         replicaFetcherManager.removeFetcherForBuckets(Collections.singleton(tb));
 
+        // Close active scanner sessions for this bucket before tearing down the KV tablet.
+        // A concurrent scanKv RPC in flight can still reach getLeaderKvTablet(tb) and race
+        // with createScanner. Both KvTablet.openScan and ResourceGuard.acquireResource()
+        // synchronise with the subsequent replica/RocksDB close, so the worst case is an
+        // IOException surfaced cleanly as an RPC error — never cursor corruption or a
+        // post-shutdown snapshot.
         if (scannerManager != null) {
             scannerManager.closeScannersForBucket(tb);
         }
