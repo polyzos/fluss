@@ -33,20 +33,7 @@ mkdir fluss-quickstart-flink
 cd fluss-quickstart-flink
 ```
 
-2. Create a `lib` directory and download the required jar files. You can adjust the Flink version as needed. Please make sure to download the compatible versions of [fluss-flink connector jar](/downloads), [fluss-fs-s3 jar](/downloads), and [flink-connector-faker](https://github.com/knaufk/flink-faker/releases)
-
-```shell
-export FLINK_VERSION="1.20"
-```
-
-```shell
-mkdir lib
-curl -fL -o lib/flink-faker-0.5.3.jar https://github.com/knaufk/flink-faker/releases/download/v0.5.3/flink-faker-0.5.3.jar
-curl -fL -o "lib/fluss-flink-${FLINK_VERSION}-$FLUSS_VERSION$.jar" "$FLUSS_MAVEN_REPO_URL$/org/apache/fluss/fluss-flink-${FLINK_VERSION}/$FLUSS_VERSION$/fluss-flink-${FLINK_VERSION}-$FLUSS_VERSION$.jar"
-curl -fL -o "lib/fluss-fs-s3-$FLUSS_VERSION$.jar" "$FLUSS_MAVEN_REPO_URL$/org/apache/fluss/fluss-fs-s3/$FLUSS_VERSION$/fluss-fs-s3-$FLUSS_VERSION$.jar"
-```
-
-3. Create a `docker-compose.yml` file with the following content:
+2. Create a `docker-compose.yml` file with the following content:
 
 ```yaml
 services:
@@ -121,20 +108,19 @@ services:
   #end
   #begin Flink cluster
   jobmanager:
-    image: flink:${FLINK_VERSION}
+    image: apache/fluss-quickstart-flink:$FLUSS_QUICKSTART_FLINK_DOCKER_VERSION$
     ports:
       - "8083:8081"
+    command: jobmanager
     environment:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
-    entrypoint: ["sh", "-c", "cp -v /tmp/lib/*.jar /opt/flink/lib && exec /docker-entrypoint.sh jobmanager"]
-    volumes:
-      - ./lib:/tmp/lib
   taskmanager:
-    image: flink:${FLINK_VERSION}
+    image: apache/fluss-quickstart-flink:$FLUSS_QUICKSTART_FLINK_DOCKER_VERSION$
     depends_on:
       - jobmanager
+    command: taskmanager
     environment:
       - |
         FLINK_PROPERTIES=
@@ -142,21 +128,16 @@ services:
         taskmanager.numberOfTaskSlots: 10
         taskmanager.memory.process.size: 2048m
         taskmanager.memory.framework.off-heap.size: 256m
-    entrypoint: ["sh", "-c", "cp -v /tmp/lib/*.jar /opt/flink/lib && exec /docker-entrypoint.sh taskmanager"]
-    volumes:
-      - ./lib:/tmp/lib
   sql-client:
-    image: flink:${FLINK_VERSION}
+    image: apache/fluss-quickstart-flink:$FLUSS_QUICKSTART_FLINK_DOCKER_VERSION$
     depends_on:
       - jobmanager
+    command: sql-client
     environment:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
         rest.address: jobmanager
-    entrypoint: ["sh", "-c", "cp -v /tmp/lib/*.jar /opt/flink/lib && exec /docker-entrypoint.sh bin/sql-client.sh"]
-    volumes:
-      - ./lib:/tmp/lib
   #end
 
 volumes:
@@ -167,13 +148,13 @@ The Docker Compose environment consists of the following containers:
 - **RustFS:** an S3-compatible object storage for tiered storage. You can access the RustFS console at http://localhost:9001 with credentials `rustfsadmin/rustfsadmin`. An init container (`rustfs-init`) automatically creates the `fluss` bucket on startup.
 - **Fluss Cluster:** a Fluss `CoordinatorServer`, a Fluss `TabletServer` and a `ZooKeeper` server.
    - Credentials are configured directly with `s3.access-key` and `s3.secret-key`. The `s3.assumed.role.arn` and `s3.assumed.role.sts.endpoint` options configure [AssumeRole STS](/maintenance/filesystems/s3.md#assumerole-sts-configuration) which is required by RustFS for delegation token support. Production systems should use CredentialsProvider chain specific to cloud environments.
-- **Flink Cluster**: a Flink `JobManager`, a Flink `TaskManager`, and a Flink SQL client container to execute queries.
+- **Flink Cluster**: a Flink `JobManager`, a Flink `TaskManager`, and a Flink SQL client container to execute queries. The [`apache/fluss-quickstart-flink`](https://hub.docker.com/r/apache/fluss-quickstart-flink) image bundles the Fluss Flink connector, [flink-faker](https://github.com/knaufk/flink-faker) for demo data generation, and S3 filesystem support — no extra downloads required.
 
 :::tip
 [RustFS](https://github.com/rustfs/rustfs) is used as replacement for S3 in this quickstart example, for your production setup you may want to configure this to use cloud file system. See [here](/maintenance/filesystems/overview.md) for information on how to setup cloud file systems
 :::
 
-4. To start all containers, run:
+3. To start all containers, run:
 ```shell
 docker compose up -d
 ```
@@ -185,7 +166,7 @@ docker compose ps
 ```
 to check whether all containers are running properly.
 
-5. Verify the setup. You can visit http://localhost:8083/ to see if Flink is running normally. The S3 bucket for Fluss tiered storage is automatically created by the `rustfs-init` service. You can access the RustFS console at http://localhost:9001 with credentials `rustfsadmin/rustfsadmin` to view the `fluss` bucket.
+4. Verify the setup. You can visit http://localhost:8083/ to see if Flink is running normally. The S3 bucket for Fluss tiered storage is automatically created by the `rustfs-init` service. You can access the RustFS console at http://localhost:9001 with credentials `rustfsadmin/rustfsadmin` to view the `fluss` bucket.
 
 :::note
 - If you want to additionally use an observability stack, follow one of the provided quickstart guides [here](/docs/maintenance/observability/quickstart.md) and then continue with this guide.

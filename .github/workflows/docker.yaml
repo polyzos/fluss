@@ -1,0 +1,177 @@
+################################################################################
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+################################################################################
+
+name: Docker
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The Flink version bundled in the quickstart image. Update this when the
+  # recommended Flink version for the quickstart changes.
+  QUICKSTART_FLINK_VERSION: '2.2'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-fluss:
+    name: "Build and Push apache/fluss"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v5
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build Fluss distribution
+        run: ./mvnw -T 1C -B clean package -pl fluss-dist -am -DskipTests -Dgpg.skip -Dcheckstyle.skip=true
+
+      - name: Prepare Docker build context
+        run: |
+          FLUSS_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "FLUSS_VERSION=${FLUSS_VERSION}" >> $GITHUB_ENV
+          rm -rf docker/fluss/build-target/
+          mkdir -p docker/fluss/build-target/
+          cp -r fluss-dist/target/fluss-${FLUSS_VERSION}-bin/fluss-${FLUSS_VERSION}/* docker/fluss/build-target/
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Determine Docker image tag
+        id: tags
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            # Strip the 'v' prefix from the tag (e.g. v0.9.1-incubating -> 0.9.1-incubating)
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "tags=apache/fluss:${VERSION}" >> $GITHUB_OUTPUT
+          else
+            echo "tags=apache/fluss:latest-snapshot" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push apache/fluss
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/fluss
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+
+  build-quickstart-flink:
+    name: "Build and Push apache/fluss-quickstart-flink"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v5
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Check if RC tag (skip quickstart image for RC builds)
+        id: check
+        run: |
+          # RC tags: Maven artifacts live in a private staging repo not accessible here.
+          # The release guide covers RC quickstart image builds manually.
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]] && [[ "${GITHUB_REF_NAME}" =~ -rc[0-9]+$ ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine FLUSS_VERSION and Maven repo URL
+        if: steps.check.outputs.skip == 'false'
+        id: vars
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            # Final release tag: Maven artifacts are on Maven Central.
+            FLUSS_VERSION="${GITHUB_REF_NAME#v}"
+            MAVEN_REPO_URL="https://repo1.maven.org/maven2"
+          else
+            # Main branch: use ASF Snapshot repository.
+            FLUSS_VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+            MAVEN_REPO_URL="https://repository.apache.org/content/groups/snapshots"
+          fi
+          echo "fluss_version=${FLUSS_VERSION}" >> $GITHUB_OUTPUT
+          echo "maven_repo_url=${MAVEN_REPO_URL}" >> $GITHUB_OUTPUT
+
+      - name: Set up QEMU
+        if: steps.check.outputs.skip == 'false'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.skip == 'false'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: steps.check.outputs.skip == 'false'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Determine Docker image tag
+        if: steps.check.outputs.skip == 'false'
+        id: tags
+        run: |
+          FLINK_VERSION="${{ env.QUICKSTART_FLINK_VERSION }}"
+          FLUSS_VERSION="${{ steps.vars.outputs.fluss_version }}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "tags=apache/fluss-quickstart-flink:${FLINK_VERSION}-${FLUSS_VERSION}" >> $GITHUB_OUTPUT
+          else
+            echo "tags=apache/fluss-quickstart-flink:${FLINK_VERSION}-latest-snapshot" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push apache/fluss-quickstart-flink
+        if: steps.check.outputs.skip == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/quickstart-flink
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            FLINK_VERSION=${{ env.QUICKSTART_FLINK_VERSION }}
+            FLUSS_VERSION=${{ steps.vars.outputs.fluss_version }}
+            FLUSS_MAVEN_REPO_URL=${{ steps.vars.outputs.maven_repo_url }}
