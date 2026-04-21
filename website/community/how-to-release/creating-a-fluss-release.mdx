@@ -462,7 +462,7 @@ Close the staging repository on Apache Nexus. When prompted for a description, e
 
 ![](../assets/nexus-staging.png)
 
-### 7. Stage the `apache/fluss-quickstart-flink` RC image
+### 7. Stage RC Docker images
 
 :::note
 Make sure that you are authenticated with your Docker ID, and that your Docker ID has access to `apache/fluss`: `docker login -u <username>`. If you do not have access, you should seek help via the dev mailing list.
@@ -472,7 +472,9 @@ If you can't login Docker ID in your region because of network issues, you can f
 
 The `apache/fluss` image is **built and pushed automatically** by the [Docker CI workflow](https://github.com/apache/fluss/actions/workflows/docker.yaml) when the RC tag is pushed in the next step — no manual action is required for it.
 
-The `apache/fluss-quickstart-flink` image, however, must be built **manually** for RC builds because it downloads Fluss artifacts from the Maven staging repository, which is not publicly accessible from CI. Use the staging repository URL from step 6 (e.g., `https://repository.apache.org/content/repositories/orgapachefluss-<STAGING_ID>/`).
+The `apache/fluss-quickstart-flink` image must be built and pushed **manually**, because it downloads Fluss artifacts from a Maven repository and Fluss does not currently publish snapshots to the ASF snapshot repository. For RC builds, use the staging repository URL from step 6 (e.g., `https://repository.apache.org/content/repositories/orgapachefluss-<STAGING_ID>/`).
+
+From the root directory of the source code, run the following commands to build and push the image:
 
 ```bash
 $ cd docker/quickstart-flink
@@ -483,15 +485,17 @@ docker/quickstart-flink $ docker buildx build --push --platform linux/arm64/v8,l
     --tag apache/fluss-quickstart-flink:2.2-${RELEASE_VERSION}-rc${RC_NUM} .
 ```
 
+Verify the `apache/fluss-quickstart-flink` RC image is present:
+- https://hub.docker.com/r/apache/fluss-quickstart-flink/tags
+
 ### 8. Push the RC tag
 
 ```bash
 git push origin $TAG
 ```
 
-Pushing the tag triggers the Docker CI workflow, which automatically builds and pushes `apache/fluss:${RELEASE_VERSION}-rc${RC_NUM}`. Monitor the workflow run at https://github.com/apache/fluss/actions/workflows/docker.yaml and verify both RC images are present once it completes:
+Pushing the tag triggers the Docker CI workflow, which automatically builds and pushes `apache/fluss:${RELEASE_VERSION}-rc${RC_NUM}`. Monitor the workflow run at https://github.com/apache/fluss/actions/workflows/docker.yaml and verify the RC image is present once it completes:
 - https://hub.docker.com/r/apache/fluss/tags
-- https://hub.docker.com/r/apache/fluss-quickstart-flink/tags
 
 Then, update the `dockerVersion` and `quickstartFlinkDockerVersion` fields for the current release RC version in the `website/fluss-versions.json` file on the `main` branch:
 - `dockerVersion` → `${RELEASE_VERSION}-rc${RC_NUM}` (e.g., `0.9.0-incubating-rc1`)
