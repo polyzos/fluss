@@ -76,6 +76,7 @@ import org.apache.fluss.shaded.arrow.org.apache.arrow.memory.BufferAllocator;
 import org.apache.fluss.types.RowType;
 import org.apache.fluss.utils.BytesUtils;
 import org.apache.fluss.utils.FileUtils;
+import org.apache.fluss.utils.IOUtils;
 
 import org.rocksdb.RateLimiter;
 import org.rocksdb.ReadOptions;
@@ -772,7 +773,7 @@ public final class KvTablet {
      * org.apache.fluss.server.kv.scan.ScannerManager}) is responsible for registering it and for
      * closing it when the scan is complete.
      *
-     * @param scannerId the server-assigned scanner ID bytes
+     * @param scannerId the server-assigned scanner ID
      * @param limit maximum number of rows to return across all batches ({@code ≤ 0} = unlimited)
      * @param initialAccessTimeMs wall-clock time (ms) to use as the initial last-access timestamp
      * @return a newly created, cursor-positioned {@link ScannerContext}, or {@code null} if the
@@ -790,6 +791,7 @@ public final class KvTablet {
                     Snapshot snapshot = null;
                     ReadOptions readOptions = null;
                     RocksIterator iterator = null;
+                    boolean success = false;
                     try {
                         snapshot = rocksDBKv.getDb().getSnapshot();
                         readOptions = new ReadOptions().setSnapshot(snapshot);
@@ -801,37 +803,38 @@ public final class KvTablet {
                                                 readOptions);
                         iterator.seekToFirst();
                         if (!iterator.isValid()) {
-                            // Empty bucket: release all resources without creating a session.
-                            iterator.close();
-                            readOptions.close();
-                            rocksDBKv.getDb().releaseSnapshot(snapshot);
-                            snapshot.close();
-                            lease.close();
+                            // Empty bucket: no session will be registered; cleanup in finally.
                             return null;
                         }
-                        return new ScannerContext(
-                                scannerId,
-                                tableBucket,
-                                rocksDBKv,
-                                iterator,
-                                readOptions,
-                                snapshot,
-                                lease,
-                                limit,
-                                initialAccessTimeMs);
-                    } catch (Exception e) {
-                        if (iterator != null) {
-                            iterator.close();
+                        ScannerContext context =
+                                new ScannerContext(
+                                        scannerId,
+                                        tableBucket,
+                                        rocksDBKv,
+                                        iterator,
+                                        readOptions,
+                                        snapshot,
+                                        lease,
+                                        limit,
+                                        initialAccessTimeMs);
+                        success = true;
+                        return context;
+                    } finally {
+                        if (!success) {
+                            // Release in reverse allocation order. Each close is independent,
+                            // so a failure in one must not prevent the others from running.
+                            IOUtils.closeQuietly(iterator);
+                            IOUtils.closeQuietly(readOptions);
+                            if (snapshot != null) {
+                                try {
+                                    rocksDBKv.getDb().releaseSnapshot(snapshot);
+                                } catch (Throwable t) {
+                                    LOG.warn("Error releasing RocksDB snapshot.", t);
+                                }
+                                IOUtils.closeQuietly(snapshot);
+                            }
+                            IOUtils.closeQuietly(lease);
                         }
-                        if (readOptions != null) {
-                            readOptions.close();
-                        }
-                        if (snapshot != null) {
-                            rocksDBKv.getDb().releaseSnapshot(snapshot);
-                            snapshot.close();
-                        }
-                        lease.close();
-                        throw e;
                     }
                 });
     }
