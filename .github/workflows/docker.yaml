@@ -30,8 +30,12 @@ permissions:
   contents: read
 
 env:
-  # The Flink version bundled in the quickstart image. Update this when the
-  # recommended Flink version for the quickstart changes.
+  # The Flink version prefix bundled in the quickstart image, used in
+  # `apache/fluss-quickstart-flink` image tags.
+  # Keep this in sync with:
+  #  - website/fluss-versions.json (`quickstartFlinkDockerVersion`, typically in `next`)
+  #  - docker/quickstart-flink/Dockerfile (`FLINK_VERSION` ARG default)
+  # Update all of them together when the recommended quickstart Flink version changes.
   QUICKSTART_FLINK_VERSION: '2.2'
 
 concurrency:

@@ -33,6 +33,12 @@ ARG FLUSS_MAVEN_REPO_URL=https://repo1.maven.org/maven2
 #   - Flink Prometheus metrics reporter (placed in lib/ so it is on the classpath;
 #     it acts as a reporter only when explicitly configured via metrics.reporter.*)
 RUN set -ex; \
+    # Validate required build args early so failures are fast and actionable
+    # (otherwise a missing FLUSS_VERSION would produce a confusing 404 from Maven).
+    if [ -z "${FLUSS_VERSION}" ]; then \
+        echo "ERROR: FLUSS_VERSION build-arg is required (e.g. --build-arg FLUSS_VERSION=0.9.0-incubating)" >&2; \
+        exit 1; \
+    fi; \
     # Fluss JARs are downloaded from the official Apache Maven repository (Maven Central
     # for releases, ASF Snapshot repo for snapshots). Integrity is ensured by the TLS
     # connection to the repository host and Maven Central's GPG-signed artifacts.

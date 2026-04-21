@@ -132,7 +132,7 @@ services:
     image: apache/fluss-quickstart-flink:$FLUSS_QUICKSTART_FLINK_DOCKER_VERSION$
     depends_on:
       - jobmanager
-    command: sql-client
+    command: /opt/flink/bin/sql-client.sh
     environment:
       - |
         FLINK_PROPERTIES=
