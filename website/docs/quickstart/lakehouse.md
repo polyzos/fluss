@@ -40,7 +40,7 @@ curl -fL -o "lib/paimon-s3-$PAIMON_VERSION$.jar" "https://repo.maven.apache.org/
 ```
 
 :::info
-The `apache/fluss-quickstart-flink` image already bundles the Flink-side dependencies used by this guide. The downloaded `paimon-s3` jar is mounted only into the Fluss server containers so they can access the S3-backed Paimon warehouse.
+The `apache/fluss-quickstart-flink` image already includes the Flink-side dependencies used by this guide. Only the Fluss server-side `paimon-s3` plugin still needs to be downloaded and mounted into the Fluss containers.
 :::
 
 3. Create a `docker-compose.yml` file with the following content:
@@ -164,7 +164,7 @@ services:
     depends_on:
       - jobmanager
     entrypoint: ["/opt/flink/init_paimon.sh"]
-    command: ["bin/sql-client.sh"]
+    command: ["/opt/sql-client/sql-client"]
     environment:
       - |
         FLINK_PROPERTIES=
@@ -177,7 +177,7 @@ volumes:
 
 The Docker Compose environment consists of the following containers:
 - **Fluss Cluster:** a Fluss `CoordinatorServer`, a Fluss `TabletServer` and a `ZooKeeper` server.
-- **Flink Cluster**: a Flink `JobManager`, a Flink `TaskManager`, and a Flink SQL client container to execute queries. The quickstart image already contains the base Fluss dependencies, and `init_paimon.sh` activates the Paimon-specific jars before Flink starts.
+- **Flink Cluster**: a Flink `JobManager`, a Flink `TaskManager`, and a Flink SQL client container to execute queries. The quickstart image already keeps the base Fluss dependencies in `FLINK_HOME/lib`, and `init_paimon.sh` prints a clear activation banner before copying the Paimon-specific jars into place.
 - **RustFS**: an S3-compatible storage system used both as Fluss remote storage and Paimon's filesystem warehouse.
 
 
@@ -225,12 +225,11 @@ cd fluss-quickstart-iceberg
 mkdir lib
 curl -fL -o lib/iceberg-aws-1.10.1.jar https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws/1.10.1/iceberg-aws-1.10.1.jar
 curl -fL -o lib/iceberg-aws-bundle-1.10.1.jar https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/1.10.1/iceberg-aws-bundle-1.10.1.jar
-
 curl -fL -o lib/postgresql-42.7.4.jar https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.4/postgresql-42.7.4.jar
 ```
 
 :::info
-The `apache/fluss-quickstart-flink` image already bundles the Flink-side dependencies used by this guide. The downloaded jars are mounted into the Fluss server containers for Iceberg catalog access.
+The `apache/fluss-quickstart-flink` image already includes the Flink-side dependencies used by this guide. Only the Fluss server-side Iceberg and JDBC jars still need to be downloaded and mounted into the Fluss containers.
 :::
 
 3. Create a `docker-compose.yml` file with the following content:
@@ -379,7 +378,7 @@ services:
     depends_on:
       - jobmanager
     entrypoint: ["/opt/flink/init_iceberg.sh"]
-    command: ["bin/sql-client.sh"]
+    command: ["/opt/sql-client/sql-client"]
     environment:
       - |
         FLINK_PROPERTIES=
@@ -392,7 +391,7 @@ volumes:
 
 The Docker Compose environment consists of the following containers:
 - **Fluss Cluster:** a Fluss `CoordinatorServer`, a Fluss `TabletServer` and a `ZooKeeper` server.
-- **Flink Cluster**: a Flink `JobManager`, a Flink `TaskManager`, and a Flink SQL client container to execute queries. The quickstart image already contains the base Fluss dependencies, and `init_iceberg.sh` activates the Iceberg-specific jars before Flink starts.
+- **Flink Cluster**: a Flink `JobManager`, a Flink `TaskManager`, and a Flink SQL client container to execute queries. The quickstart image already keeps the base Fluss dependencies in `FLINK_HOME/lib`, and `init_iceberg.sh` prints a clear activation banner before copying the Iceberg-specific jars into place.
 - **PostgreSQL**: stores Iceberg catalog metadata (used by `JdbcCatalog`).
 - **RustFS**: an S3-compatible storage system used both as Fluss remote storage and Iceberg's filesystem warehouse.
 
@@ -434,67 +433,7 @@ First, use the following command to enter the Flink SQL CLI Container:
 docker compose run sql-client
 ```
 
-To simplify this guide, we will create three temporary tables with `faker` connector to generate data:
-
-```sql title="Flink SQL"
-CREATE TEMPORARY TABLE source_order (
-    `order_key` BIGINT,
-    `cust_key` INT,
-    `total_price` DECIMAL(15, 2),
-    `order_date` DATE,
-    `order_priority` STRING,
-    `clerk` STRING
-) WITH (
-  'connector' = 'faker',
-  'rows-per-second' = '10',
-  'number-of-rows' = '10000',
-  'fields.order_key.expression' = '#{number.numberBetween ''0'',''100000000''}',
-  'fields.cust_key.expression' = '#{number.numberBetween ''0'',''20''}',
-  'fields.total_price.expression' = '#{number.randomDouble ''3'',''1'',''1000''}',
-  'fields.order_date.expression' = '#{date.past ''100'' ''DAYS''}',
-  'fields.order_priority.expression' = '#{regexify ''(low|medium|high){1}''}',
-  'fields.clerk.expression' = '#{regexify ''(Clerk1|Clerk2|Clerk3|Clerk4){1}''}'
-);
-```
-
-```sql title="Flink SQL"
-CREATE TEMPORARY TABLE source_customer (
-    `cust_key` INT,
-    `name` STRING,
-    `phone` STRING,
-    `nation_key` INT NOT NULL,
-    `acctbal` DECIMAL(15, 2),
-    `mktsegment` STRING,
-    PRIMARY KEY (`cust_key`) NOT ENFORCED
-) WITH (
-  'connector' = 'faker',
-  'number-of-rows' = '200',
-  'fields.cust_key.expression' = '#{number.numberBetween ''0'',''20''}',
-  'fields.name.expression' = '#{funnyName.name}',
-  'fields.nation_key.expression' = '#{number.numberBetween ''1'',''5''}',
-  'fields.phone.expression' = '#{phoneNumber.cellPhone}',
-  'fields.acctbal.expression' = '#{number.randomDouble ''3'',''1'',''1000''}',
-  'fields.mktsegment.expression' = '#{regexify ''(AUTOMOBILE|BUILDING|FURNITURE|MACHINERY|HOUSEHOLD){1}''}'
-);
-```
-
-```sql title="Flink SQL"
-CREATE TEMPORARY TABLE `source_nation` (
-  `nation_key` INT NOT NULL,
-  `name` STRING,
-   PRIMARY KEY (`nation_key`) NOT ENFORCED
-) WITH (
-  'connector' = 'faker',
-  'number-of-rows' = '100',
-  'fields.nation_key.expression' = '#{number.numberBetween ''1'',''5''}',
-  'fields.name.expression' = '#{regexify ''(CANADA|JORDAN|CHINA|UNITED|INDIA){1}''}'
-);
-```
-
-```sql title="Flink SQL"
--- drop records silently if a null value would have to be inserted into a NOT NULL column
-SET 'table.exec.sink.not-null-enforcer'='DROP';
-```
+To simplify this guide, the demo source tables backed by the `faker` connector are already pre-created in the SQL client session.
 
   </TabItem>
 
@@ -505,67 +444,7 @@ First, use the following command to enter the Flink SQL CLI Container:
 docker compose run sql-client
 ```
 
-To simplify this guide, we will create three temporary tables with `faker` connector to generate data:
-
-```sql title="Flink SQL"
-CREATE TEMPORARY TABLE source_order (
-    `order_key` BIGINT,
-    `cust_key` INT,
-    `total_price` DECIMAL(15, 2),
-    `order_date` DATE,
-    `order_priority` STRING,
-    `clerk` STRING
-) WITH (
-  'connector' = 'faker',
-  'rows-per-second' = '10',
-  'number-of-rows' = '10000',
-  'fields.order_key.expression' = '#{number.numberBetween ''0'',''100000000''}',
-  'fields.cust_key.expression' = '#{number.numberBetween ''0'',''20''}',
-  'fields.total_price.expression' = '#{number.randomDouble ''3'',''1'',''1000''}',
-  'fields.order_date.expression' = '#{date.past ''100'' ''DAYS''}',
-  'fields.order_priority.expression' = '#{regexify ''(low|medium|high){1}''}',
-  'fields.clerk.expression' = '#{regexify ''(Clerk1|Clerk2|Clerk3|Clerk4){1}''}'
-);
-```
-
-```sql title="Flink SQL"
-CREATE TEMPORARY TABLE source_customer (
-    `cust_key` INT,
-    `name` STRING,
-    `phone` STRING,
-    `nation_key` INT NOT NULL,
-    `acctbal` DECIMAL(15, 2),
-    `mktsegment` STRING,
-    PRIMARY KEY (`cust_key`) NOT ENFORCED
-) WITH (
-  'connector' = 'faker',
-  'number-of-rows' = '200',
-  'fields.cust_key.expression' = '#{number.numberBetween ''0'',''20''}',
-  'fields.name.expression' = '#{funnyName.name}',
-  'fields.nation_key.expression' = '#{number.numberBetween ''1'',''5''}',
-  'fields.phone.expression' = '#{phoneNumber.cellPhone}',
-  'fields.acctbal.expression' = '#{number.randomDouble ''3'',''1'',''1000''}',
-  'fields.mktsegment.expression' = '#{regexify ''(AUTOMOBILE|BUILDING|FURNITURE|MACHINERY|HOUSEHOLD){1}''}'
-);
-```
-
-```sql title="Flink SQL"
-CREATE TEMPORARY TABLE `source_nation` (
-  `nation_key` INT NOT NULL,
-  `name`       STRING,
-   PRIMARY KEY (`nation_key`) NOT ENFORCED
-) WITH (
-  'connector' = 'faker',
-  'number-of-rows' = '100',
-  'fields.nation_key.expression' = '#{number.numberBetween ''1'',''5''}',
-  'fields.name.expression' = '#{regexify ''(CANADA|JORDAN|CHINA|UNITED|INDIA){1}''}'
-);
-```
-
-```sql title="Flink SQL"
--- drop records silently if a null value would have to be inserted into a NOT NULL column
-SET 'table.exec.sink.not-null-enforcer'='DROP';
-```
+To simplify this guide, the demo source tables backed by the `faker` connector are already pre-created in the SQL client session.
 
   </TabItem>
 </Tabs>
