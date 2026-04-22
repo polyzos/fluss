@@ -111,7 +111,7 @@ check_prerequisites() {
     log_info "Checking prerequisites..."
 
     local required_dirs=(
-        "$PROJECT_ROOT/fluss-flink/fluss-flink-1.20/target"
+        "$PROJECT_ROOT/fluss-flink/fluss-flink-2.2/target"
         "$PROJECT_ROOT/fluss-lake/fluss-lake-paimon/target"
         "$PROJECT_ROOT/fluss-lake/fluss-lake-iceberg/target"
         "$PROJECT_ROOT/fluss-flink/fluss-flink-tiering/target"
@@ -143,7 +143,7 @@ main() {
 
     # Copy Fluss connector JARs
     log_info "Copying Fluss connector JARs..."
-    copy_jar "$PROJECT_ROOT/fluss-flink/fluss-flink-1.20/target/fluss-flink-1.20-*.jar" "./lib" "fluss-flink-1.20 connector"
+    copy_jar "$PROJECT_ROOT/fluss-flink/fluss-flink-2.2/target/fluss-flink-2.2-*.jar" "./lib" "fluss-flink-2.2 connector"
     copy_jar "$PROJECT_ROOT/fluss-lake/fluss-lake-paimon/target/fluss-lake-paimon-*.jar" "./lib" "fluss-lake-paimon connector"
     copy_jar "$PROJECT_ROOT/fluss-lake/fluss-lake-iceberg/target/fluss-lake-iceberg-*.jar" "./lib" "fluss-lake-iceberg connector"
 
@@ -166,20 +166,20 @@ main() {
 
     # Download paimon-flink connector
     download_jar \
-        "https://repo1.maven.org/maven2/org/apache/paimon/paimon-flink-1.20/1.2.0/paimon-flink-1.20-1.2.0.jar" \
-        "./lib/paimon-flink-1.20-1.2.0.jar" \
-        "b9f8762c6e575f6786f1d156a18d51682ffc975c" \
-        "paimon-flink-1.20-1.2.0"
+        "https://repo1.maven.org/maven2/org/apache/paimon/paimon-flink-2.1/1.3.1/paimon-flink-2.1-1.3.1.jar" \
+        "./lib/paimon-flink-2.1-1.3.1.jar" \
+        "" \
+        "paimon-flink-2.1-1.3.1"
 
     # Iceberg Support
     log_info "Downloading Iceberg connector JARs..."
 
-    # Download iceberg-flink-runtime for Flink 1.20 (version 1.10.1)
+    # Download iceberg-flink-runtime for Flink 2.0 (version 1.10.1)
     download_jar \
-        "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.20/1.10.1/iceberg-flink-runtime-1.20-1.10.1.jar" \
-        "./lib/iceberg-flink-runtime-1.20-1.10.1.jar" \
+        "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-2.0/1.10.1/iceberg-flink-runtime-2.0-1.10.1.jar" \
+        "./lib/iceberg-flink-runtime-2.0-1.10.1.jar" \
         "" \
-        "iceberg-flink-runtime-1.20-1.10.1"
+        "iceberg-flink-runtime-2.0-1.10.1"
 
     # Prepare lake tiering JAR
     log_info "Preparing lake tiering JAR..."
@@ -198,13 +198,13 @@ verify_jars() {
 
     local missing_jars=()
     local lib_jars=(
-        "fluss-flink-1.20-*.jar"
+        "fluss-flink-2.2-*.jar"
         "fluss-lake-paimon-*.jar"
         "fluss-lake-iceberg-*.jar"
         "flink-faker-0.5.3.jar"
         "hadoop-apache-3.3.5-2.jar"
-        "paimon-flink-1.20-1.2.0.jar"
-        "iceberg-flink-runtime-1.20-1.10.1.jar"
+        "paimon-flink-2.1-1.3.1.jar"
+        "iceberg-flink-runtime-2.0-1.10.1.jar"
     )
 
     local opt_jars=(
@@ -250,11 +250,11 @@ show_summary() {
     ls -lh ./opt/ | tail -n +2 | awk '{printf "  %-50s %8s\n", $9, $5}'
     echo ""
     log_info "Included Components:"
-    echo "  x Fluss Flink 1.20 connector"
+    echo "  x Fluss Flink 2.2 connector"
     echo "  x Fluss Lake Paimon connector"
     echo "  x Fluss Lake Iceberg connector"
-    echo "  x Iceberg Flink runtime 1.20 (v1.10.1)"
-    echo "  x Paimon Flink 1.20 (v1.2.0)"
+    echo "  x Iceberg Flink runtime 2.0 (v1.10.1)"
+    echo "  x Paimon Flink 2.1 (v1.3.1)"
     echo "  x Hadoop Apache (v3.3.5-2)"
     echo "  x Flink Faker (v0.5.3)"
     echo "  x Fluss Tiering service"
