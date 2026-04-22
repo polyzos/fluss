@@ -488,16 +488,6 @@ Verify the RC images are present:
 git push origin $TAG
 ```
 
-Pushing the tag triggers the Docker CI workflow, which automatically builds and pushes `apache/fluss:${RELEASE_VERSION}-rc${RC_NUM}`. Monitor the workflow run at https://github.com/apache/fluss/actions/workflows/docker.yaml and verify the RC image is present once it completes:
-- https://hub.docker.com/r/apache/fluss/tags
-
-Then, update the `dockerVersion` field for the current release RC version in the `website/fluss-versions.json` file on the `main` branch:
-- `dockerVersion` → `${RELEASE_VERSION}-rc${RC_NUM}` (e.g., `0.9.0-incubating-rc1`)
-
-This update should be committed and pushed to the `main` branch.
-
-This ensures that the **Quickstart guide** in the documentation references the correct Docker images for the release candidate. This will help developers to easily test the new release candidate using the Quickstart guide.
-
 -------------
 
 **Checklist to proceed to the next step**
@@ -506,7 +496,6 @@ This ensures that the **Quickstart guide** in the documentation references the c
 - Maven artifacts deployed to the staging repository of [repository.apache.org](https://repository.apache.org/content/repositories/)
 - RC Docker images pushed to DockerHub ([apache/fluss](https://hub.docker.com/r/apache/fluss/tags), [apache/fluss-quickstart-flink](https://hub.docker.com/r/apache/fluss-quickstart-flink/tags))
 - RC tag pushed to the [official repository](https://github.com/apache/fluss/tags)
-- Updated `dockerVersion` in `fluss-versions.json` on `main` branch
 
 
 ## Vote on the release candidate
