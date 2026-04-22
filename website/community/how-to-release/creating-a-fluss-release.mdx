@@ -472,20 +472,16 @@ If you can't login Docker ID in your region because of network issues, you can f
 
 The `apache/fluss` image is **built and pushed automatically** by the [Docker CI workflow](https://github.com/apache/fluss/actions/workflows/docker.yaml) when the RC tag is pushed in the next step — no manual action is required for it.
 
-The `apache/fluss-quickstart-flink` image must be built and pushed **manually**, because it downloads Fluss artifacts from a Maven repository and Fluss does not currently publish snapshots to the ASF snapshot repository. For RC builds, use the staging repository URL from step 6 (e.g., `https://repository.apache.org/content/repositories/orgapachefluss-<STAGING_ID>/`).
-
-From the root directory of the source code, run the following commands to build and push the image:
+Then, run the following commands to build and push the flink — a customized Apache Flink image that includes all necessary libraries and JARs for the Fluss Quickstart guide:
 
 ```bash
-$ cd docker/quickstart-flink
-docker/quickstart-flink $ docker buildx build --push --platform linux/arm64/v8,linux/amd64 \
-    --build-arg FLINK_VERSION=1.20 \
-    --build-arg FLUSS_VERSION=${RELEASE_VERSION} \
-    --build-arg FLUSS_MAVEN_REPO_URL=https://repository.apache.org/content/repositories/orgapachefluss-<STAGING_ID>/ \
-    --tag apache/fluss-quickstart-flink:1.20-${RELEASE_VERSION}-rc${RC_NUM} .
+docker/fluss $ cd ../quickstart-flink
+docker/quickstart-flink $ ./prepare_build.sh
+docker/quickstart-flink $ docker buildx build --push --platform linux/arm64/v8,linux/amd64 --tag apache/fluss-quickstart-flink:1.20-${RELEASE_VERSION}-rc${RC_NUM} .
 ```
 
-Verify the `apache/fluss-quickstart-flink` RC image is present:
+Verify the RC images are present:
+- https://hub.docker.com/r/apache/fluss/tags
 - https://hub.docker.com/r/apache/fluss-quickstart-flink/tags
 
 ### 8. Push the RC tag
