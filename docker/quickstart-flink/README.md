@@ -55,5 +55,5 @@ After the preparation is complete, build the Docker image:
 
 ```bash
 # Build the Docker image
-docker build -t fluss/quickstart-flink:1.20-latest .
+docker build -t fluss/quickstart-flink:2.2-latest .
 ```

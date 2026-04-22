@@ -16,8 +16,8 @@
 # limitations under the License.
 #
 
-# Use Flink 1.20.0 as base image
-FROM flink:1.20.0-scala_2.12-java17
+# Use Flink 2.2.0 as base image
+FROM flink:2.2.0-java17
 
 # Switch to root user for installation and setup
 USER root
