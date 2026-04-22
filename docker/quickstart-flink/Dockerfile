@@ -30,6 +30,8 @@ ARG HADOOP_VERSION=3.3.5
 
 COPY bin/init_paimon.sh /opt/flink/init_paimon.sh
 COPY bin/init_iceberg.sh /opt/flink/init_iceberg.sh
+COPY bin/sql-client /opt/flink/bin/sql-client
+COPY sql/sql-client.sql /opt/flink/sql-client/sql-client.sql
 
 # Pre-install the dependencies used by Fluss quickstart guides so users do not
 # need to download jars manually before starting the demo environment.
@@ -69,4 +71,4 @@ RUN set -ex; \
     curl -fL -o /opt/flink/iceberg/hadoop-client-runtime-${HADOOP_VERSION}.jar \
         "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-client-runtime/${HADOOP_VERSION}/hadoop-client-runtime-${HADOOP_VERSION}.jar"; \
     cp /opt/flink/opt/flink-metrics-prometheus-*.jar /opt/flink/lib/; \
-    chmod +x /opt/flink/init_paimon.sh /opt/flink/init_iceberg.sh
+    chmod +x /opt/flink/init_paimon.sh /opt/flink/init_iceberg.sh /opt/flink/bin/sql-client

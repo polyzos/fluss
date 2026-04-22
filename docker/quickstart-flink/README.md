@@ -38,6 +38,11 @@ Use the bundled init scripts to activate them before starting Flink:
 - `/opt/flink/init_paimon.sh`
 - `/opt/flink/init_iceberg.sh`
 
+The image also includes quickstart helpers restored for local demos:
+
+- `/opt/flink/bin/sql-client` preloads the demo `faker` source tables from `/opt/flink/sql-client/sql-client.sql`
+- `prepare_build.sh` prepares the recommended `docker buildx build` command for a given Fluss version
+
 ## Build the image
 
 Build a release image from Maven Central:
@@ -74,4 +79,18 @@ docker buildx build \
   --build-arg FLUSS_MAVEN_REPO_URL=https://repository.apache.org/content/repositories/orgapachefluss-<STAGING_ID> \
   --tag apache/fluss-quickstart-flink:1.20-<FLUSS_VERSION> \
   .
+```
+
+## Helper scripts
+
+Use the bundled quickstart SQL client helper inside the container if you want the demo source tables to be created automatically before entering the CLI:
+
+```bash
+docker run --rm -it apache/fluss-quickstart-flink:1.20-<FLUSS_VERSION> /opt/flink/bin/sql-client
+```
+
+To prepare the standard build command locally:
+
+```bash
+./prepare_build.sh --fluss-version <FLUSS_VERSION>
 ```
