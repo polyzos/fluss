@@ -486,7 +486,7 @@ Then, run the following commands to build and push the flink — a customized Ap
 ```bash
 docker/fluss $ cd ../quickstart-flink
 docker/quickstart-flink $ ./prepare_build.sh
-docker/quickstart-flink $ docker buildx build --push --platform linux/arm64/v8,linux/amd64 --tag apache/fluss-quickstart-flink:2.2-${RELEASE_VERSION}-rc${RC_NUM} .
+docker/quickstart-flink $ docker buildx build --push --platform linux/arm64/v8,linux/amd64 --tag apache/fluss-quickstart-flink:1.20-${RELEASE_VERSION}-rc${RC_NUM} .
 ```
 
 Verify the RC images are present:
@@ -783,7 +783,7 @@ Make sure that you are authenticated with your Docker ID, and that your Docker I
 ```bash
 docker buildx imagetools create apache/fluss:${RELEASE_VERSION}-rc${RC_NUM} --tag apache/fluss:${RELEASE_VERSION}
 
-docker buildx imagetools create apache/fluss-quickstart-flink:2.2-${RELEASE_VERSION}-rc${RC_NUM} --tag apache/fluss-quickstart-flink:2.2-${RELEASE_VERSION}
+docker buildx imagetools create apache/fluss-quickstart-flink:1.20-${RELEASE_VERSION}-rc${RC_NUM} --tag apache/fluss-quickstart-flink:1.20-${RELEASE_VERSION}
 ```
 
 ### 6. Update `fluss-versions.json`
