@@ -18,79 +18,42 @@
 
 # Fluss Quickstart Flink Docker
 
-This directory contains the Dockerfile for the `apache/fluss-quickstart-flink` image used by the Fluss quickstart documentation.
+This directory contains the Docker setup for Fluss Quickstart with Flink integration.
 
-The image is based on the official Flink Docker image and pre-installs the jars needed by the Fluss quickstart guides:
+## Overview
 
-- `fluss-flink`
-- `fluss-fs-s3`
-- `flink-faker`
-- Flink Prometheus metrics reporter
-- `fluss-flink-tiering`
+The Fluss Quickstart Flink Docker image provides a complete environment for running Flink with Fluss, powered by Paimon lake storage.
 
-Lakehouse-specific dependencies are pre-bundled in separate directories inside the image:
+## Prerequisites
 
-- `/opt/flink/paimon`
-- `/opt/flink/iceberg`
+Before building the Docker image, ensure you have:
 
-Use the bundled init scripts to activate them before starting Flink:
+1. Check out the code version that you want to use for the Docker image. Go to the project root directory and build Fluss using `./mvnw clean package -DskipTests`.
+The local build will be used for the Docker image.
+2. Docker installed and running
+3. Internet access for retrieving dependencies
 
-- `/opt/flink/init_paimon.sh`
-- `/opt/flink/init_iceberg.sh`
+## Build Process
 
-The image also includes quickstart helpers restored for local demos:
+The build process consists of two main steps:
 
-- `/opt/flink/bin/sql-client` preloads the demo `faker` source tables from `/opt/flink/sql-client/sql-client.sql`
-- `prepare_build.sh` prepares the recommended `docker buildx build` command for a given Fluss version
+### Step 1: Prepare Build Files
 
-## Build the image
-
-Build a release image from Maven Central:
+First, you need to prepare the required JAR files and dependencies:
 
 ```bash
-docker buildx build \
-  --platform linux/arm64/v8,linux/amd64 \
-  --build-arg FLINK_VERSION=1.20 \
-  --build-arg FLUSS_VERSION=<FLUSS_VERSION> \
-  --tag apache/fluss-quickstart-flink:1.20-<FLUSS_VERSION> \
-  .
+# Make the script executable
+chmod +x prepare_build.sh
+
+# Run the preparation script
+./prepare_build.sh
 ```
 
-For example:
+### Step 2: Build Docker Image
+
+After the preparation is complete, build the Docker image:
 
 ```bash
-docker buildx build \
-  --platform linux/arm64/v8,linux/amd64 \
-  --build-arg FLINK_VERSION=1.20 \
-  --build-arg FLUSS_VERSION=0.9.0-incubating \
-  --tag apache/fluss-quickstart-flink:1.20-0.9.0-incubating \
-  .
-```
-
-## Build an RC or snapshot image
-
-When building against staged or snapshot Fluss artifacts, override `FLUSS_MAVEN_REPO_URL`:
-
-```bash
-docker buildx build \
-  --platform linux/arm64/v8,linux/amd64 \
-  --build-arg FLINK_VERSION=1.20 \
-  --build-arg FLUSS_VERSION=<FLUSS_VERSION> \
-  --build-arg FLUSS_MAVEN_REPO_URL=https://repository.apache.org/content/repositories/orgapachefluss-<STAGING_ID> \
-  --tag apache/fluss-quickstart-flink:1.20-<FLUSS_VERSION> \
-  .
-```
-
-## Helper scripts
-
-Use the bundled quickstart SQL client helper inside the container if you want the demo source tables to be created automatically before entering the CLI:
-
-```bash
-docker run --rm -it apache/fluss-quickstart-flink:1.20-<FLUSS_VERSION> /opt/flink/bin/sql-client
-```
-
-To prepare the standard build command locally:
-
-```bash
-./prepare_build.sh --fluss-version <FLUSS_VERSION>
+# Build the Docker image
+docker build -t fluss/quickstart-flink:1.20-latest .
 ```

@@ -18,8 +18,4 @@
 # limitations under the License.
 #
 
-set -euo pipefail
-
-exec "${FLINK_HOME:-/opt/flink}/bin/sql-client.sh" \
-    -i /opt/flink/sql-client/sql-client.sql \
-    "$@"
+${FLINK_HOME}/bin/sql-client.sh  -i ${SQL_CLIENT_HOME}/sql/sql-client.sql
