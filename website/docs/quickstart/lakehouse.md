@@ -32,36 +32,16 @@ mkdir fluss-quickstart-paimon
 cd fluss-quickstart-paimon
 ```
 
-2. Create directories and download required jars:
+2. Create a `lib` directory and download the Paimon S3 plugin jar required by the Fluss servers:
 
 ```shell
-mkdir -p lib opt
-
-# Flink connectors
-curl -fL -o lib/flink-faker-0.5.3.jar https://github.com/knaufk/flink-faker/releases/download/v0.5.3/flink-faker-0.5.3.jar
-curl -fL -o "lib/fluss-flink-1.20-$FLUSS_VERSION$.jar" "$FLUSS_MAVEN_REPO_URL$/org/apache/fluss/fluss-flink-1.20/$FLUSS_VERSION$/fluss-flink-1.20-$FLUSS_VERSION$.jar"
-curl -fL -o "lib/paimon-flink-1.20-$PAIMON_VERSION$.jar" "https://repo1.maven.org/maven2/org/apache/paimon/paimon-flink-1.20/$PAIMON_VERSION$/paimon-flink-1.20-$PAIMON_VERSION$.jar"
-
-# Fluss lake plugin
-curl -fL -o "lib/fluss-lake-paimon-$FLUSS_VERSION$.jar" "$FLUSS_MAVEN_REPO_URL$/org/apache/fluss/fluss-lake-paimon/$FLUSS_VERSION$/fluss-lake-paimon-$FLUSS_VERSION$.jar"
-
-# Paimon bundle jar
-curl -fL -o "lib/paimon-bundle-$PAIMON_VERSION$.jar" "https://repo.maven.apache.org/maven2/org/apache/paimon/paimon-bundle/$PAIMON_VERSION$/paimon-bundle-$PAIMON_VERSION$.jar"
-
-# Hadoop bundle jar
-curl -fL -o lib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar https://repo.maven.apache.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar
-
-# AWS S3 support
+mkdir lib
 curl -fL -o "lib/paimon-s3-$PAIMON_VERSION$.jar" "https://repo.maven.apache.org/maven2/org/apache/paimon/paimon-s3/$PAIMON_VERSION$/paimon-s3-$PAIMON_VERSION$.jar"
-
-# Tiering service
-curl -fL -o "opt/fluss-flink-tiering-$FLUSS_VERSION$.jar" "$FLUSS_MAVEN_REPO_URL$/org/apache/fluss/fluss-flink-tiering/$FLUSS_VERSION$/fluss-flink-tiering-$FLUSS_VERSION$.jar"
 ```
 
 :::info
-You can add more jars to this `lib` directory based on your requirements:
-- **Other catalog backends**: Add jars needed for alternative Paimon catalog implementations (e.g., Hive, JDBC)
-  :::
+The `apache/fluss-quickstart-flink` image already bundles the Flink-side dependencies used by this guide. The downloaded `paimon-s3` jar is mounted only into the Fluss server containers so they can access the S3-backed Paimon warehouse.
+:::
 
 3. Create a `docker-compose.yml` file with the following content:
 
@@ -157,30 +137,21 @@ services:
     restart: always
     image: zookeeper:3.9.2
   jobmanager:
-    image: flink:1.20-scala_2.12-java17
+    image: apache/fluss-quickstart-flink:$FLUSS_QUICKSTART_FLINK_DOCKER_VERSION$
     ports:
       - "8083:8081"
-    entrypoint: ["/bin/bash", "-c"]
-    command: >
-      "cp /tmp/jars/*.jar /opt/flink/lib/ 2>/dev/null || true;
-       cp /tmp/opt/*.jar /opt/flink/opt/ 2>/dev/null || true;
-       /docker-entrypoint.sh jobmanager"
+    entrypoint: ["/opt/flink/init_paimon.sh"]
+    command: ["jobmanager"]
     environment:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
-    volumes:
-      - ./lib:/tmp/jars
-      - ./opt:/tmp/opt
   taskmanager:
-    image: flink:1.20-scala_2.12-java17
+    image: apache/fluss-quickstart-flink:$FLUSS_QUICKSTART_FLINK_DOCKER_VERSION$
     depends_on:
       - jobmanager
-    entrypoint: ["/bin/bash", "-c"]
-    command: >
-      "cp /tmp/jars/*.jar /opt/flink/lib/ 2>/dev/null || true;
-       cp /tmp/opt/*.jar /opt/flink/opt/ 2>/dev/null || true;
-       /docker-entrypoint.sh taskmanager"
+    entrypoint: ["/opt/flink/init_paimon.sh"]
+    command: ["taskmanager"]
     environment:
       - |
         FLINK_PROPERTIES=
@@ -188,9 +159,17 @@ services:
         taskmanager.numberOfTaskSlots: 10
         taskmanager.memory.process.size: 2048m
         taskmanager.memory.task.off-heap.size: 128m
-    volumes:
-      - ./lib:/tmp/jars
-      - ./opt:/tmp/opt
+  sql-client:
+    image: apache/fluss-quickstart-flink:$FLUSS_QUICKSTART_FLINK_DOCKER_VERSION$
+    depends_on:
+      - jobmanager
+    entrypoint: ["/opt/flink/init_paimon.sh"]
+    command: ["bin/sql-client.sh"]
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        rest.address: jobmanager
 
 volumes:
   rustfs-data:
@@ -198,7 +177,7 @@ volumes:
 
 The Docker Compose environment consists of the following containers:
 - **Fluss Cluster:** a Fluss `CoordinatorServer`, a Fluss `TabletServer` and a `ZooKeeper` server.
-- **Flink Cluster**: a Flink `JobManager` and a Flink `TaskManager` container to execute queries.
+- **Flink Cluster**: a Flink `JobManager`, a Flink `TaskManager`, and a Flink SQL client container to execute queries. The quickstart image already contains the base Fluss dependencies, and `init_paimon.sh` activates the Paimon-specific jars before Flink starts.
 - **RustFS**: an S3-compatible storage system used both as Fluss remote storage and Paimon's filesystem warehouse.
 
 
@@ -222,7 +201,6 @@ You can also visit http://localhost:8083/ to see if Flink is running normally.
 
 :::note
 - If you want to additionally use an observability stack, follow one of the provided quickstart guides [here](maintenance/observability/quickstart.md) and then continue with this guide.
-- If you want to run with your own Flink environment, remember to download the [fluss-flink connector jar](/downloads), [flink-connector-faker](https://github.com/knaufk/flink-faker/releases), [paimon-flink connector jar](https://paimon.apache.org/docs/1.3/flink/quick-start/) and then put them to `FLINK_HOME/lib/`.
 - All the following commands involving `docker compose` should be executed in the created working directory that contains the `docker-compose.yml` file.
 :::
 
@@ -241,37 +219,18 @@ mkdir fluss-quickstart-iceberg
 cd fluss-quickstart-iceberg
 ```
 
-2. Create directories and download required jars:
+2. Create a `lib` directory and download the Iceberg jars required by the Fluss servers:
 
 ```shell
-mkdir -p lib opt
-
-# Flink connectors
-curl -fL -o lib/flink-faker-0.5.3.jar https://github.com/knaufk/flink-faker/releases/download/v0.5.3/flink-faker-0.5.3.jar
-curl -fL -o "lib/fluss-flink-1.20-$FLUSS_VERSION$.jar" "$FLUSS_MAVEN_REPO_URL$/org/apache/fluss/fluss-flink-1.20/$FLUSS_VERSION$/fluss-flink-1.20-$FLUSS_VERSION$.jar"
-curl -fL -o lib/iceberg-flink-runtime-1.20-1.10.1.jar https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.20/1.10.1/iceberg-flink-runtime-1.20-1.10.1.jar
-
-# Fluss lake plugin
-curl -fL -o "lib/fluss-lake-iceberg-$FLUSS_VERSION$.jar" "$FLUSS_MAVEN_REPO_URL$/org/apache/fluss/fluss-lake-iceberg/$FLUSS_VERSION$/fluss-lake-iceberg-$FLUSS_VERSION$.jar"
-
-# Iceberg AWS support (S3FileIO + AWS SDK)
+mkdir lib
 curl -fL -o lib/iceberg-aws-1.10.1.jar https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws/1.10.1/iceberg-aws-1.10.1.jar
 curl -fL -o lib/iceberg-aws-bundle-1.10.1.jar https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/1.10.1/iceberg-aws-bundle-1.10.1.jar
 
-# JDBC catalog driver
 curl -fL -o lib/postgresql-42.7.4.jar https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.4/postgresql-42.7.4.jar
-
-# Hadoop client (required by Iceberg's Flink integration)
-curl -fL -o lib/hadoop-client-api-3.3.5.jar https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-client-api/3.3.5/hadoop-client-api-3.3.5.jar
-curl -fL -o lib/hadoop-client-runtime-3.3.5.jar https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-client-runtime/3.3.5/hadoop-client-runtime-3.3.5.jar
-
-# Tiering service
-curl -fL -o "opt/fluss-flink-tiering-$FLUSS_VERSION$.jar" "$FLUSS_MAVEN_REPO_URL$/org/apache/fluss/fluss-flink-tiering/$FLUSS_VERSION$/fluss-flink-tiering-$FLUSS_VERSION$.jar"
 ```
 
 :::info
-You can add more jars to this `lib` directory based on your requirements:
-- **Other catalog backends**: Add jars needed for alternative Iceberg catalog implementations (e.g., Rest, Hive, Glue)
+The `apache/fluss-quickstart-flink` image already bundles the Flink-side dependencies used by this guide. The downloaded jars are mounted into the Fluss server containers for Iceberg catalog access.
 :::
 
 3. Create a `docker-compose.yml` file with the following content:
@@ -393,30 +352,21 @@ services:
     restart: always
     image: zookeeper:3.9.2
   jobmanager:
-    image: flink:1.20-scala_2.12-java17
+    image: apache/fluss-quickstart-flink:$FLUSS_QUICKSTART_FLINK_DOCKER_VERSION$
     ports:
       - "8083:8081"
-    entrypoint: ["/bin/bash", "-c"]
-    command: >
-      "cp /tmp/jars/*.jar /opt/flink/lib/ 2>/dev/null || true;
-       cp /tmp/opt/*.jar /opt/flink/opt/ 2>/dev/null || true;
-       /docker-entrypoint.sh jobmanager"
+    entrypoint: ["/opt/flink/init_iceberg.sh"]
+    command: ["jobmanager"]
     environment:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
-    volumes:
-      - ./lib:/tmp/jars
-      - ./opt:/tmp/opt
   taskmanager:
-    image: flink:1.20-scala_2.12-java17
+    image: apache/fluss-quickstart-flink:$FLUSS_QUICKSTART_FLINK_DOCKER_VERSION$
     depends_on:
       - jobmanager
-    entrypoint: ["/bin/bash", "-c"]
-    command: >
-      "cp /tmp/jars/*.jar /opt/flink/lib/ 2>/dev/null || true;
-       cp /tmp/opt/*.jar /opt/flink/opt/ 2>/dev/null || true;
-       /docker-entrypoint.sh taskmanager"
+    entrypoint: ["/opt/flink/init_iceberg.sh"]
+    command: ["taskmanager"]
     environment:
       - |
         FLINK_PROPERTIES=
@@ -424,9 +374,17 @@ services:
         taskmanager.numberOfTaskSlots: 10
         taskmanager.memory.process.size: 2048m
         taskmanager.memory.task.off-heap.size: 128m
-    volumes:
-      - ./lib:/tmp/jars
-      - ./opt:/tmp/opt
+  sql-client:
+    image: apache/fluss-quickstart-flink:$FLUSS_QUICKSTART_FLINK_DOCKER_VERSION$
+    depends_on:
+      - jobmanager
+    entrypoint: ["/opt/flink/init_iceberg.sh"]
+    command: ["bin/sql-client.sh"]
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        rest.address: jobmanager
 
 volumes:
   rustfs-data:
@@ -434,7 +392,7 @@ volumes:
 
 The Docker Compose environment consists of the following containers:
 - **Fluss Cluster:** a Fluss `CoordinatorServer`, a Fluss `TabletServer` and a `ZooKeeper` server.
-- **Flink Cluster**: a Flink `JobManager` and a Flink `TaskManager` container to execute queries.
+- **Flink Cluster**: a Flink `JobManager`, a Flink `TaskManager`, and a Flink SQL client container to execute queries. The quickstart image already contains the base Fluss dependencies, and `init_iceberg.sh` activates the Iceberg-specific jars before Flink starts.
 - **PostgreSQL**: stores Iceberg catalog metadata (used by `JdbcCatalog`).
 - **RustFS**: an S3-compatible storage system used both as Fluss remote storage and Iceberg's filesystem warehouse.
 
@@ -473,7 +431,7 @@ Congratulations, you are all set!
 
 First, use the following command to enter the Flink SQL CLI Container:
 ```shell
-docker compose exec jobmanager ./bin/sql-client.sh
+docker compose run sql-client
 ```
 
 To simplify this guide, we will create three temporary tables with `faker` connector to generate data:
@@ -544,7 +502,7 @@ SET 'table.exec.sink.not-null-enforcer'='DROP';
 
 First, use the following command to enter the Flink SQL CLI Container:
 ```shell
-docker compose exec jobmanager ./bin/sql-client.sh
+docker compose run sql-client
 ```
 
 To simplify this guide, we will create three temporary tables with `faker` connector to generate data:

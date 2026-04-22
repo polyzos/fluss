@@ -16,61 +16,62 @@
  limitations under the License.
 -->
 
-# `apache/fluss-quickstart-flink` Docker image
+# Fluss Quickstart Flink Docker
 
-This directory contains the `Dockerfile` for the `apache/fluss-quickstart-flink`
-image referenced by the Fluss [Quickstart guide](../../website/docs/quickstart/flink.md).
+This directory contains the Dockerfile for the `apache/fluss-quickstart-flink` image used by the Fluss quickstart documentation.
 
-The image is based on `flink:<FLINK_VERSION>-java17` and bundles:
+The image is based on the official Flink Docker image and pre-installs the jars needed by the Fluss quickstart guides:
 
-- The Fluss Flink connector (`fluss-flink-<FLINK_VERSION>`)
-- The Fluss S3 filesystem plugin (`fluss-fs-s3`)
-- [Flink Faker](https://github.com/knaufk/flink-faker) (demo data generation)
-- The Flink Prometheus metrics reporter (available on the classpath, disabled by default)
+- `fluss-flink`
+- `fluss-fs-s3`
+- `flink-faker`
+- Flink Prometheus metrics reporter
+- `fluss-flink-tiering`
 
-## Why is this built manually?
+Lakehouse-specific dependencies are pre-bundled in separate directories inside the image:
 
-The Dockerfile downloads the Fluss jars from a Maven repository at build time.
-Fluss does **not** currently publish snapshots to the ASF snapshot repository,
-so this image cannot be built from `main` by CI. It is therefore built and
-pushed manually by the release manager using a released version (or a staged
-release-candidate).
+- `/opt/flink/paimon`
+- `/opt/flink/iceberg`
 
-See the [release guide](../../website/community/how-to-release/creating-a-fluss-release.mdx)
-for the full workflow.
+Use the bundled init scripts to activate them before starting Flink:
 
-## Build
+- `/opt/flink/init_paimon.sh`
+- `/opt/flink/init_iceberg.sh`
 
-### From a released version (artifacts on Maven Central)
+## Build the image
 
-```bash
-docker buildx build --push --platform linux/arm64/v8,linux/amd64 \
-    --build-arg FLINK_VERSION=2.2 \
-    --build-arg FLUSS_VERSION=<RELEASE_VERSION> \
-    --tag apache/fluss-quickstart-flink:2.2-<RELEASE_VERSION> \
-    .
-```
-
-### From a staged release candidate (artifacts on the Apache Nexus staging repo)
-
-Use the staging repository URL from the release candidate (see the release
-guide, "Deploy to the Nexus staging repository"):
+Build a release image from Maven Central:
 
 ```bash
-docker buildx build --push --platform linux/arm64/v8,linux/amd64 \
-    --build-arg FLINK_VERSION=2.2 \
-    --build-arg FLUSS_VERSION=<RELEASE_VERSION> \
-    --build-arg FLUSS_MAVEN_REPO_URL=https://repository.apache.org/content/repositories/orgapachefluss-<STAGING_ID>/ \
-    --tag apache/fluss-quickstart-flink:2.2-<RELEASE_VERSION>-rc<RC_NUM> \
-    .
+docker buildx build \
+  --platform linux/arm64/v8,linux/amd64 \
+  --build-arg FLINK_VERSION=1.20 \
+  --build-arg FLUSS_VERSION=<FLUSS_VERSION> \
+  --tag apache/fluss-quickstart-flink:1.20-<FLUSS_VERSION> \
+  .
 ```
 
-## Build arguments
+For example:
 
-| Arg                     | Required | Default                                | Description                                                                  |
-|-------------------------|----------|----------------------------------------|------------------------------------------------------------------------------|
-| `FLINK_VERSION`         | No       | `2.2`                                  | Flink major/minor version for the base image and the `fluss-flink-*` jar.    |
-| `FLUSS_VERSION`         | **Yes**  | –                                      | Fluss version used to resolve the `fluss-flink-*` and `fluss-fs-s3` jars.    |
-| `FLUSS_MAVEN_REPO_URL`  | No       | `https://repo1.maven.org/maven2`       | Maven repository to download the Fluss jars from.                            |
+```bash
+docker buildx build \
+  --platform linux/arm64/v8,linux/amd64 \
+  --build-arg FLINK_VERSION=1.20 \
+  --build-arg FLUSS_VERSION=0.9.0-incubating \
+  --tag apache/fluss-quickstart-flink:1.20-0.9.0-incubating \
+  .
+```
 
-The build fails fast if `FLUSS_VERSION` is not provided.
+## Build an RC or snapshot image
+
+When building against staged or snapshot Fluss artifacts, override `FLUSS_MAVEN_REPO_URL`:
+
+```bash
+docker buildx build \
+  --platform linux/arm64/v8,linux/amd64 \
+  --build-arg FLINK_VERSION=1.20 \
+  --build-arg FLUSS_VERSION=<FLUSS_VERSION> \
+  --build-arg FLUSS_MAVEN_REPO_URL=https://repository.apache.org/content/repositories/orgapachefluss-<STAGING_ID> \
+  --tag apache/fluss-quickstart-flink:1.20-<FLUSS_VERSION> \
+  .
+```

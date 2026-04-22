@@ -205,7 +205,7 @@ Next, add a new version item for the next release version in the `website/fluss-
   "fullVersion": "0.10-SNAPSHOT",
   "shortVersion": "0.10",
   "dockerVersion": "latest-snapshot",
-  "quickstartFlinkDockerVersion": "2.2-latest-snapshot",
+  "quickstartFlinkDockerVersion": "1.20-latest-snapshot",
   "paimonVersion": "1.3.1",
   "paimonVersionShort": "1.3",
   "released": false
@@ -220,7 +220,7 @@ Additionally, update the `fullVersion`, `shortVersion`, `dockerVersion`, and `qu
     "fullVersion": "0.9.0-incubating",
     "shortVersion": "0.9",
     "dockerVersion": "0.9.0-incubating",
-    "quickstartFlinkDockerVersion": "2.2-0.9.0-incubating",
+    "quickstartFlinkDockerVersion": "1.20-0.9.0-incubating",
     "paimonVersion": "1.3.1",
     "paimonVersionShort": "1.3",
     "released": false
@@ -479,10 +479,10 @@ From the root directory of the source code, run the following commands to build 
 ```bash
 $ cd docker/quickstart-flink
 docker/quickstart-flink $ docker buildx build --push --platform linux/arm64/v8,linux/amd64 \
-    --build-arg FLINK_VERSION=2.2 \
+    --build-arg FLINK_VERSION=1.20 \
     --build-arg FLUSS_VERSION=${RELEASE_VERSION} \
     --build-arg FLUSS_MAVEN_REPO_URL=https://repository.apache.org/content/repositories/orgapachefluss-<STAGING_ID>/ \
-    --tag apache/fluss-quickstart-flink:2.2-${RELEASE_VERSION}-rc${RC_NUM} .
+    --tag apache/fluss-quickstart-flink:1.20-${RELEASE_VERSION}-rc${RC_NUM} .
 ```
 
 Verify the `apache/fluss-quickstart-flink` RC image is present:
@@ -499,7 +499,7 @@ Pushing the tag triggers the Docker CI workflow, which automatically builds and 
 
 Then, update the `dockerVersion` and `quickstartFlinkDockerVersion` fields for the current release RC version in the `website/fluss-versions.json` file on the `main` branch:
 - `dockerVersion` → `${RELEASE_VERSION}-rc${RC_NUM}` (e.g., `0.9.0-incubating-rc1`)
-- `quickstartFlinkDockerVersion` → `2.2-${RELEASE_VERSION}-rc${RC_NUM}` (e.g., `2.2-0.9.0-incubating-rc1`)
+- `quickstartFlinkDockerVersion` → `1.20-${RELEASE_VERSION}-rc${RC_NUM}` (e.g., `1.20-0.9.0-incubating-rc1`)
 
 This update should be committed and pushed to the `main` branch.
 
@@ -785,12 +785,12 @@ Make sure that you are authenticated with your Docker ID, and that your Docker I
 ```bash
 docker buildx imagetools create apache/fluss:${RELEASE_VERSION}-rc${RC_NUM} --tag apache/fluss:${RELEASE_VERSION}
 
-docker buildx imagetools create apache/fluss-quickstart-flink:2.2-${RELEASE_VERSION}-rc${RC_NUM} --tag apache/fluss-quickstart-flink:2.2-${RELEASE_VERSION}
+docker buildx imagetools create apache/fluss-quickstart-flink:1.20-${RELEASE_VERSION}-rc${RC_NUM} --tag apache/fluss-quickstart-flink:1.20-${RELEASE_VERSION}
 ```
 
 ### 6. Update `fluss-versions.json`
 
-Update the `released` field to `true`, `dockerVersion` to `$RELEASE_VERSION`, and `quickstartFlinkDockerVersion` to `2.2-$RELEASE_VERSION` (both without the RC number) for the current release version in the `website/fluss-versions.json` file on the `main` branch. This update should be committed and pushed to the `main` branch.
+Update the `released` field to `true`, `dockerVersion` to `$RELEASE_VERSION`, and `quickstartFlinkDockerVersion` to `1.20-$RELEASE_VERSION` (both without the RC number) for the current release version in the `website/fluss-versions.json` file on the `main` branch. This update should be committed and pushed to the `main` branch.
 This will refresh the documentation website to reflect that the new version has been officially released.
 
 ```json
@@ -799,7 +799,7 @@ This will refresh the documentation website to reflect that the new version has 
   "fullVersion": "0.8.0-incubating",
   "shortVersion": "0.8",
   "dockerVersion": "0.8.0-incubating-rc1",             // ==> "0.8.0-incubating"
-  "quickstartFlinkDockerVersion": "2.2-0.8.0-incubating-rc1", // ==> "2.2-0.8.0-incubating"
+  "quickstartFlinkDockerVersion": "1.20-0.8.0-incubating-rc1", // ==> "1.20-0.8.0-incubating"
   "released": false                                    // ==> true
 }
 ```

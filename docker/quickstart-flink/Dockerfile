@@ -16,34 +16,25 @@
 # limitations under the License.
 #
 
-# ARG before FROM is consumed only by FROM; redeclare after FROM to use in RUN.
-ARG FLINK_VERSION=2.2
+ARG FLINK_VERSION=1.20
 
 FROM flink:${FLINK_VERSION}-java17
 
-ARG FLINK_VERSION=2.2
+ARG FLINK_VERSION=1.20
 ARG FLUSS_VERSION
 ARG FLUSS_MAVEN_REPO_URL=https://repo1.maven.org/maven2
+ARG PAIMON_VERSION=1.3.1
+ARG ICEBERG_VERSION=1.10.1
+ARG POSTGRES_VERSION=42.7.4
+ARG HADOOP_VERSION=3.3.5
 
-# Pre-install dependencies into Flink lib so that quickstart users do not need to
-# download any jars manually:
-#   - Fluss Flink connector
-#   - Fluss S3 filesystem plugin (needed for remote tiered storage in quickstart)
-#   - Flink Faker connector (for generating demo data in quickstart examples)
-#   - Flink Prometheus metrics reporter (placed in lib/ so it is on the classpath;
-#     it acts as a reporter only when explicitly configured via metrics.reporter.*)
+COPY bin/init_paimon.sh /opt/flink/init_paimon.sh
+COPY bin/init_iceberg.sh /opt/flink/init_iceberg.sh
+
+# Pre-install the dependencies used by Fluss quickstart guides so users do not
+# need to download jars manually before starting the demo environment.
 RUN set -ex; \
-    # Validate required build args early so failures are fast and actionable
-    # (otherwise a missing FLUSS_VERSION would produce a confusing 404 from Maven).
-    if [ -z "${FLUSS_VERSION}" ]; then \
-        echo "ERROR: FLUSS_VERSION build-arg is required (e.g. --build-arg FLUSS_VERSION=0.9.0-incubating)" >&2; \
-        exit 1; \
-    fi; \
-    # Fluss JARs are downloaded from the official Apache Maven repository (Maven Central
-    # for releases, ASF Snapshot repo for snapshots). Integrity is ensured by the TLS
-    # connection to the repository host and Maven Central's GPG-signed artifacts.
-    # SHA-256 pinning is not used here because the FLUSS_VERSION build-arg varies per
-    # release; instead, trust is delegated to the repository's transport security.
+    mkdir -p /opt/flink/paimon /opt/flink/iceberg; \
     curl -fL -o /opt/flink/lib/fluss-flink-${FLINK_VERSION}-${FLUSS_VERSION}.jar \
         "${FLUSS_MAVEN_REPO_URL}/org/apache/fluss/fluss-flink-${FLINK_VERSION}/${FLUSS_VERSION}/fluss-flink-${FLINK_VERSION}-${FLUSS_VERSION}.jar"; \
     curl -fL -o /opt/flink/lib/fluss-fs-s3-${FLUSS_VERSION}.jar \
@@ -51,4 +42,31 @@ RUN set -ex; \
     curl -fL -o /opt/flink/lib/flink-faker-0.5.3.jar \
         "https://github.com/knaufk/flink-faker/releases/download/v0.5.3/flink-faker-0.5.3.jar"; \
     echo "d5015905354f3580cd9a1e984501cbfca843a4ce8e9e7f6c7ff81f5abf9c5a7e  /opt/flink/lib/flink-faker-0.5.3.jar" | sha256sum -c -; \
-    cp /opt/flink/opt/flink-metrics-prometheus-*.jar /opt/flink/lib/
+    curl -fL -o /opt/flink/opt/fluss-flink-tiering-${FLUSS_VERSION}.jar \
+        "${FLUSS_MAVEN_REPO_URL}/org/apache/fluss/fluss-flink-tiering/${FLUSS_VERSION}/fluss-flink-tiering-${FLUSS_VERSION}.jar"; \
+    curl -fL -o /opt/flink/paimon/paimon-flink-${FLINK_VERSION}-${PAIMON_VERSION}.jar \
+        "https://repo1.maven.org/maven2/org/apache/paimon/paimon-flink-${FLINK_VERSION}/${PAIMON_VERSION}/paimon-flink-${FLINK_VERSION}-${PAIMON_VERSION}.jar"; \
+    curl -fL -o /opt/flink/paimon/fluss-lake-paimon-${FLUSS_VERSION}.jar \
+        "${FLUSS_MAVEN_REPO_URL}/org/apache/fluss/fluss-lake-paimon/${FLUSS_VERSION}/fluss-lake-paimon-${FLUSS_VERSION}.jar"; \
+    curl -fL -o /opt/flink/paimon/paimon-bundle-${PAIMON_VERSION}.jar \
+        "https://repo.maven.apache.org/maven2/org/apache/paimon/paimon-bundle/${PAIMON_VERSION}/paimon-bundle-${PAIMON_VERSION}.jar"; \
+    curl -fL -o /opt/flink/paimon/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar \
+        "https://repo.maven.apache.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar"; \
+    curl -fL -o /opt/flink/paimon/paimon-s3-${PAIMON_VERSION}.jar \
+        "https://repo.maven.apache.org/maven2/org/apache/paimon/paimon-s3/${PAIMON_VERSION}/paimon-s3-${PAIMON_VERSION}.jar"; \
+    curl -fL -o /opt/flink/iceberg/iceberg-flink-runtime-${FLINK_VERSION}-${ICEBERG_VERSION}.jar \
+        "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-${FLINK_VERSION}/${ICEBERG_VERSION}/iceberg-flink-runtime-${FLINK_VERSION}-${ICEBERG_VERSION}.jar"; \
+    curl -fL -o /opt/flink/iceberg/fluss-lake-iceberg-${FLUSS_VERSION}.jar \
+        "${FLUSS_MAVEN_REPO_URL}/org/apache/fluss/fluss-lake-iceberg/${FLUSS_VERSION}/fluss-lake-iceberg-${FLUSS_VERSION}.jar"; \
+    curl -fL -o /opt/flink/iceberg/iceberg-aws-${ICEBERG_VERSION}.jar \
+        "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws/${ICEBERG_VERSION}/iceberg-aws-${ICEBERG_VERSION}.jar"; \
+    curl -fL -o /opt/flink/iceberg/iceberg-aws-bundle-${ICEBERG_VERSION}.jar \
+        "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/${ICEBERG_VERSION}/iceberg-aws-bundle-${ICEBERG_VERSION}.jar"; \
+    curl -fL -o /opt/flink/iceberg/postgresql-${POSTGRES_VERSION}.jar \
+        "https://repo1.maven.org/maven2/org/postgresql/postgresql/${POSTGRES_VERSION}/postgresql-${POSTGRES_VERSION}.jar"; \
+    curl -fL -o /opt/flink/iceberg/hadoop-client-api-${HADOOP_VERSION}.jar \
+        "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-client-api/${HADOOP_VERSION}/hadoop-client-api-${HADOOP_VERSION}.jar"; \
+    curl -fL -o /opt/flink/iceberg/hadoop-client-runtime-${HADOOP_VERSION}.jar \
+        "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-client-runtime/${HADOOP_VERSION}/hadoop-client-runtime-${HADOOP_VERSION}.jar"; \
+    cp /opt/flink/opt/flink-metrics-prometheus-*.jar /opt/flink/lib/; \
+    chmod +x /opt/flink/init_paimon.sh /opt/flink/init_iceberg.sh

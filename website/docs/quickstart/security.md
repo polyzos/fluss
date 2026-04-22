@@ -623,4 +623,3 @@ CREATE TABLE `marketing_db`.`order` (
 org.apache.fluss.exception.AuthorizationException: Principal FlussPrincipal{name='finance', type='User'} have no authorization to operate CREATE on resource Resource{type=DATABASE, name='marketing_db'} 
 ```
 
-

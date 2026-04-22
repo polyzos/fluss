@@ -132,7 +132,7 @@ services:
     image: apache/fluss-quickstart-flink:$FLUSS_QUICKSTART_FLINK_DOCKER_VERSION$
     depends_on:
       - jobmanager
-    command: /opt/flink/bin/sql-client.sh
+    command: bin/sql-client.sh
     environment:
       - |
         FLINK_PROPERTIES=
@@ -148,7 +148,7 @@ The Docker Compose environment consists of the following containers:
 - **RustFS:** an S3-compatible object storage for tiered storage. You can access the RustFS console at http://localhost:9001 with credentials `rustfsadmin/rustfsadmin`. An init container (`rustfs-init`) automatically creates the `fluss` bucket on startup.
 - **Fluss Cluster:** a Fluss `CoordinatorServer`, a Fluss `TabletServer` and a `ZooKeeper` server.
    - Credentials are configured directly with `s3.access-key` and `s3.secret-key`. The `s3.assumed.role.arn` and `s3.assumed.role.sts.endpoint` options configure [AssumeRole STS](/maintenance/filesystems/s3.md#assumerole-sts-configuration) which is required by RustFS for delegation token support. Production systems should use CredentialsProvider chain specific to cloud environments.
-- **Flink Cluster**: a Flink `JobManager`, a Flink `TaskManager`, and a Flink SQL client container to execute queries. The [`apache/fluss-quickstart-flink`](https://hub.docker.com/r/apache/fluss-quickstart-flink) image bundles the Fluss Flink connector, [flink-faker](https://github.com/knaufk/flink-faker) for demo data generation, and S3 filesystem support — no extra downloads required.
+- **Flink Cluster**: a Flink `JobManager`, a Flink `TaskManager`, and a Flink SQL client container to execute queries. The [`apache/fluss-quickstart-flink`](https://hub.docker.com/r/apache/fluss-quickstart-flink) image bundles the Fluss Flink connector, [flink-faker](https://github.com/knaufk/flink-faker) for demo data generation, and S3 filesystem support, so no extra jar downloads are required for this guide.
 
 :::tip
 [RustFS](https://github.com/rustfs/rustfs) is used as replacement for S3 in this quickstart example, for your production setup you may want to configure this to use cloud file system. See [here](/maintenance/filesystems/overview.md) for information on how to setup cloud file systems
