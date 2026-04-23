@@ -16,15 +16,32 @@
 # limitations under the License.
 #
 
-{{ if .Values.serviceAccount.create }}
+{{- if include "fluss.metrics.reporter.prometheus.enabled" . }}
+{{- $prometheus := .Values.metrics.prometheus | default dict }}
+{{- $promSvc := $prometheus.service | default dict }}
 apiVersion: v1
-kind: ServiceAccount
+kind: Service
 metadata:
-  name: {{ .Values.serviceAccount.name | default (include "fluss.fullname" .) }}
+  name: {{ .Release.Name }}-coordinator-server-metrics-hs
   labels:
     {{- include "fluss.labels" . | nindent 4 }}
-  {{- with .Values.serviceAccount.annotations }}
+    app.kubernetes.io/component: metrics
+    {{- with $promSvc.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with $promSvc.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+spec:
+  clusterIP: None
+  type: ClusterIP
+  ports:
+    - name: {{ default "metrics" $promSvc.portName }}
+      protocol: TCP
+      port: {{ $prometheus.port }}
+      targetPort: {{ $prometheus.port }}
+  selector:
+    {{- include "fluss.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: coordinator
 {{- end }}

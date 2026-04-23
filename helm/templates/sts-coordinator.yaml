@@ -38,6 +38,7 @@ spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ .Values.serviceAccount.name | default (include "fluss.fullname" .) }}
       {{- end }}
+      {{- include "fluss.imagePullSecrets" . | nindent 6 }}
       {{- with .Values.coordinator.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
@@ -54,9 +55,13 @@ spec:
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.coordinator.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}-coordinator
-          image: "{{.Values.image.repository}}:{{ .Values.image.tag }}"
+          image: {{ include "fluss.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: POD_NAME
@@ -75,6 +80,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
+            {{- if (include "fluss.security.jaas.required" .) }}
+            - name: FLUSS_ENV_JAVA_OPTS
+              value: "-Djava.security.auth.login.config=/etc/fluss/conf/jaas.conf"
+            {{- end }}
           ports:
             - name: internal
               containerPort: {{ .Values.listeners.internal.port }}
@@ -110,12 +119,20 @@ spec:
             tcpSocket:
               port: {{ .Values.listeners.client.port }}
           resources:
-            {{- toYaml .Values.resources.tabletServer | nindent 12 }}
+            {{- toYaml .Values.resources.coordinatorServer | nindent 12 }}
           volumeMounts:
             - name: fluss-conf
               mountPath: /opt/conf
             - name: data
               mountPath: /tmp/fluss/data
+            {{- if (include "fluss.security.jaas.required" .) }}
+            - name: sasl-config
+              mountPath: /etc/fluss/conf
+              readOnly: true
+            {{- end }}
+            {{- with .Values.coordinator.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
       volumes:
         - name: fluss-conf
           configMap:
@@ -123,6 +140,14 @@ spec:
         {{- if not .Values.coordinator.storage.enabled }}
         - name: data
           emptyDir: {}
+        {{- end }}
+        {{- if (include "fluss.security.jaas.required" .) }}
+        - name: sasl-config
+          secret:
+            secretName: {{ include "fluss.security.jaas.configName" . }}
+        {{- end }}
+        {{- with .Values.coordinator.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
   {{- if .Values.coordinator.storage.enabled }}
   volumeClaimTemplates:

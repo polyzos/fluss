@@ -38,6 +38,7 @@ spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ .Values.serviceAccount.name | default (include "fluss.fullname" .) }}
       {{- end }}
+      {{- include "fluss.imagePullSecrets" . | nindent 6 }}
       {{- with .Values.tablet.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
@@ -54,9 +55,13 @@ spec:
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.tablet.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}-tablet
-          image: "{{.Values.image.repository}}:{{ .Values.image.tag }}"
+          image: {{ include "fluss.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: POD_NAME
@@ -71,6 +76,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            {{- if (include "fluss.security.jaas.required" .) }}
+            - name: FLUSS_ENV_JAVA_OPTS
+              value: "-Djava.security.auth.login.config=/etc/fluss/conf/jaas.conf"
+            {{- end }}
           ports:
             - name: internal
               containerPort: {{ .Values.listeners.internal.port }}
@@ -113,6 +122,14 @@ spec:
               mountPath: /opt/conf
             - name: data
               mountPath: /tmp/fluss/data
+            {{- if (include "fluss.security.jaas.required" .) }}
+            - name: sasl-config
+              mountPath: /etc/fluss/conf
+              readOnly: true
+            {{- end }}
+            {{- with .Values.tablet.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
       volumes:
         - name: fluss-conf
           configMap:
@@ -120,6 +137,14 @@ spec:
         {{- if not .Values.tablet.storage.enabled }}
         - name: data
           emptyDir: {}
+        {{- end }}
+        {{- if (include "fluss.security.jaas.required" .) }}
+        - name: sasl-config
+          secret:
+            secretName: {{ include "fluss.security.jaas.configName" . }}
+        {{- end }}
+        {{- with .Values.tablet.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
   {{- if .Values.tablet.storage.enabled }}
   volumeClaimTemplates:
