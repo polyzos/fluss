@@ -23,7 +23,7 @@
 image:
   registry: ""
   repository: apache/fluss
-  tag: "0.9.0-incubating"
+  tag: "0.9.1-incubating"
   pullPolicy: IfNotPresent
   pullSecrets: []
 
