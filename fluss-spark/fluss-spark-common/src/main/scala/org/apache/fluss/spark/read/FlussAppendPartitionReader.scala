@@ -58,7 +58,7 @@ class FlussAppendPartitionReader(
     currentRecords = scanRecords.records(tableBucket).iterator()
   }
 
-  override def next(): Boolean = {
+  override def next0(): Boolean = {
     if (closed || currentOffset >= flussPartition.stopOffset) {
       return false
     }

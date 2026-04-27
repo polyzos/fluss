@@ -60,7 +60,7 @@ class FlussLakeUpsertPartitionReader(
 
   override lazy val projectedRowType: RowType = rowType.project(projection)
 
-  override def next(): Boolean = {
+  override def next0(): Boolean = {
     if (closed || scanFinished) {
       return false
     }

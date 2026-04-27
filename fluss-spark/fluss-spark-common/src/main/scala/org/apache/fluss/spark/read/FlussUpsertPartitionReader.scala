@@ -86,7 +86,7 @@ class FlussUpsertPartitionReader(
   // initialize scanners
   initialize()
 
-  override def next(): Boolean = {
+  override def next0(): Boolean = {
     if (closed) {
       return false
     }
