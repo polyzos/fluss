@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import lightTheme from './src/utils/prismLight';
+import darkTheme from './src/utils/prismDark';
 import versionReplace from './src/plugins/remark-version-replace/index';
 import {loadVersionData} from './src/utils/versionData';
 
@@ -26,8 +26,70 @@ const { versionsMap, latestVersion } = loadVersionData();
 
 const config: Config = {
   title: 'Apache Fluss™ (Incubating)',
-  tagline: 'Streaming Storage for Real-Time Analytics & AI',
+  tagline: 'The streaming storage layer for real-time analytics and the lakehouse',
   favicon: 'img/logo/fluss_favicon.svg',
+
+  headTags: [
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'description',
+        content:
+          'Apache Fluss is an open-source columnar streaming storage system. Sub-second freshness, primary-key tables, first-class Apache Flink integration, and native tiering to Apache Iceberg and Apache Paimon.',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        property: 'og:title',
+        content: 'Apache Fluss — Streaming Storage for the Real-Time Lakehouse',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        property: 'og:description',
+        content:
+          'Open-source columnar streaming storage with sub-second freshness, primary-key tables, Flink integration, and native tiering to Iceberg and Paimon.',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        property: 'og:type',
+        content: 'website',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'twitter:card',
+        content: 'summary_large_image',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'twitter:title',
+        content: 'Apache Fluss — Streaming Storage for the Real-Time Lakehouse',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'twitter:description',
+        content:
+          'Open-source columnar streaming storage with sub-second freshness, primary-key tables, Flink integration, and native tiering to Iceberg and Paimon.',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'theme-color',
+        content: '#0B1E47',
+      },
+    },
+  ],
 
   // Set the production url of your site here
   url: 'https://fluss.apache.org/',
@@ -182,13 +244,15 @@ const config: Config = {
     image: 'img/logo/png/colored_logo.png',
     colorMode: {
       defaultMode: 'light',
-      disableSwitch: true,
+      disableSwitch: false,
+      respectPrefersColorScheme: true,
     },
     navbar: {
       title: '',
       logo: {
         alt: 'Fluss',
         src: 'img/logo/svg/colored_logo.svg',
+        srcDark: 'img/logo/svg/white_color_logo.svg',
       },
       items: [
         {
@@ -247,6 +311,48 @@ const config: Config = {
     },
     footer: {
       style: 'dark',
+      links: [
+        {
+          title: 'Product',
+          items: [
+            {label: 'Documentation', to: '/docs/quickstart/flink'},
+            {label: 'Quickstart', to: '/docs/quickstart/flink'},
+            {label: 'Roadmap', to: '/roadmap'},
+            {label: 'Downloads', to: '/downloads'},
+            {label: 'Blog', to: '/blog'},
+          ],
+        },
+        {
+          title: 'Community',
+          items: [
+            {label: 'GitHub', href: 'https://github.com/apache/fluss'},
+            {label: 'Slack', href: 'https://join.slack.com/t/apache-fluss/shared_invite/zt-33wlna581-QAooAiCmnYboJS8D_JUcYw'},
+            {label: 'Welcome', to: '/community/welcome'},
+            {label: 'Contribute', to: '/community/welcome'},
+          ],
+        },
+        {
+          title: 'Resources',
+          items: [
+            {label: 'Talks', to: '/learn/talks'},
+            {label: 'Videos', to: '/learn/videos'},
+            {label: 'Issues', href: 'https://github.com/apache/fluss/issues'},
+            {label: 'Releases', href: 'https://github.com/apache/fluss/releases'},
+          ],
+        },
+        {
+          title: 'Apache',
+          items: [
+            {label: 'Foundation', href: 'https://www.apache.org/'},
+            {label: 'License', href: 'https://www.apache.org/licenses/'},
+            {label: 'Events', href: 'https://events.apache.org'},
+            {label: 'Donate', href: 'https://www.apache.org/foundation/sponsorship.html'},
+            {label: 'Sponsors', href: 'https://www.apache.org/foundation/thanks.html'},
+            {label: 'Security', href: 'https://www.apache.org/security/'},
+            {label: 'Privacy', href: 'https://privacy.apache.org/policies/privacy-policy-public.html'},
+          ],
+        },
+      ],
       logo: {
         width: 200,
         src: "/img/apache-incubator.svg",
@@ -259,7 +365,7 @@ const config: Config = {
     },
     prism: {
       theme: lightTheme,
-      darkTheme: prismThemes.dracula,
+      darkTheme: darkTheme,
       additionalLanguages: ['java', 'bash', 'scala']
     },
     algolia: {
