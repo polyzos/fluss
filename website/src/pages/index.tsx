@@ -352,19 +352,19 @@ function SystemsTaxSection() {
     const beforeStack = [
         {
             label: 'Message broker',
-            sub: 'Kafka — for streaming event transport.',
+            sub: 'Kafka, for streaming event transport.',
         },
         {
             label: 'Stream processor',
-            sub: 'Flink or Spark — for derived features and aggregations.',
+            sub: 'Flink or Spark, for derived features and aggregations.',
         },
         {
             label: 'Online store',
-            sub: 'Redis or DynamoDB — for sub-millisecond feature lookup.',
+            sub: 'Redis or DynamoDB, for sub-millisecond feature lookup.',
         },
         {
             label: 'Offline store',
-            sub: 'Iceberg or Parquet on S3 — for training and history.',
+            sub: 'Iceberg or Parquet on S3, for training and history.',
         },
         {
             label: 'Sync layer',
@@ -373,12 +373,12 @@ function SystemsTaxSection() {
     ];
 
     const afterRequirements = [
-        'Event log — durable, replayable, offset-ordered.',
-        'KV store — sub-millisecond point lookups on the same leader.',
-        'Streaming compute substrate — leader-resident state, no Flink slot state.',
-        'Cold archive — open-format tiering to Iceberg / Paimon / Lance.',
-        'Vector-compatible layer — multi-modal context for ML and AI.',
-        'First-class audit trail — deterministic, replayable by design.',
+        'Event log: durable, replayable, offset-ordered.',
+        'KV store: sub-millisecond point lookups on the same leader.',
+        'Streaming compute substrate: leader-resident state, no Flink slot state.',
+        'Cold archive: open-format tiering to Iceberg / Paimon / Lance.',
+        'Vector-compatible layer: multi-modal context for ML and AI.',
+        'First-class audit trail: deterministic, replayable by design.',
     ];
 
     return (
@@ -400,7 +400,7 @@ function SystemsTaxSection() {
                 <div className={styles.taxGrid}>
                     <div className={styles.taxColumn}>
                         <span className={clsx(styles.taxLabel, styles.taxLabelBefore)}>
-                            Before — fragmented stack
+                            Before · fragmented stack
                         </span>
                         <div className={styles.taxStack}>
                             {beforeStack.map((s, i) => (
@@ -441,7 +441,7 @@ function SystemsTaxSection() {
 
                     <div className={styles.taxColumn}>
                         <span className={clsx(styles.taxLabel, styles.taxLabelAfter)}>
-                            After — unified substrate
+                            After · unified substrate
                         </span>
                         <div className={styles.taxAfterCard}>
                             <div className={styles.taxAfterHeader}>
@@ -502,12 +502,6 @@ function CompareSection() {
             lake: 'Not designed for it',
             fluss: 'Built-in lookups & upserts',
         },
-        {
-            label: 'Governance',
-            kafka: 'Vendor / ASF (Kafka)',
-            lake: 'ASF (Iceberg/Paimon)',
-            fluss: 'Apache Software Foundation',
-        },
     ];
 
     return (
@@ -516,7 +510,7 @@ function CompareSection() {
                 <div className={styles.sectionHeader}>
                     <span className={styles.eyebrow}>Where Fluss fits</span>
                     <h2 className={styles.sectionTitle}>
-                        Streams, tables, and the lake — in one storage layer.
+                        Streams, tables, and the lake, in one storage layer.
                     </h2>
                     <p className={styles.sectionLead}>
                         Kafka is great for transport. The lakehouse is great for analytics.
@@ -562,7 +556,7 @@ function FlinkSection() {
                         <h2 className={styles.sectionTitle}>Flink&apos;s natural storage layer.</h2>
                         <p className={styles.sectionLead}>
                             Apache Fluss is designed to be a first-class storage layer for
-                            Apache Flink — as a source, sink, lookup-join target, and
+                            Apache Flink as a source, sink, lookup-join target, and
                             CDC-friendly substrate. Define a catalog, point at Fluss, and
                             you have streaming and analytical access on the same tables.
                         </p>
@@ -681,7 +675,7 @@ function QuickstartSection() {
   `}<span className="tk-string">'bootstrap.servers'</span>{` = `}<span className="tk-string">'localhost:9123'</span>{`
 );
 
-`}<span className="tk-comment"># 3. You're streaming and querying — on the same table.</span>
+`}<span className="tk-comment"># 3. You're streaming and querying, on the same table.</span>
                     </pre>
                 </div>
 

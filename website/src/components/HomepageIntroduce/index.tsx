@@ -28,22 +28,22 @@ type ValueProp = {
 const VALUE_PROPS: ValueProp[] = [
   {
     title: 'Sub-second freshness',
-    body: 'Columnar streaming storage means analytics, features, and agents see new rows in seconds — no commit lag, no batch window, no lambda layer.',
+    body: 'Columnar streaming over Apache Arrow, with server-side projection and predicate pushdown. Analytics, features, and agents see new rows in seconds. No commit lag, no batch window, no lambda layer.',
     Icon: require('@site/static/img/feature_real_time.svg').default,
   },
   {
     title: 'One copy across hot and cold',
-    body: 'The hot Fluss tier and the cold open-format tier (Iceberg, Paimon, Lance) share a logical schema. One union read; one source of truth.',
+    body: 'The hot Fluss tier and the cold open-format tier (Iceberg, Paimon, Lance) share a logical schema with synchronised metadata. One union read; one source of truth.',
     Icon: require('@site/static/img/feature_lake.svg').default,
   },
   {
     title: 'Logs + tables on one substrate',
-    body: 'Append-only logs for events. Primary-key tables for live state. Sub-millisecond point lookups served from the same leader that owns the log.',
+    body: 'PK Tables hold both an append-only log for events and a leader-side RocksDB KV view for live state. Sub-millisecond point lookups served from the same TabletServer that owns the log.',
     Icon: require('@site/static/img/feature_update.svg').default,
   },
   {
     title: 'Stateless, elastic compute',
-    body: 'State lives on the Fluss leader, not in Flink task slots. Recovery collapses from minutes to seconds; topologies cost up to 85% less than Kafka-based equivalents.',
+    body: 'State lives on the Fluss leader, not in Flink task slots. Recovery collapses from minutes to seconds; topologies run up to 85% cheaper than comparable Kafka-based equivalents.',
     Icon: require('@site/static/img/feature_lookup.svg').default,
   },
 ];
@@ -67,13 +67,13 @@ export default function HomepageIntroduce(): JSX.Element {
         <div className={styles.header}>
           <span className={styles.eyebrow}>What is Apache Fluss?</span>
           <Heading as="h2" className={styles.title}>
-            One substrate. Streams, tables, and the lake.
+            One Platform. Streams, tables, and the lake.
           </Heading>
           <p className={styles.lead}>
             <b>Apache Fluss (Incubating)</b> is an open-source columnar streaming
             storage system. It collapses the message broker, online KV store,
             stream-processing state backend, and lakehouse offline store into a
-            single coherent foundation — so the systems above it don&apos;t have
+            single coherent foundation, so the systems above it don&apos;t have
             to keep them in sync.
           </p>
         </div>

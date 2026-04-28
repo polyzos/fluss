@@ -16,8 +16,12 @@
  */
 
 .introduce {
+  position: relative;
   padding: var(--fluss-space-24) 0;
-  background: var(--fluss-canvas);
+  background:
+    radial-gradient(1100px 480px at 100% 0%, rgba(34, 211, 238, 0.06), transparent 60%),
+    radial-gradient(900px 460px at 0% 100%, rgba(37, 99, 235, 0.06), transparent 60%),
+    var(--fluss-canvas);
 }
 
 .container {
@@ -33,13 +37,28 @@
 }
 
 .eyebrow {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: var(--fluss-radius-pill);
+  background: var(--fluss-blue-50);
+  border: 1px solid rgba(37, 99, 235, 0.18);
   color: var(--fluss-blue-700);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-family: var(--fluss-font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  margin-bottom: var(--fluss-space-3);
+  margin-bottom: var(--fluss-space-4);
+}
+
+.eyebrow::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: linear-gradient(120deg, var(--fluss-blue-600), var(--fluss-cyan));
 }
 
 .title {
@@ -76,23 +95,41 @@
 }
 
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--fluss-space-3);
   padding: var(--fluss-space-8) var(--fluss-space-6);
-  background: var(--fluss-paper);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7) 0%, transparent 60%),
+    var(--fluss-paper);
   border: 1px solid var(--fluss-ink-100);
   border-radius: var(--fluss-radius-lg);
   box-shadow: var(--fluss-shadow-sm);
+  overflow: hidden;
   transition: transform var(--fluss-motion-base) var(--fluss-ease-out),
               box-shadow var(--fluss-motion-base) var(--fluss-ease-out),
               border-color var(--fluss-motion-base) var(--fluss-ease-out);
 }
 
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--fluss-blue-600), var(--fluss-cyan));
+  opacity: 0;
+  transition: opacity var(--fluss-motion-base) var(--fluss-ease-out);
+}
+
 .card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   box-shadow: var(--fluss-shadow-md);
   border-color: var(--fluss-blue-300);
+}
+
+.card:hover::before {
+  opacity: 1;
 }
 
 .cardIcon {
@@ -102,8 +139,9 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--fluss-radius-md);
-  background: var(--fluss-blue-50);
+  background: linear-gradient(135deg, var(--fluss-blue-50) 0%, rgba(34, 211, 238, 0.16) 100%);
   color: var(--fluss-blue-700);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
 }
 
 .cardIcon svg {
