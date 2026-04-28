@@ -194,7 +194,7 @@
     height: 18px;
 }
 
-/* Hero diagram (right column) — aspect-ratio matches the SVG viewBox (620:480) */
+/* Hero diagram (right column). Aspect-ratio matches the SVG viewBox (620:480). */
 .heroDiagram {
     position: relative;
     width: 100%;
@@ -270,7 +270,13 @@
    Generic section primitives
    ========================================================================= */
 .section {
+    position: relative;
     padding: var(--fluss-space-24) 0;
+    /* Soft radial wash to give plain sections a designed feel in light mode */
+    background:
+        radial-gradient(1100px 480px at 80% 0%, rgba(34, 211, 238, 0.05), transparent 60%),
+        radial-gradient(900px 460px at 0% 100%, rgba(37, 99, 235, 0.05), transparent 60%),
+        var(--fluss-canvas);
 }
 
 .sectionTight {
@@ -283,20 +289,39 @@
 }
 
 .sectionWash {
-    background: var(--fluss-blue-50);
+    background:
+        radial-gradient(1000px 460px at 50% 0%, rgba(34, 211, 238, 0.08), transparent 60%),
+        var(--fluss-blue-50);
 }
 
 .eyebrow {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: var(--fluss-radius-pill);
+    background: var(--fluss-blue-50);
+    border: 1px solid rgba(37, 99, 235, 0.18);
     color: var(--fluss-blue-700);
-    font-size: 0.8125rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
+    font-family: var(--fluss-font-display);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    margin-bottom: var(--fluss-space-3);
+    margin-bottom: var(--fluss-space-4);
+}
+
+.eyebrow::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: linear-gradient(120deg, var(--fluss-blue-600), var(--fluss-cyan));
 }
 
 .sectionDark .eyebrow {
+    background: rgba(34, 211, 238, 0.1);
+    border-color: rgba(34, 211, 238, 0.28);
     color: var(--fluss-cyan);
 }
 
@@ -349,11 +374,21 @@
    Comparison matrix
    ========================================================================= */
 .compareWrap {
+    position: relative;
     border-radius: var(--fluss-radius-xl);
     overflow: hidden;
     border: 1px solid var(--fluss-ink-100);
     background: var(--fluss-paper);
-    box-shadow: var(--fluss-shadow-md);
+    box-shadow: var(--fluss-shadow-lg);
+}
+
+.compareWrap::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--fluss-blue-600), var(--fluss-cyan));
+    z-index: 1;
 }
 
 .compareTable {
@@ -377,11 +412,28 @@
     color: #FFFFFF;
 }
 
+.compareTable tbody tr {
+    transition: background-color var(--fluss-motion-fast) var(--fluss-ease-out);
+}
+
+.compareTable tbody tr:hover td {
+    background-color: rgba(37, 99, 235, 0.04);
+}
+
+.compareTable tbody tr:hover td:first-child {
+    background-color: rgba(37, 99, 235, 0.06);
+}
+
+.compareTable tbody tr:hover td.colHighlight {
+    background-color: rgba(37, 99, 235, 0.14);
+}
+
 .compareTable tbody td {
     padding: var(--fluss-space-4) var(--fluss-space-5);
     border-top: 1px solid var(--fluss-ink-100);
     vertical-align: top;
     color: var(--fluss-ink-700);
+    transition: background-color var(--fluss-motion-fast) var(--fluss-ease-out);
 }
 
 .compareTable tbody td:first-child {
@@ -505,10 +557,14 @@
 }
 
 .freshTile {
+    position: relative;
     padding: var(--fluss-space-6);
     border-radius: var(--fluss-radius-lg);
-    background: var(--fluss-paper);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, transparent 60%),
+        var(--fluss-paper);
     border: 1px solid var(--fluss-ink-100);
+    box-shadow: var(--fluss-shadow-sm);
     transition: transform var(--fluss-motion-base) var(--fluss-ease-out),
                 box-shadow var(--fluss-motion-base) var(--fluss-ease-out),
                 border-color var(--fluss-motion-base) var(--fluss-ease-out);

@@ -42,7 +42,7 @@ const config: Config = {
       tagName: 'meta',
       attributes: {
         property: 'og:title',
-        content: 'Apache Fluss — Streaming Storage for the Real-Time Lakehouse',
+        content: 'Apache Fluss · Streaming Storage for the Real-Time Lakehouse',
       },
     },
     {
@@ -71,7 +71,7 @@ const config: Config = {
       tagName: 'meta',
       attributes: {
         name: 'twitter:title',
-        content: 'Apache Fluss — Streaming Storage for the Real-Time Lakehouse',
+        content: 'Apache Fluss · Streaming Storage for the Real-Time Lakehouse',
       },
     },
     {
@@ -200,16 +200,16 @@ const config: Config = {
     [
       '@docusaurus/plugin-pwa',
       {
-          debug: true,
+          debug: false,
           offlineModeActivationStrategies: [
             'appInstalled',
             'standalone',
             'queryString',
           ],
           pwaHead: [
-            { tagName: 'link', rel: 'icon', href: '/img/logo.svg' },
+            { tagName: 'link', rel: 'icon', href: '/img/logo/svg/colored_logo.svg' },
             { tagName: 'link', rel: 'manifest', href: '/manifest.json' },
-            { tagName: 'meta', name: 'theme-color', content: '#0071e3' },
+            { tagName: 'meta', name: 'theme-color', content: '#0B1E47' },
           ],
       },
     ],
@@ -245,7 +245,7 @@ const config: Config = {
     colorMode: {
       defaultMode: 'light',
       disableSwitch: false,
-      respectPrefersColorScheme: true,
+      respectPrefersColorScheme: false,
     },
     navbar: {
       title: '',

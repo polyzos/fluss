@@ -111,7 +111,7 @@
   --fluss-container-pad: 24px;
 
   /* =====================================================================
-     Infima overrides — wire tokens into Docusaurus
+     Infima overrides : wire tokens into Docusaurus
      ===================================================================== */
   --ifm-font-family-base: var(--fluss-font-sans);
   --ifm-heading-font-family: var(--fluss-font-display);
@@ -684,7 +684,7 @@ div[class*='announcementBar'] a {
 }
 
 /* -------------------------------------------------------------------------
-   Doc page layout — sidebar / main / TOC
+   Doc page layout : sidebar / main / TOC
    ------------------------------------------------------------------------- */
 .theme-doc-sidebar-container {
   border-right: 1px solid var(--fluss-ink-100);
@@ -844,7 +844,7 @@ div[class*='announcementBar'] a {
   color: var(--fluss-blue-600);
 }
 
-/* Doc page title (h1) — refined */
+/* Doc page title (h1) : refined */
 header.theme-doc-markdown h1,
 .theme-doc-markdown > article > header > h1 {
   font-family: var(--fluss-font-display);
@@ -1149,7 +1149,7 @@ details[open] > summary::before {
 }
 
 /* -------------------------------------------------------------------------
-   Headings — anchor offset for sticky navbar
+   Headings : anchor offset for sticky navbar
    ------------------------------------------------------------------------- */
 .theme-doc-markdown h1,
 .theme-doc-markdown h2,
@@ -1202,7 +1202,7 @@ div[class*='docVersionBanner'] a {
 }
 
 /* -------------------------------------------------------------------------
-   Blog — list page (cards)
+   Blog : list page (cards)
    ------------------------------------------------------------------------- */
 .blog-list-page article,
 article[itemtype='https://schema.org/BlogPosting'] {
@@ -1398,7 +1398,7 @@ main.container .row .col h1.hero__title {
 }
 
 /* -------------------------------------------------------------------------
-   Buttons (Infima primary / outline) — global refresh
+   Buttons (Infima primary / outline) : global refresh
    ------------------------------------------------------------------------- */
 .button.button--primary {
   background: var(--fluss-blue-600);
@@ -1556,7 +1556,7 @@ article > header:first-of-type + .markdown > p:first-of-type {
 }
 
 /* -------------------------------------------------------------------------
-   Markdown body — generous reading rhythm
+   Markdown body : generous reading rhythm
    ------------------------------------------------------------------------- */
 .theme-doc-markdown,
 .markdown {
@@ -1717,7 +1717,7 @@ kbd {
 }
 
 /* -------------------------------------------------------------------------
-   Premium sidebar — sliding active indicator
+   Premium sidebar : sliding active indicator
    ------------------------------------------------------------------------- */
 .theme-doc-sidebar-container {
   background:
@@ -1750,7 +1750,7 @@ kbd {
   box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
 }
 
-/* Top-level category labels — Linear-ish eyebrow style */
+/* Top-level category labels : Linear-ish eyebrow style */
 .theme-doc-sidebar-menu > .menu__list-item > .menu__link--sublist,
 .theme-doc-sidebar-menu > .menu__list-item > .menu__list-item-collapsible > .menu__link {
   font-family: var(--fluss-font-display);
@@ -1820,7 +1820,7 @@ kbd {
 }
 
 /* -------------------------------------------------------------------------
-   Doc footer — "edit this page" + last-updated as buttons
+   Doc footer : "edit this page" + last-updated as buttons
    ------------------------------------------------------------------------- */
 .theme-doc-footer {
   padding: var(--fluss-space-5);
@@ -1883,7 +1883,7 @@ div[class*='codeBlockContainer'] button[class*='copyButton']:not(:hover) {
   opacity: 0.85;
 }
 
-/* Language label in the corner — synthetic via data-attr if title not set */
+/* Language label in the corner : synthetic via data-attr if title not set */
 div[class*='codeBlockContainer']::before {
   content: attr(data-language);
   position: absolute;
@@ -1900,7 +1900,7 @@ div[class*='codeBlockContainer']::before {
 }
 
 /* -------------------------------------------------------------------------
-   Blog list — featured first post + editorial polish
+   Blog list : featured first post + editorial polish
    ------------------------------------------------------------------------- */
 main[class*='blogListPage'] article:first-of-type,
 .blog-list-page > article:first-of-type {
@@ -1937,14 +1937,14 @@ main[class*='blogListPage'] article:first-of-type::before,
   text-transform: uppercase;
 }
 
-/* Blog post titles — display font in cards */
+/* Blog post titles : display font in cards */
 article[itemtype='https://schema.org/BlogPosting'] header h2,
 .blog-list-page article header h2 {
   font-family: var(--fluss-font-display);
   letter-spacing: -0.018em;
 }
 
-/* Blog post meta row — compact, calm */
+/* Blog post meta row : compact, calm */
 .blog-list-page article header > div:not([class*='blogPostTags']),
 article[itemtype='https://schema.org/BlogPosting'] header > div:not([class*='blogPostTags']) {
   font-size: 0.85rem;
@@ -1966,7 +1966,7 @@ a[class*='readMore']:hover::after {
 }
 
 /* -------------------------------------------------------------------------
-   Blog post page — editorial header
+   Blog post page : editorial header
    ------------------------------------------------------------------------- */
 .blog-post-page-no-sidebar article > header,
 main[class*='blogPostPage'] article > header {
@@ -1987,7 +1987,7 @@ main[class*='blogPostPage'] article > header h1 {
   color: var(--fluss-ink-950);
 }
 
-/* Author row — bigger, card-like */
+/* Author row : bigger, card-like */
 .blog-post-page-no-sidebar article > header > div[class*='authorRow'],
 main[class*='blogPostPage'] article > header > div[class*='authorRow'] {
   margin-top: var(--fluss-space-5);
@@ -2129,7 +2129,7 @@ ul[class*='tag'] li {
 
 /* =========================================================================
    ========================================================================
-   HOMEPAGE NAVBAR — transparent over hero, solid otherwise
+   HOMEPAGE NAVBAR : transparent over hero, solid otherwise
    Driven by body.fluss-on-hero (set by IntersectionObserver in index.tsx).
    ========================================================================
    ========================================================================= */
@@ -2176,7 +2176,7 @@ body.fluss-on-hero[data-theme='light'] .navbar__logo img {
   content: url('/img/logo/svg/white_color_logo.svg');
 }
 
-/* Search button on the hero — translucent glass */
+/* Search button on the hero : translucent glass */
 body.fluss-on-hero .DocSearch-Button {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.2);
@@ -2219,7 +2219,7 @@ body.fluss-home:not(.fluss-on-hero)[data-theme='dark'] .navbar {
 
 /* =========================================================================
    ========================================================================
-   COLOR MODE TOGGLE — branded sun/moon button
+   COLOR MODE TOGGLE : branded sun/moon button
    ========================================================================
    ========================================================================= */
 
@@ -2273,7 +2273,7 @@ body.fluss-on-hero button.clean-btn[class*='toggle']:hover {
 
 /* =========================================================================
    ========================================================================
-   DARK MODE — full token remap + component overrides
+   DARK MODE : full token remap + component overrides
    Triggered by [data-theme='dark'] on <html>.
    ========================================================================
    ========================================================================= */
@@ -2299,7 +2299,7 @@ body.fluss-on-hero button.clean-btn[class*='toggle']:hover {
   --fluss-blue-700: #93C5FD;
   --fluss-blue-800: #DBEAFE;
 
-  /* Shadows on dark — softer, warmer */
+  /* Shadows on dark : softer, warmer */
   --fluss-shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.4);
   --fluss-shadow-md:   0 4px 16px rgba(0, 0, 0, 0.4);
   --fluss-shadow-lg:   0 16px 48px rgba(0, 0, 0, 0.5);
@@ -2824,7 +2824,7 @@ body.fluss-on-hero button.clean-btn[class*='toggle']:hover {
 
 /* =========================================================================
    ========================================================================
-   RESPONSIVE — small viewport refinements (any device)
+   RESPONSIVE : small viewport refinements (any device)
    ========================================================================
    ========================================================================= */
 
@@ -2910,7 +2910,7 @@ body.fluss-on-hero button.clean-btn[class*='toggle']:hover {
   }
 }
 
-/* Very small screens — squeeze the navbar items so they don't overflow */
+/* Very small screens : squeeze the navbar items so they don't overflow */
 @media (max-width: 480px) {
   .navbar__items--right .navbar-ask-ai {
     padding: 4px 8px;
@@ -2920,7 +2920,7 @@ body.fluss-on-hero button.clean-btn[class*='toggle']:hover {
 
 /* =========================================================================
    ========================================================================
-   HOMEPAGE — dark-mode adjustments for sections that hardcode blue-950
+   HOMEPAGE : dark-mode adjustments for sections that hardcode blue-950
    ========================================================================
    ========================================================================= */
 
@@ -2940,7 +2940,7 @@ body.fluss-on-hero button.clean-btn[class*='toggle']:hover {
     linear-gradient(180deg, #0B1E47 0%, #06122B 100%);
 }
 
-/* Wash sections in dark mode — replace the very faint blue tint with a
+/* Wash sections in dark mode : replace the very faint blue tint with a
    slightly more visible blue glow so the band is legible. */
 [data-theme='dark'] section[class*='sectionWash'] {
   background:
@@ -2997,7 +2997,7 @@ body.fluss-on-hero button.clean-btn[class*='toggle']:hover {
   color: #CBD5E1;
 }
 
-/* Code card in dark mode — slightly lifted so it stands above canvas */
+/* Code card in dark mode : slightly lifted so it stands above canvas */
 [data-theme='dark'] div[class*='codeCard'] {
   background: linear-gradient(180deg, #0B1E47 0%, #06122B 100%);
   border-color: rgba(255, 255, 255, 0.08);
@@ -3068,4 +3068,68 @@ body.fluss-on-hero button.clean-btn[class*='toggle']:hover {
 
 [data-theme='dark'] p[class*='taxFootnote'] {
   color: #94A3B8;
+}
+
+/* =========================================================================
+   Light-mode-only enhancements that need to be neutralised in dark mode
+   ========================================================================= */
+
+/* The card resting white-tint gradient is meant for light mode. In dark
+   mode it would lighten the card top awkwardly — strip it. */
+[data-theme='dark'] section[class*='introduce'] div[class*='card'],
+[data-theme='dark'] section[class*='features'] article[class*='card'],
+[data-theme='dark'] div[class*='freshTile']:not([class*='freshTileHighlight']) {
+  background: var(--fluss-paper);
+}
+
+/* Section background washes use white-leaning gradients in light mode.
+   In dark mode the canvas already provides the deep blue, but we want
+   subtle blue-tinted radial highlights on plain sections instead. */
+[data-theme='dark'] section[class*='introduce'],
+[data-theme='dark'] section[class*='features'] {
+  background:
+    radial-gradient(1100px 480px at 100% 0%, rgba(96, 165, 250, 0.1), transparent 60%),
+    radial-gradient(900px 460px at 0% 100%, rgba(96, 165, 250, 0.08), transparent 60%),
+    var(--fluss-canvas);
+  border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Generic .section radial wash on light mode — recolour for dark */
+[data-theme='dark'] section[class*='section'][class*='index_section'],
+[data-theme='dark'] section[class*='index_section'] {
+  background:
+    radial-gradient(1100px 480px at 80% 0%, rgba(96, 165, 250, 0.08), transparent 60%),
+    radial-gradient(900px 460px at 0% 100%, rgba(96, 165, 250, 0.08), transparent 60%),
+    var(--fluss-canvas);
+}
+
+/* Eyebrow chip override for dark mode — the auto-mapped background is
+   already a translucent blue, but the border needs darkening too. */
+[data-theme='dark'] span[class*='eyebrow'] {
+  border-color: rgba(96, 165, 250, 0.28);
+}
+
+/* Card icon gradient is meant for light. Re-tone for dark. */
+[data-theme='dark'] div[class*='cardIcon'],
+[data-theme='dark'] div[class*='iconWrap'] {
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.18) 0%, rgba(34, 211, 238, 0.18) 100%);
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.22);
+  color: #BFDBFE;
+}
+
+/* Comparison-table accent bar visible against dark surface */
+[data-theme='dark'] div[class*='compareWrap']::before {
+  background: linear-gradient(90deg, var(--fluss-blue-500), var(--fluss-cyan));
+}
+
+[data-theme='dark'] table[class*='compareTable'] tbody tr:hover td {
+  background-color: rgba(96, 165, 250, 0.08);
+}
+
+[data-theme='dark'] table[class*='compareTable'] tbody tr:hover td:first-child {
+  background-color: rgba(96, 165, 250, 0.12);
+}
+
+[data-theme='dark'] table[class*='compareTable'] tbody tr:hover td[class*='colHighlight'] {
+  background-color: rgba(96, 165, 250, 0.2);
 }
