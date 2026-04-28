@@ -17,37 +17,45 @@
 
 import clsx from 'clsx';
 import Heading from '@theme/Heading';
-import Link from '@docusaurus/Link';
 import styles from './styles.module.css';
 
-type IntroduceItem = {
+type ValueProp = {
   title: string;
-  description: JSX.Element;
-  Svg: React.ComponentType<React.ComponentProps<'svg'>>;
+  body: string;
+  Icon: React.ComponentType<React.ComponentProps<'svg'>>;
 };
 
-const IntroduceList: IntroduceItem[] = [
+const VALUE_PROPS: ValueProp[] = [
   {
-    description: (
-      <>
-        <b>Apache Fluss (Incubating)</b> is a streaming storage built for real-time analytics & AI which can serve as the real-time data layer for Lakehouse architectures. With its columnar stream and real-time update capabilities, Fluss integrates seamlessly with Apache Flink to enable high-throughput, low-latency, cost-effective streaming data warehouses tailored for real-time applications.
-      </>
-    ),
-    image: require('@site/static/img/fluss.png').default,
-  }
+    title: 'Sub-second freshness',
+    body: 'Columnar streaming storage means analytics, features, and agents see new rows in seconds — no commit lag, no batch window, no lambda layer.',
+    Icon: require('@site/static/img/feature_real_time.svg').default,
+  },
+  {
+    title: 'One copy across hot and cold',
+    body: 'The hot Fluss tier and the cold open-format tier (Iceberg, Paimon, Lance) share a logical schema. One union read; one source of truth.',
+    Icon: require('@site/static/img/feature_lake.svg').default,
+  },
+  {
+    title: 'Logs + tables on one substrate',
+    body: 'Append-only logs for events. Primary-key tables for live state. Sub-millisecond point lookups served from the same leader that owns the log.',
+    Icon: require('@site/static/img/feature_update.svg').default,
+  },
+  {
+    title: 'Stateless, elastic compute',
+    body: 'State lives on the Fluss leader, not in Flink task slots. Recovery collapses from minutes to seconds; topologies cost up to 85% less than Kafka-based equivalents.',
+    Icon: require('@site/static/img/feature_lookup.svg').default,
+  },
 ];
 
-
-function Introduce({title, description, image}: IntroduceItem) {
+function ValuePropCard({title, body, Icon}: ValueProp) {
   return (
-    <div className={clsx('col col--8')}>
-      <div className="text--center padding-horiz--md">
-        <Heading as="h1">{title}</Heading>
-        <p>{description}</p>
+    <div className={styles.card}>
+      <div className={styles.cardIcon} aria-hidden="true">
+        <Icon role="img" />
       </div>
-      <div className="text--center">
-        <img src={image} />
-      </div>
+      <Heading as="h3" className={styles.cardTitle}>{title}</Heading>
+      <p className={styles.cardBody}>{body}</p>
     </div>
   );
 }
@@ -55,13 +63,25 @@ function Introduce({title, description, image}: IntroduceItem) {
 export default function HomepageIntroduce(): JSX.Element {
   return (
     <section className={styles.introduce}>
-      <div className="container">
-        <div className="row">
-          <div className={clsx('col col--2')}></div>
-          {IntroduceList.map((props, idx) => (
-            <Introduce key={idx} {...props} />
+      <div className={clsx('container', styles.container)}>
+        <div className={styles.header}>
+          <span className={styles.eyebrow}>What is Apache Fluss?</span>
+          <Heading as="h2" className={styles.title}>
+            One substrate. Streams, tables, and the lake.
+          </Heading>
+          <p className={styles.lead}>
+            <b>Apache Fluss (Incubating)</b> is an open-source columnar streaming
+            storage system. It collapses the message broker, online KV store,
+            stream-processing state backend, and lakehouse offline store into a
+            single coherent foundation — so the systems above it don&apos;t have
+            to keep them in sync.
+          </p>
+        </div>
+
+        <div className={styles.grid}>
+          {VALUE_PROPS.map((vp) => (
+            <ValuePropCard key={vp.title} {...vp} />
           ))}
-          <div className={clsx('col col--2')}></div>
         </div>
       </div>
     </section>

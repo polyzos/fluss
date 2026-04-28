@@ -16,12 +16,115 @@
  */
 
 .introduce {
-  display: flex;
-  align-items: center;
-  padding: 2rem 0;
-  width: 100%;
+  padding: var(--fluss-space-24) 0;
+  background: var(--fluss-canvas);
+}
 
-  h1 {
-    font-size: 2.5rem;
-  }
+.container {
+  max-width: var(--fluss-container-max);
+  margin: 0 auto;
+  padding: 0 var(--fluss-container-pad);
+}
+
+.header {
+  text-align: center;
+  max-width: 760px;
+  margin: 0 auto var(--fluss-space-16);
+}
+
+.eyebrow {
+  display: inline-block;
+  color: var(--fluss-blue-700);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: var(--fluss-space-3);
+}
+
+.title {
+  font-family: var(--fluss-font-display);
+  font-size: clamp(2rem, 3vw + 1rem, 3rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  color: var(--fluss-ink-950);
+  margin: 0 0 var(--fluss-space-4);
+}
+
+.lead {
+  font-size: 1.125rem;
+  line-height: 1.65;
+  color: var(--fluss-ink-700);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--fluss-space-4);
+}
+
+@media (max-width: 1100px) {
+  .grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 600px) {
+  .grid { grid-template-columns: 1fr; }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fluss-space-3);
+  padding: var(--fluss-space-8) var(--fluss-space-6);
+  background: var(--fluss-paper);
+  border: 1px solid var(--fluss-ink-100);
+  border-radius: var(--fluss-radius-lg);
+  box-shadow: var(--fluss-shadow-sm);
+  transition: transform var(--fluss-motion-base) var(--fluss-ease-out),
+              box-shadow var(--fluss-motion-base) var(--fluss-ease-out),
+              border-color var(--fluss-motion-base) var(--fluss-ease-out);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--fluss-shadow-md);
+  border-color: var(--fluss-blue-300);
+}
+
+.cardIcon {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--fluss-radius-md);
+  background: var(--fluss-blue-50);
+  color: var(--fluss-blue-700);
+}
+
+.cardIcon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.cardTitle {
+  font-family: var(--fluss-font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  color: var(--fluss-ink-950);
+  margin: 0;
+}
+
+.cardBody {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--fluss-ink-500);
+  margin: 0;
+  text-wrap: pretty;
 }

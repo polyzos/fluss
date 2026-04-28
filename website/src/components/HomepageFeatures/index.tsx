@@ -20,79 +20,108 @@ import React from 'react';
 import styles from './styles.module.css';
 import Heading from '@theme/Heading';
 
-
-type FeatureItem = {
-  title: string;
-  content: string;
-  Svg: React.ComponentType<React.ComponentProps<'svg'>>;
+type Pillar = {
+    number: string;
+    title: string;
+    summary: string;
+    body: string;
+    basis: string;
+    Svg: React.ComponentType<React.ComponentProps<'svg'>>;
 };
 
-const FeatureList: FeatureItem[] = [
+const PILLARS: Pillar[] = [
     {
-        title: 'Sub-Second Data Freshness',
-        content:
-            'Continuous ingestion and immediate availability of data enable low-latency analytics and real-time decision-making at scale.',
-        Svg: require('@site/static/img/feature_real_time.svg').default
+        number: '01',
+        title: 'Unified Architecture',
+        summary: 'One system for messaging, applications, analytics, and AI.',
+        body: 'Consolidates the roles previously played by a message queue, a key-value store, and an OLAP engine — collapsing five systems into one substrate.',
+        basis: 'Dual representation of PK Tables: append-only log + leader-side RocksDB KV.',
+        Svg: require('@site/static/img/feature_update.svg').default,
     },
     {
+        number: '02',
         title: 'Streaming & Lakehouse Unification',
-        content:
-            'Streaming-native storage with low-latency access on top of the lakehouse, using tables as a single abstraction to unify real-time and historical data across engines.',
-        Svg: require('@site/static/img/feature_lake.svg').default
+        summary: 'One copy of data across the real-time and batch layers.',
+        body: 'The hot Fluss tier and the cold open-format tier share a logical schema and are queryable as a single substrate, with synchronised metadata.',
+        basis: 'Tiering Service + Union Read across Iceberg, Paimon, and Lance.',
+        Svg: require('@site/static/img/feature_lake.svg').default,
     },
     {
-        title: 'Columnar Streaming',
-        content:
-            'Based on Apache Arrow it allows database primitives on data streams and techniques like column pruning and predicate pushdown. This ensures engines read only the data they need, minimizing I/O and network costs.',
-        Svg: require('@site/static/img/feature_column.svg').default
-    },
-    {
+        number: '03',
         title: 'Compute–Storage Separation',
-        content:
-            'Stream processors focus on pure computation while Fluss manages state and storage, with features like deduplication, partial updates, delta joins, and aggregation merge engines.',
-        Svg: require('@site/static/img/feature_update.svg').default
+        summary: 'Lean, elastic, stateless compute with fast recovery.',
+        body: 'State lives on the Fluss leader, not in Flink task slots. Recovery collapses from minutes to seconds; cost runs up to 85% lower than comparable Kafka-based topologies.',
+        basis: 'Stateless compute model with leader-resident state and KV snapshots.',
+        Svg: require('@site/static/img/feature_real_time.svg').default,
     },
     {
-        title: 'ML & AI–Ready Storage',
-        content:
-            'A unified storage layer supporting row-based, columnar, vector, and multi-modal data, enabling real-time feature stores and a centralized data repository for ML and AI systems.',
-        Svg: require('@site/static/img/feature_query.svg').default
+        number: '04',
+        title: 'Columnar Streaming Analytics',
+        summary: 'Pruning that compounds.',
+        body: 'Server-side projection pushdown over Apache Arrow columnar buffers. Column projection, predicate pushdown, and partition pruning compound into order-of-magnitude reductions in I/O and network.',
+        basis: 'ARROW log format + compound pruning stack on the TabletServer.',
+        Svg: require('@site/static/img/feature_column.svg').default,
     },
     {
-        title: 'Changelogs & Decision Tracking',
-        content:
-            'Built-in changelog generation provides an append-only history of state and decision evolution, enabling auditing, reproducibility, and deep system observability.',
-        Svg: require('@site/static/img/feature_changelog.svg').default
+        number: '05',
+        title: 'Feature & Context Stores',
+        summary: 'Multi-modal data on one substrate — ready for ML and AI.',
+        body: 'Row, columnar, and vector formats on the same store. Online feature serving, RAG-ready semantic context, and real-time entity profiles collapse into one PK Table accessed through different views.',
+        basis: 'Unified substrate spanning structured features and vector context.',
+        Svg: require('@site/static/img/feature_query.svg').default,
+    },
+    {
+        number: '06',
+        title: 'Ecosystem Openness',
+        summary: 'Open formats. No vendor lock-in.',
+        body: 'Shared open storage readable by Apache Flink, Spark, Trino, StarRocks, and DuckDB. Native connectors for the hot Fluss tier; open Iceberg, Paimon, and Lance formats for the cold tier.',
+        basis: 'Open lake formats end-to-end, governed at the Apache Software Foundation.',
+        Svg: require('@site/static/img/feature_changelog.svg').default,
     },
 ];
 
-function Feature({ title, content, Svg }: FeatureItem) {
+function PillarCard({number, title, summary, body, basis, Svg}: Pillar) {
     return (
-        <div className={clsx('col col--4')}>
-            <div className={styles.core_features_icon}>
-              <Svg className={styles.featureSvg} role="img" />
+        <article className={styles.card}>
+            <div className={styles.cardTop}>
+                <div className={styles.iconWrap} aria-hidden="true">
+                    <Svg className={styles.icon} role="img" />
+                </div>
+                <span className={styles.number} aria-hidden="true">{number}</span>
             </div>
-            <div className={styles.core_features}>
-                <div className={styles.core_features_title}>{title}</div>
-                <div className={styles.core_features_content}>{content}</div>
-            </div>
-        </div>
+            <Heading as="h3" className={styles.title}>{title}</Heading>
+            <p className={styles.summary}>{summary}</p>
+            <p className={styles.body}>{body}</p>
+            <p className={styles.basis}>
+                <span className={styles.basisLabel}>Architectural basis</span>
+                {basis}
+            </p>
+        </article>
     );
 }
 
 export default function HomepageFeatures(): JSX.Element {
-  return (
-    <section className={styles.features}>
-      <div className="container">
-        <div className="text--center padding-horiz--md">
-          <Heading as="h1">Key Features</Heading>
-        </div>
-        <div className="row">
-          {FeatureList.map((props, idx) => (
-            <Feature key={idx} {...props} />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
+    return (
+        <section className={styles.features}>
+            <div className={clsx('container', styles.container)}>
+                <div className={styles.header}>
+                    <span className={styles.eyebrow}>Six capability pillars</span>
+                    <Heading as="h2" className={styles.heading}>
+                        The benefits, grounded in the architecture.
+                    </Heading>
+                    <p className={styles.lead}>
+                        Each pillar is a direct consequence of a specific architectural
+                        mechanism — not a marketing claim. Together they collapse the
+                        fragmented real-time stack into a single coherent foundation.
+                    </p>
+                </div>
+
+                <div className={styles.grid}>
+                    {PILLARS.map((p) => (
+                        <PillarCard key={p.number} {...p} />
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
 }
