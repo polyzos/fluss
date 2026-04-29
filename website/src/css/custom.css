@@ -56,9 +56,10 @@
   --fluss-ink-700: #334155;
   --fluss-ink-500: #64748B;
   --fluss-ink-300: #CBD5E1;
-  --fluss-ink-100: #F1F5F9;
+  --fluss-ink-100: #E6ECF5;
   --fluss-paper:   #FFFFFF;
-  --fluss-canvas:  #FAFBFD;
+  --fluss-canvas:  #F1F5FC;
+  --fluss-canvas-soft: #E9EFFA;
 
   /* --- Semantic --- */
   --fluss-success: #10B981;
@@ -89,10 +90,10 @@
   --fluss-radius-pill: 999px;
 
   /* --- Shadows (cool blue-tinted) --- */
-  --fluss-shadow-sm:   0 1px 2px rgba(11, 30, 71, 0.06);
-  --fluss-shadow-md:   0 4px 16px rgba(11, 30, 71, 0.08);
-  --fluss-shadow-lg:   0 16px 48px rgba(11, 30, 71, 0.12);
-  --fluss-shadow-glow: 0 0 0 1px rgba(37, 99, 235, 0.25), 0 12px 40px rgba(37, 99, 235, 0.18);
+  --fluss-shadow-sm:   0 1px 2px rgba(11, 30, 71, 0.06), 0 2px 6px rgba(11, 30, 71, 0.04);
+  --fluss-shadow-md:   0 6px 20px rgba(11, 30, 71, 0.10), 0 2px 6px rgba(11, 30, 71, 0.05);
+  --fluss-shadow-lg:   0 24px 60px rgba(11, 30, 71, 0.14), 0 6px 16px rgba(11, 30, 71, 0.06);
+  --fluss-shadow-glow: 0 0 0 1px rgba(37, 99, 235, 0.25), 0 16px 48px rgba(37, 99, 235, 0.22);
 
   /* --- Motion --- */
   --fluss-motion-fast: 120ms;
@@ -153,6 +154,18 @@ html {
 
 body {
   background: var(--fluss-canvas);
+}
+
+/* Subtle dot-grid texture on the homepage canvas in light mode.
+   Mirrors the dark-mode docs-canvas treatment so the page reads as
+   "designed" instead of flat white. The pattern fades behind hero
+   and dark sections because they paint their own backgrounds. */
+body.fluss-home {
+  background-color: var(--fluss-canvas);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(37, 99, 235, 0.10) 1px, transparent 0);
+  background-size: 28px 28px;
+  background-attachment: fixed;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -2337,8 +2350,10 @@ body.fluss-on-hero button.clean-btn[class*='toggle']:hover {
 }
 
 /* ----- Backgrounds & body ----- */
-[data-theme='dark'] body {
+[data-theme='dark'] body,
+[data-theme='dark'] body.fluss-home {
   background: var(--fluss-canvas);
+  background-image: none;
   color: var(--fluss-ink-700);
 }
 
