@@ -51,11 +51,45 @@
     pointer-events: none;
 }
 
+/* Hero gets a wider container with much tighter side padding than the rest
+   of the homepage, so the side-by-side text + diagram can use almost the
+   full viewport. Other sections keep the standard 1240 / 24px container.
+
+   The side padding ramps up at smaller viewports so the hero content does
+   not run flush to the screen edge on typical laptop sizes:
+     ≥ 1500px : 0  (max diagram space, container is centred with margin)
+     ≤ 1500px : 12px
+     ≤ 1280px : 20px
+     ≤ 996px  : 24px (matches the standard container padding under the
+                       existing mobile stack media query) */
+.heroBanner .container {
+    max-width: 1560px;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+@media (max-width: 1500px) {
+    .heroBanner .container {
+        padding-left: var(--fluss-space-3);
+        padding-right: var(--fluss-space-3);
+    }
+}
+
+@media (max-width: 1280px) {
+    .heroBanner .container {
+        padding-left: var(--fluss-space-5);
+        padding-right: var(--fluss-space-5);
+    }
+}
+
 .heroInner {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-    gap: var(--fluss-space-12);
+    /* Text column gets just enough room for the H1 to wrap to 3-4 balanced
+       lines at the largest viewport size; the rest goes to the diagram so
+       it renders as wide as we can fit alongside the text. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
+    gap: var(--fluss-space-16);
     align-items: center;
 }
 
@@ -194,15 +228,52 @@
     height: 18px;
 }
 
-/* Hero diagram (right column). Aspect-ratio matches the SVG viewBox (620:480). */
+/* Wraps the diagram title and the SVG so they sit as a single column inside
+   the right-hand grid cell of the hero. */
+.heroDiagramColumn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--fluss-space-2);
+    width: 100%;
+}
+
+/* Positioned absolutely inside .heroDiagram so it sits just above the
+   "Apache Fluss" block in the SVG (which starts at ~22% from the top of
+   the diagram's viewBox). z-index keeps it above the SVG.
+
+   The whole title uses the same cyan → blue → white gradient as the hero
+   H1's `.accent` span, so the two headings read as a pair. */
+.heroDiagramTitle {
+    position: absolute;
+    top: 11%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    margin: 0;
+    font-family: var(--fluss-font-display);
+    font-size: clamp(1.375rem, 1.6vw + 0.875rem, 1.875rem);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.018em;
+    text-align: center;
+    white-space: nowrap;
+    background: linear-gradient(120deg, var(--fluss-cyan) 0%, var(--fluss-blue-300) 60%, #FFFFFF 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* Hero diagram (right column). Aspect-ratio matches the SVG viewBox. */
 .heroDiagram {
     position: relative;
     width: 100%;
-    max-width: 620px;
-    aspect-ratio: 620 / 480;
+    max-width: 1180px;
+    aspect-ratio: 720 / 500;
     display: flex;
     align-items: center;
     justify-content: center;
+    margin: 0 auto;
 }
 
 .heroDiagram svg {
@@ -246,6 +317,10 @@
     .heroBanner {
         padding-top: calc(var(--fluss-space-20) + 60px);
         padding-bottom: var(--fluss-space-20);
+    }
+    .heroBanner .container {
+        padding-left: var(--fluss-container-pad);
+        padding-right: var(--fluss-container-pad);
     }
     .heroInner {
         grid-template-columns: 1fr;
