@@ -63,200 +63,254 @@ const SLACK_INVITE =
     'https://join.slack.com/t/apache-fluss/shared_invite/zt-33wlna581-QAooAiCmnYboJS8D_JUcYw';
 
 function HeroDiagram() {
-    // Inline SVG illustrating: producers → Fluss (log + PK + lakehouse) → Flink/Spark/Iceberg
-    // Layout uses a 620×480 grid with three columns:
-    //   - Producers      x=20 → 145   (width 125)
-    //   - Fluss core     x=215 → 450  (width 235)
-    //   - Consumers      x=475 → 615  (width 140)
+    // Inline SVG: producers → Apache Fluss Cluster (Log Tables + PK Tables)
+    // → engines (Flink, Trino, Spark, ML/AI), with a Lakehouse tier below
+    // (Iceberg / Paimon / Lance) connected by a bidirectional Tiering
+    // Service edge.
+    //
+    // Layout uses a single shared vertical centre y = 220:
+    //   - The Fluss block sits at y = 110-330 (centre 220).
+    //   - The 3 producer boxes are vertically symmetric around 220.
+    //   - The 4 consumer boxes are vertically symmetric around 220.
+    //   - All arrows fan from / converge to the block's mid-edges.
+    //
+    // Every edge uses the same flowing cyan style and the same arrowhead
+    // marker; the marker's `auto-start-reverse` orientation lets the
+    // bidirectional Tiering Service arrow reuse the same head shape on
+    // both ends. The animation respects prefers-reduced-motion.
     return (
         <svg
-            viewBox="0 0 620 480"
+            viewBox="0 0 720 500"
             xmlns="http://www.w3.org/2000/svg"
             role="img"
             aria-labelledby="heroDiagramTitle heroDiagramDesc">
             <title id="heroDiagramTitle">Apache Fluss data flow</title>
             <desc id="heroDiagramDesc">
-                Producers stream events into Apache Fluss columnar storage. Apache
-                Flink and SQL engines like Spark query the data with sub-second
-                freshness; Fluss tiers data natively to Apache Iceberg, Apache
-                Paimon, and Lance.
+                Producers (API Clients, Change Data Capture, Flink/Spark) on
+                the left feed Apache Fluss in the centre. Fluss contains Log
+                Tables and PK Tables, with column pruning, predicate
+                pushdowns, and realtime updates. Query engines (Apache Flink,
+                Trino, Apache Spark, StarRocks, DuckDB) read on the right via
+                a Union Read that merges Fluss and the Lakehouse. Data tiers
+                durably to a Lakehouse (Iceberg / Paimon / Lance) below via a
+                bidirectional Tiering Service edge.
             </desc>
 
             <defs>
-                <linearGradient id="hgFlussFill" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#1A47B8" />
-                    <stop offset="100%" stopColor="#0B1E47" />
-                </linearGradient>
-                <linearGradient id="hgFlow" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#22D3EE" stopOpacity="0" />
-                    <stop offset="50%" stopColor="#22D3EE" stopOpacity="1" />
-                    <stop offset="100%" stopColor="#22D3EE" stopOpacity="0" />
-                </linearGradient>
-                <filter id="hgGlow" x="-50%" y="-50%" width="200%" height="200%">
-                    <feGaussianBlur stdDeviation="6" result="b" />
-                    <feMerge>
-                        <feMergeNode in="b" />
-                        <feMergeNode in="SourceGraphic" />
-                    </feMerge>
-                </filter>
+                {/* Single cyan arrowhead, shared by every edge. Filled
+                    triangle for a cleaner, more professional look on dashed
+                    lines. auto-start-reverse lets it serve as both
+                    marker-start and marker-end on the bidirectional
+                    Tiering Service arrow. */}
+                <marker id="hgArrowLive" viewBox="0 0 10 10" refX="9" refY="5"
+                        markerWidth="8" markerHeight="8"
+                        orient="auto-start-reverse">
+                    <path d="M0 0 L 10 5 L 0 10 Z" fill="#22D3EE" />
+                </marker>
+                {/* Scoped animation; respects prefers-reduced-motion. */}
+                <style
+                    dangerouslySetInnerHTML={{
+                        __html: `
+                            .fluss-hero-live {
+                                animation: flussHeroFlow 5s linear infinite;
+                            }
+                            @keyframes flussHeroFlow {
+                                0%   { stroke-dashoffset: 32; }
+                                100% { stroke-dashoffset: 0; }
+                            }
+                            @media (prefers-reduced-motion: reduce) {
+                                .fluss-hero-live { animation: none; }
+                            }
+                        `,
+                    }}
+                />
             </defs>
 
-            {/* ----- Producers (left column) ----- */}
-            <g>
-                {[80, 160, 240].map((y, i) => (
+            <g fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace" fontSize="14">
+
+                {/* Producers (3 boxes, vertically centred around y = 220).
+                    Width 200 so the longest label, "Change Data Capture",
+                    fits cleanly at the shared 14px monospace size. */}
+                {[
+                    {y: 127, label: 'API Clients'},
+                    {y: 197, label: 'Change Data Capture'},
+                    {y: 267, label: 'Flink/Spark'},
+                ].map((p, i) => (
                     <g key={i}>
-                        <rect
-                            x="20" y={y} width="125" height="50"
-                            rx="10"
-                            fill="rgba(255,255,255,0.06)"
-                            stroke="rgba(255,255,255,0.18)"
-                        />
-                        <circle cx="42" cy={y + 25} r="4" fill="#22D3EE" />
-                        <text x="60" y={y + 30}
-                              fill="rgba(219,234,254,0.92)"
-                              fontFamily="Inter, sans-serif"
-                              fontSize="14"
-                              fontWeight="500">
-                            {['CDC', 'Events', 'IoT'][i]}
+                        <rect x="20" y={p.y} width="200" height="50" rx="10"
+                              fill="#0A2A6B"
+                              stroke="rgba(147,184,255,0.35)"
+                              strokeWidth="1" />
+                        <text x="120" y={p.y + 30} textAnchor="middle"
+                              fill="#E6ECFA">
+                            {p.label}
                         </text>
                     </g>
                 ))}
-                <text x="20" y="320"
-                      fill="rgba(147,197,253,0.7)"
-                      fontFamily="Inter, sans-serif"
-                      fontSize="10"
-                      fontWeight="700"
-                      letterSpacing="0.1em">
-                    PRODUCERS
-                </text>
-            </g>
 
-            {/* ----- Flow lines: producers → Fluss ----- */}
-            <g stroke="url(#hgFlow)" strokeWidth="2" fill="none">
-                <path d="M145 105 C 180 105, 195 165, 215 192" />
-                <path d="M145 185 C 185 185, 200 220, 215 246" />
-                <path d="M145 265 C 185 265, 200 295, 215 311" />
-            </g>
+                {/* Producer arrows into Fluss. Each arrow uses strong
+                    horizontal tangents at BOTH endpoints (control points
+                    pulled most of the way across the gap) so the merging
+                    arrows read as smooth S-curves rather than near-straight
+                    diagonals, the pattern most professional architecture
+                    diagrams use for converging edges.
+                    The middle arrow has no vertical offset to traverse, so
+                    it stays a clean straight line. */}
+                {[150, 220, 290].map((y, i) => {
+                    const isStraight = y === 220;
+                    const d = isStraight
+                        ? `M220 ${y} L 260 ${y}`
+                        : `M220 ${y} C 252 ${y}, 228 220, 260 220`;
+                    return (
+                        <path
+                            key={i}
+                            className="fluss-hero-live"
+                            d={d}
+                            stroke="#22D3EE"
+                            strokeWidth="1.75"
+                            strokeDasharray="4 4"
+                            fill="none"
+                            markerEnd="url(#hgArrowLive)"
+                        />
+                    );
+                })}
 
-            {/* ----- Fluss core (center column) ----- */}
-            <g>
-                <rect
-                    x="215" y="80" width="235" height="320"
-                    rx="22"
-                    fill="url(#hgFlussFill)"
-                    stroke="rgba(34,211,238,0.4)"
-                    strokeWidth="1.5"
-                    filter="url(#hgGlow)"
-                />
-                <text x="332" y="125"
-                      textAnchor="middle"
-                      fill="#FFFFFF"
-                      fontFamily="Inter, sans-serif"
-                      fontSize="17"
-                      fontWeight="700"
-                      letterSpacing="-0.005em">
+                {/* Apache Fluss Cluster (the hot tier) */}
+                <rect x="260" y="110" width="220" height="220" rx="16"
+                      fill="#0A2A6B"
+                      stroke="rgba(34,211,238,0.5)"
+                      strokeWidth="1.25" />
+                <text x="370" y="142" textAnchor="middle"
+                      fill="#A5F3FC" fontSize="16" fontWeight="600">
                     Apache Fluss
                 </text>
-                <text x="332" y="148"
-                      textAnchor="middle"
-                      fill="rgba(147,197,253,0.85)"
-                      fontFamily="Inter, sans-serif"
-                      fontSize="9.5"
-                      fontWeight="600"
-                      letterSpacing="0.14em">
-                    COLUMNAR STREAMING STORAGE
+
+                {/* Internal pieces (centred around block centre y = 220) */}
+                <g>
+                    <rect x="290" y="170" width="160" height="44" rx="8"
+                          fill="#061B3F"
+                          stroke="rgba(147,184,255,0.35)" />
+                    <text x="370" y="198" textAnchor="middle"
+                          fill="#E6ECFA" fontSize="14">Log Tables</text>
+
+                    <rect x="290" y="222" width="160" height="44" rx="8"
+                          fill="#061B3F"
+                          stroke="rgba(147,184,255,0.35)" />
+                    <text x="370" y="250" textAnchor="middle"
+                          fill="#E6ECFA" fontSize="14">PK Tables</text>
+                </g>
+
+                {/* Capability caption (three lines so it fits inside the
+                    block). Uses Fluss blue-300 so it reads as a distinct
+                    secondary accent, not a desaturated grey caption. */}
+                <text textAnchor="middle"
+                      fill="#93B8FF" fontSize="12"
+                      fontWeight="500" opacity="0.95">
+                    <tspan x="370" y="284">Column Pruning,</tspan>
+                    <tspan x="370" y="302">Predicate Pushdowns,</tspan>
+                    <tspan x="370" y="320">Realtime Updates</tspan>
                 </text>
 
-                {/* Internal lanes */}
-                <g>
-                    {/* Append-only Log */}
-                    <rect x="232" y="170" width="200" height="44" rx="10"
-                          fill="rgba(34,211,238,0.12)"
-                          stroke="rgba(34,211,238,0.3)" />
-                    <text x="332" y="197"
-                          textAnchor="middle"
-                          fill="#FFFFFF"
-                          fontFamily="Inter, sans-serif"
-                          fontSize="13"
-                          fontWeight="600">
-                        Append-only Log
-                    </text>
-
-                    {/* Primary-Key Table */}
-                    <rect x="232" y="224" width="200" height="44" rx="10"
-                          fill="rgba(124,58,237,0.18)"
-                          stroke="rgba(147,197,253,0.3)" />
-                    <text x="332" y="251"
-                          textAnchor="middle"
-                          fill="#FFFFFF"
-                          fontFamily="Inter, sans-serif"
-                          fontSize="13"
-                          fontWeight="600">
-                        Primary-Key Table
-                    </text>
-
-                    {/* Lakehouse-Native Storage (taller, two-line) */}
-                    <rect x="232" y="278" width="200" height="66" rx="10"
-                          fill="rgba(255,255,255,0.06)"
-                          stroke="rgba(255,255,255,0.16)" />
-                    <text x="332" y="302"
-                          textAnchor="middle"
-                          fill="#FFFFFF"
-                          fontFamily="Inter, sans-serif"
-                          fontSize="12"
-                          fontWeight="600">
-                        Lakehouse-Native Storage
-                    </text>
-                    <text x="332" y="325"
-                          textAnchor="middle"
-                          fill="rgba(147,197,253,0.85)"
-                          fontFamily="Inter, sans-serif"
-                          fontSize="10"
-                          fontWeight="500"
-                          letterSpacing="0.04em">
-                        Iceberg · Paimon · Lance
-                    </text>
-                </g>
-            </g>
-
-            {/* ----- Flow lines: Fluss → consumers ----- */}
-            <g stroke="url(#hgFlow)" strokeWidth="2" fill="none">
-                <path d="M450 192 C 460 192, 465 150, 475 118" />
-                <path d="M450 246 C 460 246, 465 235, 475 228" />
-                <path d="M450 311 C 460 311, 465 325, 475 338" />
-            </g>
-
-            {/* ----- Consumers (right column) ----- */}
-            <g>
+                {/* Query Engines box. Vertically centred on y = 220 (the
+                    same axis as the Fluss block) and tall enough to fit
+                    five engine names with even spacing. */}
+                <text x="625" y="108" textAnchor="middle"
+                      fill="#22D3EE" fontSize="11"
+                      fontWeight="600" letterSpacing="1.4">
+                    QUERY ENGINES
+                </text>
+                <rect x="540" y="120" width="170" height="200" rx="14"
+                      fill="#0A2A6B"
+                      stroke="rgba(34,211,238,0.5)"
+                      strokeWidth="1.25" />
+                <text x="625" y="150" textAnchor="middle"
+                      fill="#A5F3FC" fontSize="16" fontWeight="600">
+                    Engines
+                </text>
+                <line x1="560" y1="166" x2="690" y2="166"
+                      stroke="rgba(147,184,255,0.25)" strokeWidth="1" />
                 {[
-                    {y: 90, label: 'Apache Flink'},
-                    {y: 200, label: 'Apache Spark'},
-                    {y: 310, label: 'Iceberg · Paimon'},
-                ].map((c, i) => (
-                    <g key={i}>
-                        <rect
-                            x="475" y={c.y} width="140" height="56"
-                            rx="10"
-                            fill="rgba(255,255,255,0.06)"
-                            stroke="rgba(255,255,255,0.18)"
-                        />
-                        <circle cx="498" cy={c.y + 28} r="4" fill="#A3E635" />
-                        <text x="516" y={c.y + 33}
-                              fill="rgba(219,234,254,0.92)"
-                              fontFamily="Inter, sans-serif"
-                              fontSize="13"
-                              fontWeight="500">
-                            {c.label}
-                        </text>
-                    </g>
+                    {y: 192, label: 'Apache Flink'},
+                    {y: 220, label: 'Trino'},
+                    {y: 248, label: 'Apache Spark'},
+                    {y: 276, label: 'StarRocks'},
+                    {y: 304, label: 'DuckDB'},
+                ].map((e, i) => (
+                    <text key={i} x="625" y={e.y} textAnchor="middle"
+                          fill="#E6ECFA" fontSize="14">
+                        {e.label}
+                    </text>
                 ))}
-                <text x="475" y="395"
-                      fill="rgba(147,197,253,0.7)"
-                      fontFamily="Inter, sans-serif"
-                      fontSize="10"
-                      fontWeight="700"
-                      letterSpacing="0.1em">
-                    CONSUMERS / LAKE
+
+                {/* Y-junction merging Fluss and Lakehouse reads into a single
+                    Union Read edge that points into the Engines box.
+                    Merge node at (510, 220). */}
+
+                {/* Fluss → merge (hot tier, straight horizontal feed) */}
+                <path
+                    className="fluss-hero-live"
+                    d="M480 220 L 510 220"
+                    stroke="#22D3EE"
+                    strokeWidth="1.75"
+                    strokeDasharray="4 4"
+                    fill="none"
+                />
+
+                {/* Lakehouse → merge (cold tier, arcs up to the same node) */}
+                <path
+                    className="fluss-hero-live"
+                    d="M480 433 C 520 433, 510 280, 510 220"
+                    stroke="#22D3EE"
+                    strokeWidth="1.75"
+                    strokeDasharray="4 4"
+                    fill="none"
+                />
+
+                {/* Merged segment → Engines (single arrow, carries the
+                    Union Read label) */}
+                <path
+                    className="fluss-hero-live"
+                    d="M510 220 L 540 220"
+                    stroke="#22D3EE"
+                    strokeWidth="1.75"
+                    strokeDasharray="4 4"
+                    fill="none"
+                    markerEnd="url(#hgArrowLive)"
+                />
+                <text x="525" y="210" textAnchor="middle"
+                      fill="#22D3EE" fontSize="11"
+                      fontWeight="600" letterSpacing="0.6">
+                    Union Read
+                </text>
+
+                {/* Tiering Service: bidirectional animated cyan edge */}
+                <path className="fluss-hero-live"
+                      d="M370 333 L 370 388"
+                      stroke="#22D3EE"
+                      strokeWidth="1.75"
+                      strokeDasharray="4 4"
+                      fill="none"
+                      markerStart="url(#hgArrowLive)"
+                      markerEnd="url(#hgArrowLive)" />
+                <text x="385" y="365"
+                      fill="#A5F3FC" opacity="0.9" fontSize="13">
+                    Tiering Service
+                </text>
+
+                {/* Lakehouse (cold tier). Width and x matched to the Fluss
+                    block above so they form a single, tightly aligned
+                    centre column. */}
+                <rect x="260" y="390" width="220" height="86" rx="12"
+                      fill="#061B3F"
+                      stroke="rgba(59,130,246,0.55)"
+                      strokeDasharray="3 3" />
+                <text x="370" y="420" textAnchor="middle"
+                      fill="#A5F3FC" fontSize="16" fontWeight="600">
+                    Lakehouse
+                </text>
+                <text x="370" y="450" textAnchor="middle"
+                      fill="#C2CCE2" fontSize="14">
+                    Iceberg / Paimon / Lance
                 </text>
             </g>
         </svg>
@@ -317,31 +371,14 @@ function HomepageHeader({heroRef}: {heroRef: React.RefObject<HTMLElement>}) {
                         </div>
                     </div>
 
-                    <div className={styles.heroDiagram} aria-hidden="false">
-                        <HeroDiagram />
+                    <div className={styles.heroDiagramColumn}>
+                        <div className={styles.heroDiagram} aria-hidden="false">
+                            <h2 className={styles.heroDiagramTitle}>
+                                Powering The Streaming Lakehouse
+                            </h2>
+                            <HeroDiagram />
+                        </div>
                     </div>
-                </div>
-
-                <div className={styles.trustStrip} role="region" aria-label="Project trust signals">
-                    <span className={styles.trustItem}>
-                        <strong>Apache 2.0</strong> licensed
-                    </span>
-                    <span className={styles.trustDivider} aria-hidden="true" />
-                    <span className={styles.trustItem}>
-                        Built with <strong>Apache Flink</strong>, <strong>Iceberg</strong>, <strong>Paimon</strong>
-                    </span>
-                    <span className={styles.trustDivider} aria-hidden="true" />
-                    <span className={styles.trustItem}>
-                        <strong>Open governance</strong> at the ASF
-                    </span>
-                    <span className={styles.trustDivider} aria-hidden="true" />
-                    <span className={styles.trustItem}>
-                        <Link
-                            to="https://github.com/apache/fluss/releases"
-                            style={{color: 'inherit', textDecoration: 'underline'}}>
-                            View latest release →
-                        </Link>
-                    </span>
                 </div>
             </div>
         </header>
@@ -715,12 +752,12 @@ function CommunitySection() {
                         <div className={styles.statLabel}>Apache Software Foundation governance</div>
                     </div>
                     <div className={styles.statCard}>
-                        <div className={styles.statValue}>Flink-first</div>
+                        <div className={styles.statValue}>Streams As Tables</div>
                         <div className={styles.statLabel}>Streaming integration</div>
                     </div>
                     <div className={styles.statCard}>
-                        <div className={styles.statValue}>Lake-native</div>
-                        <div className={styles.statLabel}>Iceberg &amp; Paimon tiering</div>
+                        <div className={styles.statValue}>Lakehouse-Native</div>
+                        <div className={styles.statLabel}>Open Table Format Tiering</div>
                     </div>
                 </div>
 

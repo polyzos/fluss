@@ -27,23 +27,23 @@ type ValueProp = {
 
 const VALUE_PROPS: ValueProp[] = [
   {
-    title: 'Sub-second freshness',
-    body: 'Columnar streaming over Apache Arrow, with server-side projection and predicate pushdown. Analytics, features, and agents see new rows in seconds. No commit lag, no batch window, no lambda layer.',
+    title: 'Sub-second Freshness',
+    body: 'Columnar streaming over Apache Arrow with server-side column pruning and predicate pushdown. Analytics, features, and agents read new rows within sub-second latency of write. Column projection, predicate pushdown, and partition pruning compound into order-of-magnitude reductions in network transfer.',
     Icon: require('@site/static/img/feature_real_time.svg').default,
   },
   {
-    title: 'One copy across hot and cold',
-    body: 'The hot Fluss tier and the cold open-format tier (Iceberg, Paimon, Lance) share a logical schema with synchronised metadata. One union read; one source of truth.',
+    title: 'One Data Copy Across Hot & Cold Layer',
+    body: 'The hot Fluss tier and the cold open-format tier (Iceberg, Paimon, Lance) share a single logical schema with synchronised metadata. The Tiering Service and Union Read mechanism make both layers queryable as one substrate, eliminating the dual-write fork between streaming and batch.',
     Icon: require('@site/static/img/feature_lake.svg').default,
   },
   {
-    title: 'Logs + tables on one substrate',
-    body: 'PK Tables hold both an append-only log for events and a leader-side RocksDB KV view for live state. Sub-millisecond point lookups served from the same TabletServer that owns the log.',
+    title: 'Stream/Table Duality In One System',
+    body: 'PK Tables hold both an append-only changelog and a latest state in RocksDB, like database tables. Sub-millisecond key/value lookups are feasible, consolidating roles previously split across a message queue, a key-value store, and an OLAP engine.',
     Icon: require('@site/static/img/feature_update.svg').default,
   },
   {
     title: 'Stateless, elastic compute',
-    body: 'State lives on the Fluss leader, not in Flink task slots. Recovery collapses from minutes to seconds; topologies run up to 85% cheaper than comparable Kafka-based equivalents.',
+    body: 'Fluss acts as a shared-state store, allowing compute engines like Apache Flink to be stateless. Recovery collapses from minutes to seconds, RPO is decoupled from RTO, and benchmarked topologies run up to 85% cheaper than comparable Kafka-based equivalents.',
     Icon: require('@site/static/img/feature_lookup.svg').default,
   },
 ];
