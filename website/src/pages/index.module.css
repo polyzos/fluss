@@ -20,7 +20,7 @@
  */
 
 .homepageWrapper {
-    background: var(--fluss-canvas);
+    background: transparent;
 }
 
 /* =========================================================================
@@ -272,11 +272,13 @@
 .section {
     position: relative;
     padding: var(--fluss-space-24) 0;
-    /* Soft radial wash to give plain sections a designed feel in light mode */
+    /* Layered gradient washes give light mode a "designed" feel instead of
+       flat white. Two radial accents + a top-down soft wash + transparent
+       canvas (so the body dot-grid shows through behind). */
     background:
-        radial-gradient(1100px 480px at 80% 0%, rgba(34, 211, 238, 0.05), transparent 60%),
-        radial-gradient(900px 460px at 0% 100%, rgba(37, 99, 235, 0.05), transparent 60%),
-        var(--fluss-canvas);
+        radial-gradient(1100px 520px at 85% -10%, rgba(34, 211, 238, 0.14), transparent 60%),
+        radial-gradient(900px 460px at -5% 110%, rgba(37, 99, 235, 0.12), transparent 60%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.4) 100%);
 }
 
 .sectionTight {
@@ -290,18 +292,21 @@
 
 .sectionWash {
     background:
-        radial-gradient(1000px 460px at 50% 0%, rgba(34, 211, 238, 0.08), transparent 60%),
-        var(--fluss-blue-50);
+        radial-gradient(1100px 460px at 50% -10%, rgba(34, 211, 238, 0.18), transparent 60%),
+        radial-gradient(800px 380px at 100% 100%, rgba(124, 58, 237, 0.10), transparent 60%),
+        linear-gradient(180deg, var(--fluss-blue-50) 0%, #DDE9FB 100%);
+    border-top: 1px solid rgba(37, 99, 235, 0.10);
+    border-bottom: 1px solid rgba(37, 99, 235, 0.10);
 }
 
 .eyebrow {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 12px;
+    padding: 5px 14px;
     border-radius: var(--fluss-radius-pill);
-    background: var(--fluss-blue-50);
-    border: 1px solid rgba(37, 99, 235, 0.18);
+    background: linear-gradient(120deg, rgba(34, 211, 238, 0.12) 0%, rgba(37, 99, 235, 0.10) 100%);
+    border: 1px solid rgba(37, 99, 235, 0.22);
     color: var(--fluss-blue-700);
     font-family: var(--fluss-font-display);
     font-size: 0.75rem;
@@ -309,6 +314,7 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     margin-bottom: var(--fluss-space-4);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
 }
 
 .eyebrow::before {
@@ -377,8 +383,10 @@
     position: relative;
     border-radius: var(--fluss-radius-xl);
     overflow: hidden;
-    border: 1px solid var(--fluss-ink-100);
-    background: var(--fluss-paper);
+    border: 1px solid rgba(37, 99, 235, 0.14);
+    background:
+        radial-gradient(800px 240px at 100% 0%, rgba(34, 211, 238, 0.10), transparent 60%),
+        var(--fluss-paper);
     box-shadow: var(--fluss-shadow-lg);
 }
 
@@ -398,12 +406,12 @@
 }
 
 .compareTable thead th {
-    background: var(--fluss-ink-100);
+    background: linear-gradient(180deg, #EAF1FB 0%, #D9E5F8 100%);
     color: var(--fluss-ink-950);
     font-weight: 600;
     text-align: left;
     padding: var(--fluss-space-4) var(--fluss-space-5);
-    border-bottom: 1px solid var(--fluss-ink-300);
+    border-bottom: 1px solid rgba(37, 99, 235, 0.18);
     white-space: nowrap;
 }
 
@@ -439,14 +447,15 @@
 .compareTable tbody td:first-child {
     font-weight: 600;
     color: var(--fluss-ink-950);
-    background: var(--fluss-canvas);
+    background: linear-gradient(90deg, rgba(37, 99, 235, 0.04) 0%, transparent 100%);
     width: 28%;
 }
 
 .compareTable tbody td.colHighlight {
-    background: var(--fluss-blue-50);
+    background: linear-gradient(180deg, rgba(37, 99, 235, 0.08) 0%, rgba(34, 211, 238, 0.10) 100%);
     color: var(--fluss-ink-950);
     font-weight: 500;
+    box-shadow: inset 1px 0 0 rgba(37, 99, 235, 0.12), inset -1px 0 0 rgba(37, 99, 235, 0.12);
 }
 
 @media (max-width: 800px) {
@@ -485,13 +494,15 @@
     display: inline-flex;
     align-items: center;
     height: 28px;
-    padding: 0 12px;
+    padding: 0 14px;
     border-radius: var(--fluss-radius-pill);
-    background: var(--fluss-blue-100);
+    background: linear-gradient(120deg, #FFFFFF 0%, var(--fluss-blue-100) 100%);
     color: var(--fluss-blue-800);
+    border: 1px solid rgba(37, 99, 235, 0.20);
     font-size: 0.8125rem;
     font-weight: 600;
     letter-spacing: 0.01em;
+    box-shadow: 0 1px 2px rgba(11, 30, 71, 0.06);
 }
 
 /* =========================================================================
@@ -561,9 +572,9 @@
     padding: var(--fluss-space-6);
     border-radius: var(--fluss-radius-lg);
     background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, transparent 60%),
-        var(--fluss-paper);
-    border: 1px solid var(--fluss-ink-100);
+        radial-gradient(400px 160px at 100% 0%, rgba(34, 211, 238, 0.08), transparent 60%),
+        linear-gradient(180deg, #FFFFFF 0%, #F6F9FE 100%);
+    border: 1px solid rgba(37, 99, 235, 0.12);
     box-shadow: var(--fluss-shadow-sm);
     transition: transform var(--fluss-motion-base) var(--fluss-ease-out),
                 box-shadow var(--fluss-motion-base) var(--fluss-ease-out),
@@ -571,9 +582,9 @@
 }
 
 .freshTile:hover {
-    transform: translateY(-2px);
+    transform: translateY(-3px);
     box-shadow: var(--fluss-shadow-md);
-    border-color: var(--fluss-blue-300);
+    border-color: rgba(37, 99, 235, 0.30);
 }
 
 .freshTileHighlight {
@@ -763,10 +774,12 @@
 .taxSection {
     padding: var(--fluss-space-24) 0;
     background:
-        radial-gradient(900px 500px at 50% 0%, rgba(37, 99, 235, 0.06), transparent 60%),
-        var(--fluss-canvas);
-    border-top: 1px solid var(--fluss-ink-100);
-    border-bottom: 1px solid var(--fluss-ink-100);
+        radial-gradient(900px 500px at 50% -10%, rgba(37, 99, 235, 0.16), transparent 60%),
+        radial-gradient(700px 360px at 0% 100%, rgba(244, 63, 94, 0.06), transparent 60%),
+        radial-gradient(700px 360px at 100% 100%, rgba(34, 211, 238, 0.10), transparent 60%),
+        linear-gradient(180deg, #F4F8FE 0%, #E8EFFA 100%);
+    border-top: 1px solid rgba(37, 99, 235, 0.10);
+    border-bottom: 1px solid rgba(37, 99, 235, 0.10);
 }
 
 .taxGrid {
@@ -831,15 +844,20 @@
     align-items: flex-start;
     padding: var(--fluss-space-4) var(--fluss-space-5);
     border-radius: var(--fluss-radius-md);
-    background: var(--fluss-paper);
-    border: 1px solid var(--fluss-ink-100);
+    background:
+        linear-gradient(90deg, rgba(244, 63, 94, 0.04) 0%, rgba(255, 255, 255, 0.95) 40%);
+    border: 1px solid rgba(244, 63, 94, 0.12);
     border-left: 3px solid #FB7185;
+    box-shadow: var(--fluss-shadow-sm);
     transition: transform var(--fluss-motion-base) var(--fluss-ease-out),
-                border-color var(--fluss-motion-base) var(--fluss-ease-out);
+                border-color var(--fluss-motion-base) var(--fluss-ease-out),
+                box-shadow var(--fluss-motion-base) var(--fluss-ease-out);
 }
 
 .taxStackItem:hover {
-    transform: translateX(2px);
+    transform: translateX(3px);
+    box-shadow: var(--fluss-shadow-md);
+    border-color: rgba(244, 63, 94, 0.22);
 }
 
 .taxStackIndex {

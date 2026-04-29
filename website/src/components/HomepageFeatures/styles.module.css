@@ -19,13 +19,31 @@
   position: relative;
   padding: var(--fluss-space-24) 0;
   background:
-    radial-gradient(1200px 500px at 0% 0%, rgba(34, 211, 238, 0.06), transparent 60%),
-    radial-gradient(900px 460px at 100% 100%, rgba(124, 58, 237, 0.06), transparent 60%),
-    var(--fluss-paper);
-  border-top: 1px solid var(--fluss-ink-100);
+    radial-gradient(1200px 520px at -5% -10%, rgba(34, 211, 238, 0.16), transparent 60%),
+    radial-gradient(900px 460px at 110% 110%, rgba(124, 58, 237, 0.14), transparent 60%),
+    radial-gradient(700px 360px at 50% 0%, rgba(37, 99, 235, 0.08), transparent 60%),
+    linear-gradient(180deg, #FFFFFF 0%, #F4F8FE 100%);
+  border-top: 1px solid rgba(37, 99, 235, 0.10);
+  border-bottom: 1px solid rgba(37, 99, 235, 0.10);
+}
+
+/* Subtle diagonal mesh lines, very faint, to add visual texture */
+.features::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(37, 99, 235, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.05) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+  pointer-events: none;
 }
 
 .container {
+  position: relative;
+  z-index: 1;
   max-width: var(--fluss-container-max);
   margin: 0 auto;
   padding: 0 var(--fluss-container-pad);
@@ -41,10 +59,10 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 12px;
+  padding: 5px 14px;
   border-radius: var(--fluss-radius-pill);
-  background: var(--fluss-blue-50);
-  border: 1px solid rgba(37, 99, 235, 0.18);
+  background: linear-gradient(120deg, rgba(34, 211, 238, 0.12) 0%, rgba(37, 99, 235, 0.10) 100%);
+  border: 1px solid rgba(37, 99, 235, 0.22);
   color: var(--fluss-blue-700);
   font-family: var(--fluss-font-display);
   font-size: 0.75rem;
@@ -52,6 +70,7 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   margin-bottom: var(--fluss-space-4);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
 }
 
 .eyebrow::before {
@@ -101,9 +120,9 @@
   gap: var(--fluss-space-3);
   padding: var(--fluss-space-8) var(--fluss-space-6) var(--fluss-space-6);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.7) 0%, transparent 60%),
-    var(--fluss-paper);
-  border: 1px solid var(--fluss-ink-100);
+    radial-gradient(420px 200px at 100% 0%, rgba(34, 211, 238, 0.10), transparent 60%),
+    linear-gradient(180deg, #FFFFFF 0%, #F8FAFE 100%);
+  border: 1px solid rgba(37, 99, 235, 0.12);
   border-radius: var(--fluss-radius-lg);
   box-shadow: var(--fluss-shadow-sm);
   position: relative;
@@ -117,19 +136,33 @@
   content: '';
   position: absolute;
   inset: 0 0 auto 0;
-  height: 2px;
+  height: 3px;
   background: linear-gradient(90deg, var(--fluss-blue-600), var(--fluss-cyan));
   opacity: 0;
   transition: opacity var(--fluss-motion-base) var(--fluss-ease-out);
 }
 
-.card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--fluss-shadow-md);
-  border-color: var(--fluss-blue-300);
+.card::after {
+  content: '';
+  position: absolute;
+  inset: -40% -40% auto auto;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(34, 211, 238, 0.18), transparent);
+  opacity: 0;
+  transition: opacity var(--fluss-motion-base) var(--fluss-ease-out);
+  pointer-events: none;
 }
 
-.card:hover::before {
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--fluss-shadow-md), 0 0 0 1px rgba(37, 99, 235, 0.18);
+  border-color: rgba(37, 99, 235, 0.28);
+}
+
+.card:hover::before,
+.card:hover::after {
   opacity: 1;
 }
 
@@ -141,15 +174,18 @@
 }
 
 .iconWrap {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--fluss-radius-md);
-  background: linear-gradient(135deg, var(--fluss-blue-50) 0%, rgba(34, 211, 238, 0.16) 100%);
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(34, 211, 238, 0.22) 100%);
   color: var(--fluss-blue-700);
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
+  box-shadow:
+    inset 0 0 0 1px rgba(37, 99, 235, 0.18),
+    0 4px 12px rgba(37, 99, 235, 0.10);
 }
 
 .icon {
@@ -195,7 +231,7 @@
 .basis {
   margin: var(--fluss-space-3) 0 0;
   padding-top: var(--fluss-space-3);
-  border-top: 1px dashed var(--fluss-ink-100);
+  border-top: 1px dashed rgba(37, 99, 235, 0.18);
   font-size: 0.8125rem;
   line-height: 1.55;
   color: var(--fluss-ink-500);
