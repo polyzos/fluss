@@ -31,7 +31,7 @@ Repo: https://downloads.apache.org/incubator/fluss/helm-chart
 | [Filesystem Jar for Google Cloud Storage](https://repo1.maven.org/maven2/org/apache/fluss/fluss-fs-gs/0.9.1-incubating/fluss-fs-gs-0.9.1-incubating.jar)   | [.asc](https://repo1.maven.org/maven2/org/apache/fluss/fluss-fs-gs/0.9.1-incubating/fluss-fs-gs-0.9.1-incubating.jar.asc) | [.sha1](https://repo1.maven.org/maven2/org/apache/fluss/fluss-fs-gs/0.9.1-incubating/fluss-fs-gs-0.9.1-incubating.jar.sha1) |
 | [Filesystem Jar for Huawei OBS](https://repo1.maven.org/maven2/org/apache/fluss/fluss-fs-obs/0.9.1-incubating/fluss-fs-obs-0.9.1-incubating.jar)           | [.asc](https://repo1.maven.org/maven2/org/apache/fluss/fluss-fs-obs/0.9.1-incubating/fluss-fs-obs-0.9.1-incubating.jar.asc) | [.sha1](https://repo1.maven.org/maven2/org/apache/fluss/fluss-fs-obs/0.9.1-incubating/fluss-fs-obs-0.9.1-incubating.jar.sha1) |
 
-Read the [release blog](/blog/releases/0.9/) about the new features and significant improvements in the Apache Fluss 0.9.1 release.
+Read the [release blog](/blog/releases/0.9/) about the new features and significant improvements in the Apache Fluss v0.9 release.
 
 ------------------
 
