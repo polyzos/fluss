@@ -195,19 +195,27 @@ public class ScannerManager implements AutoCloseableAsync {
     }
 
     /**
-     * Looks up an existing scanner session by its raw ID bytes and refreshes its last-access
-     * timestamp.
+     * Looks up an existing scanner session by its raw ID bytes. <em>Does not</em> refresh the
+     * last-access timestamp — callers must invoke {@link #markAccessed(ScannerContext)} only after
+     * the request has been validated, otherwise an invalid request (bad call-sequence id, missing
+     * batch size, leadership lost, etc.) would silently extend the session TTL and let an orphan
+     * scanner survive past its idle deadline.
      *
      * @return the {@link ScannerContext}, or {@code null} if not found (may have expired or never
      *     existed)
      */
     @Nullable
     public ScannerContext getScanner(byte[] scannerId) {
-        ScannerContext context = scanners.get(new String(scannerId, StandardCharsets.UTF_8));
-        if (context != null) {
-            context.updateLastAccessTime(clock.milliseconds());
-        }
-        return context;
+        return scanners.get(new String(scannerId, StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Refreshes the last-access timestamp on the given context. Must be called only when the caller
+     * has decided the request is well-formed and is about to do real work, so that rejected
+     * requests do not extend the idle TTL.
+     */
+    public void markAccessed(ScannerContext context) {
+        context.updateLastAccessTime(clock.milliseconds());
     }
 
     /**

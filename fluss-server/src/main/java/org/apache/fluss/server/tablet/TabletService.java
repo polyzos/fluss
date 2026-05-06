@@ -464,6 +464,9 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
         // tear the session down and force the client to restart. This matches the non-resumable
         // contract documented on ScannerExpiredException.
         ScannerContext openedContext = null;
+        // Tracks the context whose `inUse` flag we own so that finally{} can release it. May
+        // diverge from openedContext (which is nulled out on success) so we keep it separate.
+        ScannerContext acquiredContext = null;
         try {
             ScannerContext context;
             // True only on the initial (bucket_scan_req) path, where we must echo the snapshot
@@ -542,20 +545,35 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                                         + "never existed.");
                     }
                 }
-                // Validate call-sequence ordering to detect duplicate or out-of-order requests.
-                // getScanner() already refreshed the last-access timestamp. Use long arithmetic to
-                // avoid a silent 32-bit overflow at Integer.MAX_VALUE continuations.
-                if (request.hasCallSeqId()) {
-                    long expectedSeqId = (long) context.getCallSeqId() + 1L;
-                    int requestSeqId = request.getCallSeqId();
-                    if ((long) requestSeqId != expectedSeqId) {
-                        throw new InvalidScanRequestException(
-                                String.format(
-                                        "Out-of-order scan request: expected callSeqId=%d but got %d.",
-                                        expectedSeqId, requestSeqId));
-                    }
-                }
                 openedContext = context;
+            }
+
+            // Acquire single-thread access to the cursor before any state mutation. Without
+            // this, two concurrent scanKv RPCs sharing a scannerId would both observe the same
+            // pre-mutation callSeqId, both pass the in-order check, and both race
+            // iterator.next() - corrupting RocksDB state at the JNI boundary. The loser of the
+            // CAS gets a clear error so the client can retry sequentially.
+            if (!context.tryAcquireForUse()) {
+                throw new InvalidScanRequestException(
+                        String.format(
+                                "Concurrent scan request on scanner ID for bucket %s; only one "
+                                        + "in-flight scanKv RPC per scanner is allowed.",
+                                context.getTableBucket()));
+            }
+            acquiredContext = context;
+
+            // Validate call-sequence ordering to detect duplicate or out-of-order requests.
+            // Use long arithmetic to avoid a silent 32-bit overflow at Integer.MAX_VALUE
+            // continuations. Skipped on the new-scan path (no scannerId on the wire).
+            if (!request.hasBucketScanReq() && request.hasCallSeqId()) {
+                long expectedSeqId = (long) context.getCallSeqId() + 1L;
+                int requestSeqId = request.getCallSeqId();
+                if ((long) requestSeqId != expectedSeqId) {
+                    throw new InvalidScanRequestException(
+                            String.format(
+                                    "Out-of-order scan request: expected callSeqId=%d but got %d.",
+                                    expectedSeqId, requestSeqId));
+                }
             }
 
             // Handle explicit close request. Honour the close even on a non-leader: the local
@@ -602,6 +620,12 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 throw new InvalidScanRequestException("batch_size_bytes must be greater than 0.");
             }
             int effectiveBatchSize = Math.min(requestedBatchSize, kvScanMaxBatchSizeBytes);
+
+            // Refresh the idle-TTL deadline only now that the request is fully validated and we
+            // are about to do real work. Earlier refreshes (during getScanner) would let any
+            // malformed request - bad callSeqId, missing batch size, lost leadership - keep an
+            // orphan session alive past its idle deadline.
+            scannerManager.markAccessed(context);
 
             // Build the next batch using the builder's own running size as the gating signal so
             // the threshold reflects the actual serialised batch (header + per-record framing),
@@ -654,6 +678,13 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
             response.setErrorCode(apiError.error().code());
             response.setErrorMessage(apiError.message() != null ? apiError.message() : "");
         } finally {
+            // Release the cursor-exclusion flag before any force-close: the close path is
+            // CAS-guarded on its own `closed` flag, so the order is purely cosmetic, but
+            // releasing first keeps the invariant "inUse=true means a thread is mid-handler"
+            // tight. Calling releaseAfterUse on an already-closed context is a no-op.
+            if (acquiredContext != null) {
+                acquiredContext.releaseAfterUse();
+            }
             // If we made it past createScanner/getScanner but failed to deliver a complete
             // response, close the session rather than leaking it to TTL. The cursor has
             // already advanced past rows whose values were never sent; resuming would drop

@@ -260,7 +260,7 @@ class ScannerManagerTest {
     }
 
     @Test
-    void testGetScanner_refreshesLastAccessTime() throws Exception {
+    void testGetScanner_doesNotRefreshLastAccessTime() throws Exception {
         putAndFlush(3);
         try (ScannerManager manager = createManager()) {
             // Create scanner at t=0.
@@ -268,14 +268,103 @@ class ScannerManagerTest {
             assertThat(context).isNotNull();
             byte[] scannerId = context.getScannerId();
 
-            // Advance clock far past any TTL, then getScanner to refresh.
+            // Advance clock far past the initial access time and look up the scanner.
             clock.advanceTime(5000, TimeUnit.MILLISECONDS);
             ScannerContext fetched = manager.getScanner(scannerId);
             assertThat(fetched).isSameAs(context);
 
+            // getScanner alone must NOT refresh the last-access time: an invalid request
+            // (bad callSeqId, missing batch size, lost leadership) would otherwise extend
+            // the idle TTL and let an orphan session survive past its deadline.
+            assertThat(context.isExpired(1000L, clock.milliseconds())).isTrue();
+
+            manager.removeScanner(context);
+        }
+    }
+
+    @Test
+    void testMarkAccessed_refreshesLastAccessTime() throws Exception {
+        putAndFlush(3);
+        try (ScannerManager manager = createManager()) {
+            ScannerContext context = openAndRegister(manager);
+            assertThat(context).isNotNull();
+
+            clock.advanceTime(5000, TimeUnit.MILLISECONDS);
+            // Must explicitly mark the session as accessed; lookup is non-mutating.
+            manager.markAccessed(context);
+
             // With a 1-hour TTL, isExpired must be false right after the refresh.
             assertThat(context.isExpired(3_600_000L, clock.milliseconds())).isFalse();
 
+            manager.removeScanner(context);
+        }
+    }
+
+    @Test
+    void testTryAcquireForUse_serialisesConcurrentClaims() throws Exception {
+        putAndFlush(3);
+        try (ScannerManager manager = createManager()) {
+            ScannerContext context = openAndRegister(manager);
+            assertThat(context).isNotNull();
+
+            // First claim wins.
+            assertThat(context.tryAcquireForUse()).isTrue();
+            // A second concurrent claim must fail until the first releases.
+            assertThat(context.tryAcquireForUse()).isFalse();
+
+            context.releaseAfterUse();
+
+            // After release, a fresh claim succeeds again.
+            assertThat(context.tryAcquireForUse()).isTrue();
+            context.releaseAfterUse();
+
+            manager.removeScanner(context);
+        }
+    }
+
+    /**
+     * Stress-test the cursor-exclusion CAS: many threads race to acquire a single context, and
+     * exactly one must win. This is the invariant that protects {@link
+     * org.apache.fluss.server.tablet.TabletService#scanKv} from concurrent same-scannerId RPCs
+     * racing the RocksDB iterator at the JNI boundary.
+     */
+    @Test
+    void testTryAcquireForUse_exactlyOneWinnerUnderContention() throws Exception {
+        putAndFlush(3);
+        try (ScannerManager manager = createManager()) {
+            ScannerContext context = openAndRegister(manager);
+            assertThat(context).isNotNull();
+
+            int threadCount = 16;
+            java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.atomic.AtomicInteger winners =
+                    new java.util.concurrent.atomic.AtomicInteger(0);
+            java.util.concurrent.ExecutorService pool =
+                    java.util.concurrent.Executors.newFixedThreadPool(threadCount);
+            try {
+                for (int i = 0; i < threadCount; i++) {
+                    pool.submit(
+                            () -> {
+                                try {
+                                    start.await();
+                                } catch (InterruptedException ie) {
+                                    Thread.currentThread().interrupt();
+                                    return;
+                                }
+                                if (context.tryAcquireForUse()) {
+                                    winners.incrementAndGet();
+                                }
+                            });
+                }
+                start.countDown();
+                pool.shutdown();
+                assertThat(pool.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+            } finally {
+                pool.shutdownNow();
+            }
+
+            assertThat(winners.get()).isEqualTo(1);
+            context.releaseAfterUse();
             manager.removeScanner(context);
         }
     }

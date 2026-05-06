@@ -44,7 +44,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * explicit close, or the session expires due to inactivity.
  *
  * <p><b>Thread safety:</b> The iterator cursor ({@link #advance()}, {@link #isValid()}, {@link
- * #currentValue()}) must be driven by only one thread at a time. {@link #close()} is thread-safe.
+ * #currentValue()}) must be driven by only one thread at a time. Callers that mutate cursor or
+ * sequence-id state must first acquire exclusive use via {@link #tryAcquireForUse()} and release it
+ * with {@link #releaseAfterUse()} when done; this prevents two concurrent client RPCs sharing a
+ * scanner ID from racing the iterator (which would corrupt RocksDB state at the JNI boundary).
+ * {@link #close()} is thread-safe.
  */
 @NotThreadSafe
 public class ScannerContext implements Closeable {
@@ -81,6 +85,15 @@ public class ScannerContext implements Closeable {
     private volatile long lastAccessTime;
 
     private final AtomicBoolean closed = new AtomicBoolean(false);
+
+    /**
+     * Cursor-exclusion flag. Two concurrent {@code scanKv} RPCs sharing a scanner ID would both
+     * pass the {@code callSeqId} check (each sees the same pre-mutation value) and then race on
+     * {@link RocksIterator#next()}, which is unsafe at the JNI boundary. Acquiring this flag at the
+     * top of the handler and releasing it in {@code finally} serialises the cursor without blocking
+     * — the loser of the CAS receives an explicit "concurrent scan" error.
+     */
+    private final AtomicBoolean inUse = new AtomicBoolean(false);
 
     public ScannerContext(
             String scannerId,
@@ -176,6 +189,28 @@ public class ScannerContext implements Closeable {
         return nowMs - lastAccessTime > ttlMs;
     }
 
+    /**
+     * Atomically tries to claim exclusive use of this context's cursor and sequence-id state.
+     * Returns {@code true} if the caller now holds the exclusive-use flag and may safely advance
+     * the iterator and update {@link #setCallSeqId(int)}; {@code false} if another thread is
+     * already inside a {@code scanKv} call for this scanner ID.
+     *
+     * <p>Callers MUST pair every successful acquire with a {@link #releaseAfterUse()} in a {@code
+     * finally} block.
+     */
+    public boolean tryAcquireForUse() {
+        return inUse.compareAndSet(false, true);
+    }
+
+    /**
+     * Releases the exclusive-use flag obtained via {@link #tryAcquireForUse()}. Calling this on a
+     * context that has already been {@link #close()}d is harmless: the context is no longer
+     * reachable through {@link ScannerManager}, so no other thread will observe the flag.
+     */
+    public void releaseAfterUse() {
+        inUse.set(false);
+    }
+
     @Override
     public void close() {
         if (closed.compareAndSet(false, true)) {
@@ -186,8 +221,15 @@ public class ScannerContext implements Closeable {
                     readOptions.close();
                 } finally {
                     try {
-                        rocksDBKv.getDb().releaseSnapshot(snapshot);
-                        snapshot.close();
+                        // Wrap releaseSnapshot in its own try/finally so that snapshot.close()
+                        // always runs even if releaseSnapshot throws — otherwise the native
+                        // snapshot handle would leak while the ResourceGuard.Lease is still
+                        // released, masking the leak from later kvTablet.close() shutdown checks.
+                        try {
+                            rocksDBKv.getDb().releaseSnapshot(snapshot);
+                        } finally {
+                            snapshot.close();
+                        }
                     } finally {
                         resourceLease.close();
                     }
