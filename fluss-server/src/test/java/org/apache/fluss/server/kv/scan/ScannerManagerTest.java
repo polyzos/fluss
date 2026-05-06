@@ -369,6 +369,33 @@ class ScannerManagerTest {
         }
     }
 
+    /**
+     * On a healthy iterator, {@link ScannerContext#checkIteratorStatus()} must be a no-op so the
+     * post-loop check in {@link org.apache.fluss.server.tablet.TabletService#scanKv} does not
+     * spuriously fail clean end-of-range scans. The error path (RocksDB-internal failure) is
+     * exercised at the integration level — fabricating a JNI-level error is impractical in a unit
+     * test, so this test pins the no-error contract.
+     */
+    @Test
+    void testCheckIteratorStatus_healthyIteratorIsNoOp() throws Exception {
+        putAndFlush(3);
+        try (ScannerManager manager = createManager()) {
+            ScannerContext context = openAndRegister(manager);
+            assertThat(context).isNotNull();
+
+            // Drain the cursor so isValid() flips to false through the natural end-of-range.
+            while (context.isValid()) {
+                context.advance();
+            }
+
+            // status() must report ok for an iterator that ended cleanly — otherwise every
+            // successful scan would surface KV_STORAGE_EXCEPTION at the post-loop guard.
+            context.checkIteratorStatus();
+
+            manager.removeScanner(context);
+        }
+    }
+
     @Test
     void testTtlEviction() throws Exception {
         putAndFlush(3);

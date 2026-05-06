@@ -17,11 +17,13 @@
 
 package org.apache.fluss.server.kv.scan;
 
+import org.apache.fluss.exception.KvStorageException;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.server.kv.rocksdb.RocksDBKv;
 import org.apache.fluss.server.utils.ResourceGuard;
 
 import org.rocksdb.ReadOptions;
+import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 import org.rocksdb.Snapshot;
 
@@ -160,6 +162,25 @@ public class ScannerContext implements Closeable {
         iterator.next();
         if (remainingLimit > 0) {
             remainingLimit--;
+        }
+    }
+
+    /**
+     * Validates the underlying RocksDB iterator's status. {@link RocksIterator#next()} does not
+     * throw on RocksDB-internal errors — the iterator silently transitions to invalid and the error
+     * is carried by {@link RocksIterator#status()}. Callers MUST invoke this once iteration has
+     * stopped (i.e. {@link #isValid()} returned {@code false}) so that a clean end-of-range is
+     * distinguishable from an error path; otherwise an internal failure would silently truncate the
+     * scan and the client would conclude the scan completed when in fact rows were dropped.
+     *
+     * @throws KvStorageException if the iterator reports an internal error
+     */
+    public void checkIteratorStatus() {
+        try {
+            iterator.status();
+        } catch (RocksDBException e) {
+            throw new KvStorageException(
+                    "RocksDB iterator error during scan for bucket " + tableBucket, e);
         }
     }
 

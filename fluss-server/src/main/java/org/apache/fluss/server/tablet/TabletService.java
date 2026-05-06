@@ -643,6 +643,14 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
             }
 
             boolean hasMore = context.isValid();
+            if (!hasMore) {
+                // RocksIterator.next() does not throw on internal errors; an unchecked status
+                // here would silently turn an iterator-internal failure into has_more=false,
+                // dropping every row past the failure point and letting the client conclude
+                // the scan completed cleanly. Surface the error so the catch block maps it to
+                // KV_STORAGE_EXCEPTION and the finally block force-closes the session.
+                context.checkIteratorStatus();
+            }
             DefaultValueRecordBatch batch = builder.build();
 
             response.setScannerId(context.getScannerId());

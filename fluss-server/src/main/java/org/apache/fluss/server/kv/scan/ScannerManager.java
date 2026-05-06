@@ -24,7 +24,6 @@ import org.apache.fluss.exception.TooManyScannersException;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.server.replica.Replica;
 import org.apache.fluss.utils.AutoCloseableAsync;
-import org.apache.fluss.utils.MapUtils;
 import org.apache.fluss.utils.clock.Clock;
 import org.apache.fluss.utils.clock.SystemClock;
 import org.apache.fluss.utils.concurrent.FutureUtils;
@@ -43,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -95,11 +95,11 @@ public class ScannerManager implements AutoCloseableAsync {
      */
     private static final AtomicInteger ZERO = new AtomicInteger(0);
 
-    private final Map<String, ScannerContext> scanners = MapUtils.newConcurrentMap();
-    private final Map<String, Long> recentlyExpiredIds = MapUtils.newConcurrentMap();
+    private final Map<String, ScannerContext> scanners = new ConcurrentHashMap<>();
+    private final Map<String, Long> recentlyExpiredIds = new ConcurrentHashMap<>();
 
     /** Per-bucket active scanner count, used for O(1) per-bucket limit enforcement. */
-    private final Map<TableBucket, AtomicInteger> perBucketCount = MapUtils.newConcurrentMap();
+    private final Map<TableBucket, AtomicInteger> perBucketCount = new ConcurrentHashMap<>();
 
     /** Total active scanner count across all buckets on this tablet server. */
     private final AtomicInteger totalScanners = new AtomicInteger(0);
