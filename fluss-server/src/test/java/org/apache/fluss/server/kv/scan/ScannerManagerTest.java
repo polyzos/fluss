@@ -58,6 +58,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.apache.fluss.compression.ArrowCompressionInfo.DEFAULT_COMPRESSION;
 import static org.apache.fluss.record.TestData.DATA1_SCHEMA_PK;
+import static org.apache.fluss.testutils.common.CommonTestUtils.retry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -293,12 +294,9 @@ class ScannerManagerTest {
             clock.advanceTime(500, TimeUnit.MILLISECONDS);
 
             // Wait for the real scheduler to invoke the cleanup task.
-            long deadline = System.currentTimeMillis() + 10_000;
-            while (manager.activeScannerCount() > 0 && System.currentTimeMillis() < deadline) {
-                Thread.sleep(50);
-            }
-
-            assertThat(manager.activeScannerCount()).isEqualTo(0);
+            retry(
+                    Duration.ofSeconds(10),
+                    () -> assertThat(manager.activeScannerCount()).isEqualTo(0));
             assertThat(manager.getScanner(scannerId)).isNull();
             assertThat(manager.isRecentlyExpired(scannerId)).isTrue();
         } finally {

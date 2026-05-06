@@ -61,13 +61,16 @@ public class ScannerContext implements Closeable {
     // in-order check: expectedSeqId = callSeqId + 1 = -1 + 1 = 0.
     // callSeqId validation is only performed for continuation requests (those carrying a
     // scanner_id), never for the initial open request (those carrying a bucket_scan_req).
-    private int callSeqId = -1;
+    // volatile because a continuation may be served by a different RPC worker thread than the
+    // one that last advanced this counter.
+    private volatile int callSeqId = -1;
 
     /**
      * Wall-clock timestamp (ms) of the most recent request that touched this session. Used by
-     * {@link ScannerManager} for TTL-based eviction.
+     * {@link ScannerManager} for TTL-based eviction. {@code volatile} so the evictor thread cannot
+     * observe a stale timestamp written by the most recent RPC worker.
      */
-    private long lastAccessTime;
+    private volatile long lastAccessTime;
 
     private final AtomicBoolean closed = new AtomicBoolean(false);
 

@@ -2412,11 +2412,7 @@ class ReplicaManagerTest extends ReplicaTestBase {
                 INITIAL_COORDINATOR_EPOCH,
                 Collections.singletonList(
                         new StopReplicaData(
-                                tb,
-                                false,
-                                false,
-                                INITIAL_COORDINATOR_EPOCH,
-                                INITIAL_LEADER_EPOCH)),
+                                tb, false, false, INITIAL_COORDINATOR_EPOCH, INITIAL_LEADER_EPOCH)),
                 future::complete);
         future.get();
 

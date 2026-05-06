@@ -1397,19 +1397,18 @@ public final class Replica {
     }
 
     /**
-     * Opens a new full-scan session against this replica's KV store, taking a point-in-time
-     * RocksDB snapshot under the {@code leaderIsrUpdateLock} read lock.
+     * Opens a new full-scan session against this replica's KV store, taking a point-in-time RocksDB
+     * snapshot under the {@code leaderIsrUpdateLock} read lock.
      *
      * <p>The lock is held for the entire flow — leadership check, KV-tablet acquisition, snapshot
      * creation, and registration with the {@link ScannerManager} — so a concurrent leadership
      * change cannot leave a scanner registered for a follower bucket. Once a leadership change
-     * acquires the write lock, {@link
-     * org.apache.fluss.server.replica.ReplicaManager#makeFollowers} / {@code stopReplicas} will
-     * call {@link ScannerManager#closeScannersForBucket(TableBucket)} and any scanner registered
-     * before the flip is released eagerly.
+     * acquires the write lock, {@link org.apache.fluss.server.replica.ReplicaManager#makeFollowers}
+     * / {@code stopReplicas} will call {@link ScannerManager#closeScannersForBucket(TableBucket)}
+     * and any scanner registered before the flip is released eagerly.
      *
-     * <p>Returns {@code null} if the bucket is empty at snapshot time; in that case no session
-     * slot is consumed.
+     * <p>Returns {@code null} if the bucket is empty at snapshot time; in that case no session slot
+     * is consumed.
      *
      * @param scannerManager the manager to register the new context with
      * @param scannerId the server-assigned scanner ID
@@ -1439,8 +1438,7 @@ public final class Replica {
                                         tableBucket, localTabletServerId));
                     }
                     checkNotNull(
-                            kvTablet,
-                            "KvTablet for the replica to open scan shouldn't be null.");
+                            kvTablet, "KvTablet for the replica to open scan shouldn't be null.");
                     ScannerContext context =
                             kvTablet.openScan(scannerId, limit, initialAccessTimeMs);
                     if (context == null) {
