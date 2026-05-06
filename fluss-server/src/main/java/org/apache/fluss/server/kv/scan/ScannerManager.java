@@ -24,6 +24,7 @@ import org.apache.fluss.exception.TooManyScannersException;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.server.replica.Replica;
 import org.apache.fluss.utils.AutoCloseableAsync;
+import org.apache.fluss.utils.MapUtils;
 import org.apache.fluss.utils.clock.Clock;
 import org.apache.fluss.utils.clock.SystemClock;
 import org.apache.fluss.utils.concurrent.FutureUtils;
@@ -42,7 +43,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -68,8 +68,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <h3>Empty bucket handling</h3>
  *
  * <p>If the target bucket contains no rows at the time the scan is opened, {@link
- * #createScanner(KvTablet, TableBucket, Long)} returns {@code null} without consuming a limit slot.
- * The caller should return an empty response immediately.
+ * #createScanner(Replica, Long)} returns an {@link OpenScanResult} whose {@link
+ * OpenScanResult#getContext context} is {@code null} without consuming a limit slot. The caller
+ * should return an empty response immediately, echoing back {@link OpenScanResult#getLogOffset}.
  *
  * <h3>TTL eviction</h3>
  *
@@ -94,11 +95,11 @@ public class ScannerManager implements AutoCloseableAsync {
      */
     private static final AtomicInteger ZERO = new AtomicInteger(0);
 
-    private final Map<String, ScannerContext> scanners = new ConcurrentHashMap<>();
-    private final Map<String, Long> recentlyExpiredIds = new ConcurrentHashMap<>();
+    private final Map<String, ScannerContext> scanners = MapUtils.newConcurrentMap();
+    private final Map<String, Long> recentlyExpiredIds = MapUtils.newConcurrentMap();
 
     /** Per-bucket active scanner count, used for O(1) per-bucket limit enforcement. */
-    private final Map<TableBucket, AtomicInteger> perBucketCount = new ConcurrentHashMap<>();
+    private final Map<TableBucket, AtomicInteger> perBucketCount = MapUtils.newConcurrentMap();
 
     /** Total active scanner count across all buckets on this tablet server. */
     private final AtomicInteger totalScanners = new AtomicInteger(0);
@@ -268,6 +269,11 @@ public class ScannerManager implements AutoCloseableAsync {
     /**
      * Closes and removes all active scanner sessions for the given bucket. Must be called when a
      * bucket loses leadership to prevent stale RocksDB snapshot/iterator leaks.
+     *
+     * <p>Closed scanner IDs are recorded in {@link #recentlyExpiredIds} so that a continuation RPC
+     * arriving after the close surfaces as {@code SCANNER_EXPIRED} (recoverable: client should
+     * restart against the new leader) rather than {@code UNKNOWN_SCANNER_ID}, which leaves the
+     * client unable to disambiguate "leadership moved" from "I made up an ID".
      */
     public void closeScannersForBucket(TableBucket tableBucket) {
         List<ScannerContext> toRemove = new ArrayList<>();
@@ -276,11 +282,15 @@ public class ScannerManager implements AutoCloseableAsync {
                 toRemove.add(entry.getValue());
             }
         }
+        long now = clock.milliseconds();
         for (ScannerContext context : toRemove) {
             LOG.info(
                     "Closing scanner {} for bucket {} due to leadership change.",
                     context.getIdString(),
                     tableBucket);
+            // Record before removal so a continuation racing with the close cannot observe a
+            // window where the ID is neither in `scanners` nor in `recentlyExpiredIds`.
+            recentlyExpiredIds.put(context.getIdString(), now);
             removeScanner(context);
         }
         // Drop any leftover per-bucket counter so we don't leak an empty AtomicInteger after

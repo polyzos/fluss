@@ -20,6 +20,7 @@ package org.apache.fluss.server.tablet;
 import org.apache.fluss.cluster.ServerType;
 import org.apache.fluss.exception.AuthorizationException;
 import org.apache.fluss.exception.InvalidScanRequestException;
+import org.apache.fluss.exception.NotLeaderOrFollowerException;
 import org.apache.fluss.exception.ScannerExpiredException;
 import org.apache.fluss.exception.UnknownScannerIdException;
 import org.apache.fluss.exception.UnknownTableOrBucketException;
@@ -90,6 +91,7 @@ import org.apache.fluss.server.log.FilterInfo;
 import org.apache.fluss.server.log.ListOffsetsParam;
 import org.apache.fluss.server.metadata.TabletServerMetadataCache;
 import org.apache.fluss.server.metadata.TabletServerMetadataProvider;
+import org.apache.fluss.server.replica.Replica;
 import org.apache.fluss.server.replica.ReplicaManager;
 import org.apache.fluss.server.utils.ServerRpcMessageUtils;
 import org.apache.fluss.server.zk.ZooKeeperClient;
@@ -473,6 +475,15 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 throw new InvalidScanRequestException(
                         "ScanKvRequest must not set both bucket_scan_req and scanner_id.");
             }
+            // close_scanner only makes sense on a continuation (paired with scanner_id);
+            // pairing it with a fresh bucket_scan_req would open and immediately tear down a
+            // session, wasting a slot and confusing the client contract.
+            if (request.hasBucketScanReq()
+                    && request.hasCloseScanner()
+                    && request.isCloseScanner()) {
+                throw new InvalidScanRequestException(
+                        "ScanKvRequest must not set close_scanner together with bucket_scan_req.");
+            }
 
             if (request.hasBucketScanReq()) {
                 // New scan: open a fresh scanner session
@@ -547,13 +558,36 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 openedContext = context;
             }
 
-            // Handle explicit close request
+            // Handle explicit close request. Honour the close even on a non-leader: the local
+            // session resources are still ours to release, and we don't want a leadership flip
+            // racing with a close to leak a snapshot.
             if (request.hasCloseScanner() && request.isCloseScanner()) {
                 scannerManager.removeScanner(context);
                 openedContext = null;
                 response.setScannerId(context.getScannerId());
                 response.setHasMoreResults(false);
                 return CompletableFuture.completedFuture(response);
+            }
+
+            // Continuation: re-verify that this server is still the leader for the bucket
+            // before serving more data. closeScannersForBucket() will eventually evict the
+            // scanner on a leadership flip (and surface SCANNER_EXPIRED on later RPCs), but
+            // there is a small window between the leader flip and that callback during which
+            // the scanner remains in the map. Catching the flip here lets the client redirect
+            // to the new leader instead of silently consuming a stale snapshot.
+            if (!request.hasBucketScanReq()) {
+                Replica replica = replicaManager.getReplicaOrException(context.getTableBucket());
+                if (!replica.isLeader()) {
+                    // Drop the local session so resources aren't held while the client
+                    // redirects; closeScannersForBucket() will be a no-op when it runs.
+                    scannerManager.removeScanner(context);
+                    openedContext = null;
+                    throw new NotLeaderOrFollowerException(
+                            String.format(
+                                    "Leader is no longer local for bucket %s; client should "
+                                            + "restart the scan against the new leader.",
+                                    context.getTableBucket()));
+                }
             }
 
             // batch_size_bytes is optional in proto; require it for data-fetching requests and
@@ -571,11 +605,17 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
 
             // Build the next batch using the builder's own running size as the gating signal so
             // the threshold reflects the actual serialised batch (header + per-record framing),
-            // not just the raw value bytes.
+            // not just the raw value bytes. We always append at least one record (when data is
+            // available) so an unusually small effectiveBatchSize — e.g. one smaller than the
+            // empty-builder header — cannot produce an empty has_more=true response that would
+            // make the client loop indefinitely.
             DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
-            while (context.isValid() && builder.sizeInBytes() < effectiveBatchSize) {
+            boolean appendedAny = false;
+            while (context.isValid()
+                    && (!appendedAny || builder.sizeInBytes() < effectiveBatchSize)) {
                 builder.append(context.currentValue());
                 context.advance();
+                appendedAny = true;
             }
 
             boolean hasMore = context.isValid();

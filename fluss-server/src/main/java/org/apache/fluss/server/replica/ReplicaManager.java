@@ -1841,11 +1841,10 @@ public class ReplicaManager implements ServerReconfigurable {
         // First stop fetchers for this table bucket.
         replicaFetcherManager.removeFetcherForBuckets(Collections.singleton(tb));
 
-        // Close active scanner sessions for this bucket before tearing down the KV tablet.
-        // Replica#openScan registers scanners under the leaderIsrUpdateLock read lock and the
-        // make-follower / stop-replica flow flips leadership under the write lock, so any
-        // scanner that races with this stop is either registered before the leader flips (and
-        // released here) or rejected by the isLeader() check inside openScan.
+        // Close active scanner sessions for this bucket as a first cut before the replica's
+        // write-lock teardown. The authoritative cleanup happens inside Replica#dropKv (called
+        // from delete() under the write lock); this outer call narrows the window during which
+        // a concurrent scanKv could observe stale state, and is a no-op once dropKv has run.
         scannerManager.closeScannersForBucket(tb);
 
         HostedReplica replica = getReplica(tb);

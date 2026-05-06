@@ -360,6 +360,29 @@ class ScannerManagerTest {
         }
     }
 
+    /**
+     * Leadership-induced closure must record the scanner ID in {@code recentlyExpiredIds} so a
+     * continuation RPC arriving after the close surfaces SCANNER_EXPIRED (recoverable: client
+     * restarts against the new leader) rather than UNKNOWN_SCANNER_ID, which would leave the client
+     * unable to disambiguate "leadership moved" from "I made up an ID".
+     */
+    @Test
+    void testCloseScannersForBucket_marksRecentlyExpired() throws Exception {
+        putAndFlush(3);
+        try (ScannerManager manager = createManager()) {
+            TableBucket tableBucket = kvTablet.getTableBucket();
+
+            ScannerContext ctx = openAndRegister(manager);
+            assertThat(ctx).isNotNull();
+            byte[] scannerId = ctx.getScannerId();
+
+            manager.closeScannersForBucket(tableBucket);
+
+            assertThat(manager.getScanner(scannerId)).isNull();
+            assertThat(manager.isRecentlyExpired(scannerId)).isTrue();
+        }
+    }
+
     @Test
     void testShutdown_closesAllScanners() throws Exception {
         putAndFlush(3);

@@ -217,9 +217,12 @@ public final class Replica {
 
     /**
      * Reference to the server-wide {@link ScannerManager}. Active scanner sessions for this bucket
-     * are closed eagerly in {@link #dropKv()} as a safety net, even on code paths that do not go
-     * through {@link org.apache.fluss.server.replica.ReplicaManager#makeFollowers} or {@link
-     * org.apache.fluss.server.replica.ReplicaManager#stopReplicas}.
+     * are closed in {@link #dropKv()} <em>under the {@code leaderIsrUpdateLock} write lock</em> so
+     * that no new scanner can register between the leadership flip and the KV tablet teardown. This
+     * is the authoritative cleanup path; the additional {@code closeScannersForBucket} calls in
+     * {@link org.apache.fluss.server.replica.ReplicaManager#stopReplicas} (before {@code delete()})
+     * and {@link org.apache.fluss.server.replica.ReplicaManager#makeFollowers} (after {@code
+     * makeFollower(...)}) cover narrower windows but do not replace this guard.
      */
     private final ScannerManager scannerManager;
 
@@ -716,11 +719,11 @@ public final class Replica {
     }
 
     private void dropKv() {
-        // Safety net: close any lingering scanner sessions for this bucket before tearing down
-        // the KV tablet. The main cleanup paths (makeFollowers, stopReplica) call
-        // ScannerManager.closeScannersForBucket directly on ReplicaManager, but this guard
-        // ensures ResourceGuard leases are released even on unexpected code paths, preventing
-        // KvTablet.close() from blocking indefinitely on resourceGuard.close().
+        // Close any active scanner sessions for this bucket BEFORE tearing down the KV tablet
+        // — otherwise outstanding ResourceGuard leases would block kvTablet.close() indefinitely
+        // on resourceGuard.close(). This call runs under leaderIsrUpdateLock(W) (held by every
+        // caller of dropKv: delete(), onBecomeNewLeader(), onBecomeNewFollower()), so no new
+        // scanner can register concurrently — Replica#openScan registers under the read lock.
         scannerManager.closeScannersForBucket(tableBucket);
         // close any closeable registry for kv
         if (closeableRegistry.unregisterCloseable(closeableRegistryForKv)) {
