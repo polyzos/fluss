@@ -62,6 +62,7 @@ import org.apache.fluss.server.kv.KvTablet;
 import org.apache.fluss.server.kv.RemoteLogFetcher;
 import org.apache.fluss.server.kv.autoinc.AutoIncIDRange;
 import org.apache.fluss.server.kv.rocksdb.RocksDBKvBuilder;
+import org.apache.fluss.server.kv.scan.OpenScanResult;
 import org.apache.fluss.server.kv.scan.ScannerContext;
 import org.apache.fluss.server.kv.scan.ScannerManager;
 import org.apache.fluss.server.kv.snapshot.CompletedKvSnapshotCommitter;
@@ -1407,8 +1408,10 @@ public final class Replica {
      * / {@code stopReplicas} will call {@link ScannerManager#closeScannersForBucket(TableBucket)}
      * and any scanner registered before the flip is released eagerly.
      *
-     * <p>Returns {@code null} if the bucket is empty at snapshot time; in that case no session slot
-     * is consumed.
+     * <p>The returned {@link OpenScanResult} always carries the log offset captured at snapshot
+     * time. If the bucket is empty, the result's {@link OpenScanResult#getContext context} is
+     * {@code null} and no session slot is consumed; the caller should still relay the offset on the
+     * response.
      *
      * @param scannerManager the manager to register the new context with
      * @param scannerId the server-assigned scanner ID
@@ -1419,8 +1422,7 @@ public final class Replica {
      * @throws TooManyScannersException if registering would breach the configured scanner limits
      * @throws IOException if RocksDB is shutting down
      */
-    @Nullable
-    public ScannerContext openScan(
+    public OpenScanResult openScan(
             ScannerManager scannerManager, String scannerId, long limit, long initialAccessTimeMs)
             throws IOException {
         if (!isKvTable()) {
@@ -1439,11 +1441,13 @@ public final class Replica {
                     }
                     checkNotNull(
                             kvTablet, "KvTablet for the replica to open scan shouldn't be null.");
-                    ScannerContext context =
+                    OpenScanResult result =
                             kvTablet.openScan(scannerId, limit, initialAccessTimeMs);
+                    ScannerContext context = result.getContext();
                     if (context == null) {
-                        // Empty bucket — no session is registered.
-                        return null;
+                        // Empty bucket — no session is registered, but propagate the captured
+                        // log offset back to the caller.
+                        return result;
                     }
                     try {
                         scannerManager.register(context);
@@ -1453,7 +1457,7 @@ public final class Replica {
                         IOUtils.closeQuietly(context);
                         throw e;
                     }
-                    return context;
+                    return result;
                 });
     }
 

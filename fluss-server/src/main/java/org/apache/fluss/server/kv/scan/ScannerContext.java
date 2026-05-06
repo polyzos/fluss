@@ -56,6 +56,14 @@ public class ScannerContext implements Closeable {
     private final ReadOptions readOptions;
     private final Snapshot snapshot;
     private final ResourceGuard.Lease resourceLease;
+
+    /**
+     * Log offset of the latest record flushed to the KV store at the moment this scanner's RocksDB
+     * snapshot was opened. Sent to the client on the first response so that downstream consumers
+     * can perform a consistent snapshot-to-log handoff.
+     */
+    private final long logOffset;
+
     private long remainingLimit;
     // Initial value -1 so that the first client call_seq_id of 0 satisfies the server's
     // in-order check: expectedSeqId = callSeqId + 1 = -1 + 1 = 0.
@@ -83,6 +91,7 @@ public class ScannerContext implements Closeable {
             Snapshot snapshot,
             ResourceGuard.Lease resourceLease,
             long limit,
+            long logOffset,
             long initialAccessTimeMs) {
         this.scannerId = scannerId;
         this.scannerIdBytes = scannerId.getBytes(StandardCharsets.UTF_8);
@@ -93,7 +102,16 @@ public class ScannerContext implements Closeable {
         this.snapshot = snapshot;
         this.resourceLease = resourceLease;
         this.remainingLimit = limit <= 0 ? -1L : limit;
+        this.logOffset = logOffset;
         this.lastAccessTime = initialAccessTimeMs;
+    }
+
+    /**
+     * Returns the log offset captured at the moment this scanner's RocksDB snapshot was opened. See
+     * {@link #logOffset}.
+     */
+    public long getLogOffset() {
+        return logOffset;
     }
 
     public byte[] getScannerId() {

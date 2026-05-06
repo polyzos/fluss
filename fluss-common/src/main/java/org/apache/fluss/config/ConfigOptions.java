@@ -550,6 +550,16 @@ public class ConfigOptions {
                                     + "Exceeding this limit returns TOO_MANY_SCANNERS. "
                                     + "The default value is 200.");
 
+    public static final ConfigOption<MemorySize> KV_SCANNER_MAX_BATCH_SIZE =
+            key("kv.scanner.max-batch-size")
+                    .memoryType()
+                    .defaultValue(MemorySize.parse("10mb"))
+                    .withDescription(
+                            "Server-side cap on the per-batch payload size for KV full-scan responses. "
+                                    + "The effective batch size is min(client-requested batch_size_bytes, "
+                                    + "this value). Protects the tablet server from out-of-memory if a "
+                                    + "client passes an excessively large batch size. The default value is 10mb.");
+
     public static final ConfigOption<Integer> TABLET_SERVER_CONTROLLED_SHUTDOWN_MAX_RETRIES =
             key("tablet-server.controlled-shutdown.max-retries")
                     .intType()

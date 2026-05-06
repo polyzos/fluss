@@ -81,6 +81,7 @@ import org.apache.fluss.server.coordinator.MetadataManager;
 import org.apache.fluss.server.entity.FetchReqInfo;
 import org.apache.fluss.server.entity.NotifyLeaderAndIsrData;
 import org.apache.fluss.server.entity.UserContext;
+import org.apache.fluss.server.kv.scan.OpenScanResult;
 import org.apache.fluss.server.kv.scan.ScannerContext;
 import org.apache.fluss.server.kv.scan.ScannerManager;
 import org.apache.fluss.server.log.FetchParams;
@@ -146,6 +147,13 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
     private final TabletServerMetadataProvider metadataFunctionProvider;
     private final ScannerManager scannerManager;
 
+    /**
+     * Server-side cap on per-batch payload size for KV full-scan responses. The effective batch
+     * size used in {@link #scanKv} is {@code min(client-requested batch_size_bytes, this value)},
+     * which protects the server against OOM if a client passes an excessively large value.
+     */
+    private final int kvScanMaxBatchSizeBytes;
+
     public TabletService(
             int serverId,
             FileSystem remoteFileSystem,
@@ -156,7 +164,8 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
             @Nullable Authorizer authorizer,
             DynamicConfigManager dynamicConfigManager,
             ExecutorService ioExecutor,
-            ScannerManager scannerManager) {
+            ScannerManager scannerManager,
+            int kvScanMaxBatchSizeBytes) {
         super(
                 remoteFileSystem,
                 ServerType.TABLET_SERVER,
@@ -171,6 +180,7 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
         this.metadataFunctionProvider =
                 new TabletServerMetadataProvider(zkClient, metadataManager, metadataCache);
         this.scannerManager = scannerManager;
+        this.kvScanMaxBatchSizeBytes = kvScanMaxBatchSizeBytes;
     }
 
     @Override
@@ -454,6 +464,10 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
         ScannerContext openedContext = null;
         try {
             ScannerContext context;
+            // True only on the initial (bucket_scan_req) path, where we must echo the snapshot
+            // log offset back to the client. On continuations the field stays absent.
+            boolean isNewScan = false;
+            long initialLogOffset = 0L;
 
             if (request.hasBucketScanReq() && request.hasScannerId()) {
                 throw new InvalidScanRequestException(
@@ -473,14 +487,19 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                                 bucketReq.getBucketId());
                 Long limit = bucketReq.hasLimit() ? bucketReq.getLimit() : null;
 
-                context =
+                OpenScanResult openResult =
                         scannerManager.createScanner(
                                 replicaManager.getReplicaOrException(tableBucket), limit);
+                isNewScan = true;
+                initialLogOffset = openResult.getLogOffset();
 
+                context = openResult.getContext();
                 if (context == null) {
                     // Bucket is empty — return an empty response immediately without registering a
-                    // session.
+                    // session, but echo the captured log offset so the client can perform a
+                    // consistent snapshot-to-log handoff.
                     response.setHasMoreResults(false);
+                    response.setLogOffset(initialLogOffset);
                     return CompletableFuture.completedFuture(response);
                 }
                 openedContext = context;
@@ -493,6 +512,15 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 byte[] scannerId = request.getScannerId();
                 context = scannerManager.getScanner(scannerId);
                 if (context == null) {
+                    // If the client is sending a close request and the scanner is already gone
+                    // (auto-closed when fully drained, or evicted by TTL), this is a benign
+                    // no-op — return a finished response instead of surfacing an error that
+                    // the client cannot act on.
+                    if (request.hasCloseScanner() && request.isCloseScanner()) {
+                        response.setScannerId(scannerId);
+                        response.setHasMoreResults(false);
+                        return CompletableFuture.completedFuture(response);
+                    }
                     if (scannerManager.isRecentlyExpired(scannerId)) {
                         throw new ScannerExpiredException(
                                 "Scanner session has expired due to inactivity. "
@@ -528,18 +556,25 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 return CompletableFuture.completedFuture(response);
             }
 
-            // Build the next batch
-            int batchSizeBytes = request.getBatchSizeBytes();
-            if (batchSizeBytes <= 0) {
+            // batch_size_bytes is optional in proto; require it for data-fetching requests and
+            // clamp to the server-side cap so a malicious or buggy client cannot trigger an OOM
+            // by passing Integer.MAX_VALUE.
+            if (!request.hasBatchSizeBytes()) {
+                throw new InvalidScanRequestException(
+                        "batch_size_bytes is required for data-fetching scan requests.");
+            }
+            int requestedBatchSize = request.getBatchSizeBytes();
+            if (requestedBatchSize <= 0) {
                 throw new InvalidScanRequestException("batch_size_bytes must be greater than 0.");
             }
-            DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
-            long totalBytes = 0L;
+            int effectiveBatchSize = Math.min(requestedBatchSize, kvScanMaxBatchSizeBytes);
 
-            while (context.isValid() && totalBytes < batchSizeBytes) {
-                byte[] value = context.currentValue();
-                builder.append(value);
-                totalBytes += value.length;
+            // Build the next batch using the builder's own running size as the gating signal so
+            // the threshold reflects the actual serialised batch (header + per-record framing),
+            // not just the raw value bytes.
+            DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
+            while (context.isValid() && builder.sizeInBytes() < effectiveBatchSize) {
+                builder.append(context.currentValue());
                 context.advance();
             }
 
@@ -550,6 +585,9 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
             response.setHasMoreResults(hasMore);
             if (batch.sizeInBytes() > 0) {
                 response.setRecords(batch.getSegment(), batch.getPosition(), batch.sizeInBytes());
+            }
+            if (isNewScan) {
+                response.setLogOffset(initialLogOffset);
             }
 
             // Update callSeqId AFTER the response is prepared so that a client retry with the
@@ -572,8 +610,9 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
             if (e instanceof InterruptedException || e.getCause() instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            response.setErrorCode(Errors.forException(e).code());
-            response.setErrorMessage(e.getMessage() != null ? e.getMessage() : "");
+            ApiError apiError = ApiError.fromThrowable(e);
+            response.setErrorCode(apiError.error().code());
+            response.setErrorMessage(apiError.message() != null ? apiError.message() : "");
         } finally {
             // If we made it past createScanner/getScanner but failed to deliver a complete
             // response, close the session rather than leaking it to TTL. The cursor has

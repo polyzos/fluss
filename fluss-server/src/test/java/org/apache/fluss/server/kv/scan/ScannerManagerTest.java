@@ -198,8 +198,8 @@ class ScannerManagerTest {
      */
     private ScannerContext openAndRegister(ScannerManager manager) throws Exception {
         ScannerContext ctx =
-                kvTablet.openScan(
-                        java.util.UUID.randomUUID().toString(), -1L, clock.milliseconds());
+                kvTablet.openScan(java.util.UUID.randomUUID().toString(), -1L, clock.milliseconds())
+                        .getContext();
         if (ctx == null) {
             return null;
         }

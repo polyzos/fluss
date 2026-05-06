@@ -58,6 +58,7 @@ import org.apache.fluss.server.kv.rocksdb.RocksDBResourceContainer;
 import org.apache.fluss.server.kv.rocksdb.RocksDBStatistics;
 import org.apache.fluss.server.kv.rowmerger.DefaultRowMerger;
 import org.apache.fluss.server.kv.rowmerger.RowMerger;
+import org.apache.fluss.server.kv.scan.OpenScanResult;
 import org.apache.fluss.server.kv.scan.ScannerContext;
 import org.apache.fluss.server.kv.snapshot.KvFileHandleAndLocalPath;
 import org.apache.fluss.server.kv.snapshot.KvSnapshotDataUploader;
@@ -767,8 +768,10 @@ public final class KvTablet {
      * Opens a new full-scan session, taking a point-in-time RocksDB snapshot under the {@code
      * kvLock} read lock.
      *
-     * <p>Returns {@code null} if the bucket contains no rows at the time of the call. In that case
-     * all acquired resources are released internally and no session is registered.
+     * <p>The returned {@link OpenScanResult} always carries the {@link OpenScanResult#getLogOffset
+     * log offset} captured at snapshot time (the latest record flushed into the KV store). On the
+     * empty-bucket fast path the result's {@link OpenScanResult#getContext context} is {@code null}
+     * and all RocksDB resources have been released internally; no session is registered.
      *
      * <p>The returned {@link ScannerContext} is <em>unregistered</em> — the caller ({@link
      * org.apache.fluss.server.kv.scan.ScannerManager}) is responsible for registering it and for
@@ -777,12 +780,11 @@ public final class KvTablet {
      * @param scannerId the server-assigned scanner ID
      * @param limit maximum number of rows to return across all batches ({@code ≤ 0} = unlimited)
      * @param initialAccessTimeMs wall-clock time (ms) to use as the initial last-access timestamp
-     * @return a newly created, cursor-positioned {@link ScannerContext}, or {@code null} if the
-     *     bucket is empty
+     * @return an {@link OpenScanResult} carrying the captured log offset and (for non-empty
+     *     buckets) a cursor-positioned {@link ScannerContext}
      * @throws IOException if the ResourceGuard is already closed (RocksDB is shutting down)
      */
-    @Nullable
-    public ScannerContext openScan(String scannerId, long limit, long initialAccessTimeMs)
+    public OpenScanResult openScan(String scannerId, long limit, long initialAccessTimeMs)
             throws IOException {
         return inReadLock(
                 kvLock,
@@ -795,6 +797,9 @@ public final class KvTablet {
                     boolean success = false;
                     try {
                         snapshot = rocksDBKv.getDb().getSnapshot();
+                        // Capture the flushed log offset under the same lock that gates flushes,
+                        // so the value reflects exactly the data visible through the snapshot.
+                        long capturedLogOffset = flushedLogOffset;
                         readOptions = new ReadOptions().setSnapshot(snapshot);
                         iterator =
                                 rocksDBKv
@@ -805,7 +810,9 @@ public final class KvTablet {
                         iterator.seekToFirst();
                         if (!iterator.isValid()) {
                             // Empty bucket: no session will be registered; cleanup in finally.
-                            return null;
+                            // Return the offset so the empty-bucket fast path can still hand it
+                            // to the client for snapshot-to-log handoff.
+                            return new OpenScanResult(null, capturedLogOffset);
                         }
                         ScannerContext context =
                                 new ScannerContext(
@@ -817,9 +824,10 @@ public final class KvTablet {
                                         snapshot,
                                         lease,
                                         limit,
+                                        capturedLogOffset,
                                         initialAccessTimeMs);
                         success = true;
-                        return context;
+                        return new OpenScanResult(context, capturedLogOffset);
                     } finally {
                         if (!success) {
                             // Release in reverse allocation order. Each close is independent,

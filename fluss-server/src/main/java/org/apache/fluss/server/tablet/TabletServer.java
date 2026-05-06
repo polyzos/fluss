@@ -290,6 +290,12 @@ public class TabletServer extends ServerBase {
             // Start dynamicConfigManager after all reconfigurable components are registered
             dynamicConfigManager.startup();
 
+            // Server-side cap on the per-batch payload size; clamped to int range because the
+            // ScanKvRequest.batch_size_bytes wire-field is int32.
+            long configuredMaxBatch = conf.get(ConfigOptions.KV_SCANNER_MAX_BATCH_SIZE).getBytes();
+            int kvScanMaxBatchSizeBytes =
+                    (int) Math.min((long) Integer.MAX_VALUE, configuredMaxBatch);
+
             this.tabletService =
                     new TabletService(
                             serverId,
@@ -301,7 +307,8 @@ public class TabletServer extends ServerBase {
                             authorizer,
                             dynamicConfigManager,
                             ioExecutor,
-                            scannerManager);
+                            scannerManager,
+                            kvScanMaxBatchSizeBytes);
 
             RequestsMetrics requestsMetrics =
                     RequestsMetrics.createTabletServerRequestMetrics(tabletServerMetricGroup);

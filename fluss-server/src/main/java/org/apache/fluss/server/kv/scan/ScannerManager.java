@@ -157,8 +157,10 @@ public class ScannerManager implements AutoCloseableAsync {
      * {@link #closeScannersForBucket(TableBucket)} during {@code makeFollowers} / {@code
      * stopReplica}), or the leadership check fails and no scanner is ever created.
      *
-     * <p>Returns {@code null} if the bucket is empty (no rows to scan). In that case no session
-     * slot is consumed and the caller should return an empty response immediately.
+     * <p>The returned {@link OpenScanResult} always carries the log offset captured at snapshot
+     * time. If the bucket is empty (no rows to scan), the result's {@link OpenScanResult#getContext
+     * context} is {@code null} and no session slot is consumed; the caller should still relay the
+     * offset on the response.
      *
      * <p><b>Limit enforcement is two-phase:</b> a fast pre-check guards the common case; the
      * subsequent atomic increment + re-check prevents the TOCTOU race from permanently breaching
@@ -167,13 +169,13 @@ public class ScannerManager implements AutoCloseableAsync {
      *
      * @param replica the leader {@link Replica} for the bucket being scanned
      * @param limit optional row-count limit ({@code null} or ≤ 0 means unlimited)
-     * @return the newly registered {@link ScannerContext}, or {@code null} if the bucket is empty
+     * @return an {@link OpenScanResult} with the captured log offset and (for non-empty buckets)
+     *     the newly registered {@link ScannerContext}
      * @throws TooManyScannersException if the per-bucket or per-server limit is exceeded
      * @throws IOException if the underlying {@link org.apache.fluss.server.utils.ResourceGuard} is
      *     already closed (the bucket is shutting down)
      */
-    @Nullable
-    public ScannerContext createScanner(Replica replica, @Nullable Long limit) throws IOException {
+    public OpenScanResult createScanner(Replica replica, @Nullable Long limit) throws IOException {
         checkLimits(replica.getTableBucket());
         String scannerId = generateScannerId();
         return replica.openScan(this, scannerId, limit != null ? limit : -1L, clock.milliseconds());

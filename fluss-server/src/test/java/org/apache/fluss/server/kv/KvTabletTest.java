@@ -57,6 +57,7 @@ import org.apache.fluss.server.kv.prewrite.KvPreWriteBuffer.KvEntry;
 import org.apache.fluss.server.kv.prewrite.KvPreWriteBuffer.Value;
 import org.apache.fluss.server.kv.rocksdb.RocksDBStatistics;
 import org.apache.fluss.server.kv.rowmerger.RowMerger;
+import org.apache.fluss.server.kv.scan.OpenScanResult;
 import org.apache.fluss.server.kv.scan.ScannerContext;
 import org.apache.fluss.server.log.FetchIsolation;
 import org.apache.fluss.server.log.LogAppendInfo;
@@ -1860,11 +1861,14 @@ class KvTabletTest {
     }
 
     @Test
-    void testOpenScan_emptyBucket_returnsNull() throws Exception {
+    void testOpenScan_emptyBucket_returnsNullContext() throws Exception {
         initLogTabletAndKvTablet(DATA1_SCHEMA_PK, new HashMap<>());
-        // No data has been written — openScan must return null.
-        ScannerContext context = kvTablet.openScan("scanner-empty", -1L, 0L);
-        assertThat(context).isNull();
+        // No data has been written — the result wraps a null context but still carries the
+        // captured log offset for the empty-bucket fast path.
+        OpenScanResult result = kvTablet.openScan("scanner-empty", -1L, 0L);
+        assertThat(result).isNotNull();
+        assertThat(result.getContext()).isNull();
+        assertThat(result.getLogOffset()).isGreaterThanOrEqualTo(0L);
     }
 
     @Test
@@ -1881,8 +1885,10 @@ class KvTabletTest {
         kvTablet.putAsLeader(kvRecordBatchFactory.ofRecords(rows), null);
         kvTablet.flush(Long.MAX_VALUE, NOPErrorHandler.INSTANCE);
 
-        ScannerContext context = kvTablet.openScan("scanner-all", -1L, 0L);
+        OpenScanResult result = kvTablet.openScan("scanner-all", -1L, 0L);
+        ScannerContext context = result.getContext();
         assertThat(context).isNotNull();
+        assertThat(result.getLogOffset()).isEqualTo(context.getLogOffset());
 
         int count = 0;
         while (context.isValid()) {
@@ -1908,7 +1914,7 @@ class KvTabletTest {
         kvTablet.putAsLeader(kvRecordBatchFactory.ofRecords(initialRows), null);
         kvTablet.flush(Long.MAX_VALUE, NOPErrorHandler.INSTANCE);
 
-        ScannerContext context = kvTablet.openScan("scanner-snap", -1L, 0L);
+        ScannerContext context = kvTablet.openScan("scanner-snap", -1L, 0L).getContext();
         assertThat(context).isNotNull();
 
         // Write 2 more rows AFTER opening the scan, then flush.
@@ -1945,7 +1951,7 @@ class KvTabletTest {
         kvTablet.flush(Long.MAX_VALUE, NOPErrorHandler.INSTANCE);
 
         long limit = 3L;
-        ScannerContext context = kvTablet.openScan("scanner-limit", limit, 0L);
+        ScannerContext context = kvTablet.openScan("scanner-limit", limit, 0L).getContext();
         assertThat(context).isNotNull();
 
         int count = 0;
@@ -1972,8 +1978,8 @@ class KvTabletTest {
         kvTablet.flush(Long.MAX_VALUE, NOPErrorHandler.INSTANCE);
 
         // Open two independent scans.
-        ScannerContext ctx1 = kvTablet.openScan("scanner-a", -1L, 0L);
-        ScannerContext ctx2 = kvTablet.openScan("scanner-b", -1L, 0L);
+        ScannerContext ctx1 = kvTablet.openScan("scanner-a", -1L, 0L).getContext();
+        ScannerContext ctx2 = kvTablet.openScan("scanner-b", -1L, 0L).getContext();
         assertThat(ctx1).isNotNull();
         assertThat(ctx2).isNotNull();
 
