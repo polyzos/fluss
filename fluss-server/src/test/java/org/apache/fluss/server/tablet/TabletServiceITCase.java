@@ -51,9 +51,9 @@ import org.apache.fluss.rpc.messages.PbPrefixLookupRespForBucket;
 import org.apache.fluss.rpc.messages.PbPutKvRespForBucket;
 import org.apache.fluss.rpc.messages.ProduceLogResponse;
 import org.apache.fluss.rpc.messages.PutKvResponse;
-import org.apache.fluss.rpc.messages.StopReplicaRequest;
 import org.apache.fluss.rpc.messages.ScanKvRequest;
 import org.apache.fluss.rpc.messages.ScanKvResponse;
+import org.apache.fluss.rpc.messages.StopReplicaRequest;
 import org.apache.fluss.rpc.protocol.Errors;
 import org.apache.fluss.server.entity.NotifyLeaderAndIsrData;
 import org.apache.fluss.server.entity.NotifyLeaderAndIsrResultForBucket;
@@ -1119,8 +1119,7 @@ public class TabletServiceITCase {
         assertThat(response.hasLogOffset()).isTrue();
         assertThat(response.getLogOffset()).isGreaterThanOrEqualTo(0L);
         assertThat(response.hasRecords()).isTrue();
-        DefaultValueRecordBatch batch =
-                DefaultValueRecordBatch.pointToBytes(response.getRecords());
+        DefaultValueRecordBatch batch = DefaultValueRecordBatch.pointToBytes(response.getRecords());
         assertThat(batch.getRecordCount()).isEqualTo(2);
     }
 
@@ -1165,8 +1164,7 @@ public class TabletServiceITCase {
             assertThat(current.hasLogOffset()).isFalse();
             if (current.hasRecords()) {
                 totalRecords +=
-                        DefaultValueRecordBatch.pointToBytes(current.getRecords())
-                                .getRecordCount();
+                        DefaultValueRecordBatch.pointToBytes(current.getRecords()).getRecordCount();
             }
         }
         assertThat(totalRecords).isEqualTo(2);
@@ -1302,11 +1300,10 @@ public class TabletServiceITCase {
     }
 
     /**
-     * Models a mid-scan leadership flip via {@code stopReplica(delete=false)}, which is the
-     * RPC path the coordinator drives when transitioning a leader away. Internally this
-     * calls {@code scannerManager.closeScannersForBucket}, the same chain a real leader
-     * -> follower transition takes via {@code makeFollower -> dropKv}, so the
-     * client-observable signal is identical.
+     * Models a mid-scan leadership flip via {@code stopReplica(delete=false)}, which is the RPC
+     * path the coordinator drives when transitioning a leader away. Internally this calls {@code
+     * scannerManager.closeScannersForBucket}, the same chain a real leader -> follower transition
+     * takes via {@code makeFollower -> dropKv}, so the client-observable signal is identical.
      */
     @Test
     void testScanKv_leadershipFlipMidScan() throws Exception {
@@ -1401,9 +1398,7 @@ public class TabletServiceITCase {
         // Integer.MAX_VALUE >> kv.scanner.max-batch-size (10 MiB by default). The server
         // must silently clamp and serve the request — not reject it and not OOM.
         ScanKvResponse response =
-                leaderGateWay
-                        .scanKv(newScanKvOpenRequest(tableId, 0, Integer.MAX_VALUE))
-                        .get();
+                leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, Integer.MAX_VALUE)).get();
         assertThat(response.hasErrorCode()).isFalse();
         assertThat(response.hasRecords()).isTrue();
         assertThat(DefaultValueRecordBatch.pointToBytes(response.getRecords()).getRecordCount())
@@ -1462,10 +1457,10 @@ public class TabletServiceITCase {
     }
 
     /**
-     * Sends a stopReplica RPC for the given bucket using the coordinator epoch carried in
-     * {@code la}. The {@code FLUSS_CLUSTER_EXTENSION.stopReplica} helper hardcodes
-     * {@code coordinatorEpoch=0}, which is rejected by tablet servers once any earlier
-     * test in the same JVM has bumped the coordinator epoch above zero.
+     * Sends a stopReplica RPC for the given bucket using the coordinator epoch carried in {@code
+     * la}. The {@code FLUSS_CLUSTER_EXTENSION.stopReplica} helper hardcodes {@code
+     * coordinatorEpoch=0}, which is rejected by tablet servers once any earlier test in the same
+     * JVM has bumped the coordinator epoch above zero.
      */
     private static void stopReplicaWithLatestEpoch(
             TabletServerGateway leaderGateWay, TableBucket tb, LeaderAndIsr la) throws Exception {
@@ -1480,4 +1475,3 @@ public class TabletServiceITCase {
                 .get();
     }
 }
-
