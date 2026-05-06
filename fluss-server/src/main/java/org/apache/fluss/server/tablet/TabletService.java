@@ -475,7 +475,7 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
 
                 context =
                         scannerManager.createScanner(
-                                replicaManager.getLeaderKvTablet(tableBucket), tableBucket, limit);
+                                replicaManager.getReplicaOrException(tableBucket), limit);
 
                 if (context == null) {
                     // Bucket is empty — return an empty response immediately without registering a

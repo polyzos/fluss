@@ -190,6 +190,31 @@ class ScannerManagerTest {
         return new ScannerManager(c, scheduler, clock);
     }
 
+    /**
+     * Helper used by tests to open a scanner context directly against the KvTablet (bypassing
+     * Replica) and register it with the manager. The Replica-mediated flow is covered by
+     * integration tests; here we want to exercise ScannerManager in isolation.
+     */
+    private ScannerContext openAndRegister(ScannerManager manager) throws Exception {
+        ScannerContext ctx =
+                kvTablet.openScan(
+                        java.util.UUID.randomUUID().toString(), -1L, clock.milliseconds());
+        if (ctx == null) {
+            return null;
+        }
+        try {
+            manager.register(ctx);
+        } catch (RuntimeException e) {
+            // Mirror the production behaviour in Replica#openScan: if registration fails
+            // (e.g. TooManyScannersException), close the already-opened context to release
+            // the underlying RocksDB snapshot/iterator/lease so the test KvTablet can shut
+            // down cleanly.
+            ctx.close();
+            throw e;
+        }
+        return ctx;
+    }
+
     /** Writes {@code count} rows into the KvTablet and flushes to RocksDB. */
     private void putAndFlush(int count) throws Exception {
         List<KvRecord> rows = new ArrayList<>();
@@ -209,9 +234,8 @@ class ScannerManagerTest {
     @Test
     void testCreateScanner_emptyBucket_returnsNull() throws Exception {
         try (ScannerManager manager = createManager()) {
-            TableBucket tableBucket = kvTablet.getTableBucket();
             // Bucket has no data — openScan must return null; no slot consumed.
-            ScannerContext context = manager.createScanner(kvTablet, tableBucket, null);
+            ScannerContext context = openAndRegister(manager);
             assertThat(context).isNull();
             assertThat(manager.activeScannerCount()).isEqualTo(0);
         }
@@ -223,7 +247,7 @@ class ScannerManagerTest {
         try (ScannerManager manager = createManager()) {
             TableBucket tableBucket = kvTablet.getTableBucket();
 
-            ScannerContext context = manager.createScanner(kvTablet, tableBucket, null);
+            ScannerContext context = openAndRegister(manager);
             assertThat(context).isNotNull();
             assertThat(manager.activeScannerCount()).isEqualTo(1);
             assertThat(manager.activeScannerCountForBucket(tableBucket)).isEqualTo(1);
@@ -238,10 +262,8 @@ class ScannerManagerTest {
     void testGetScanner_refreshesLastAccessTime() throws Exception {
         putAndFlush(3);
         try (ScannerManager manager = createManager()) {
-            TableBucket tableBucket = kvTablet.getTableBucket();
-
             // Create scanner at t=0.
-            ScannerContext context = manager.createScanner(kvTablet, tableBucket, null);
+            ScannerContext context = openAndRegister(manager);
             assertThat(context).isNotNull();
             byte[] scannerId = context.getScannerId();
 
@@ -263,9 +285,7 @@ class ScannerManagerTest {
         // TTL = 200 ms, evictor every 200 ms — wide enough for slow CI schedulers.
         ScannerManager manager = createManagerWithShortTtl(200, 200);
         try {
-            TableBucket tableBucket = kvTablet.getTableBucket();
-
-            ScannerContext context = manager.createScanner(kvTablet, tableBucket, null);
+            ScannerContext context = openAndRegister(manager);
             assertThat(context).isNotNull();
             byte[] scannerId = context.getScannerId();
 
@@ -292,11 +312,11 @@ class ScannerManagerTest {
         try (ScannerManager manager = createManager(2, 200)) {
             TableBucket tableBucket = kvTablet.getTableBucket();
 
-            ScannerContext ctx1 = manager.createScanner(kvTablet, tableBucket, null);
-            ScannerContext ctx2 = manager.createScanner(kvTablet, tableBucket, null);
+            ScannerContext ctx1 = openAndRegister(manager);
+            ScannerContext ctx2 = openAndRegister(manager);
             assertThat(manager.activeScannerCountForBucket(tableBucket)).isEqualTo(2);
 
-            assertThatThrownBy(() -> manager.createScanner(kvTablet, tableBucket, null))
+            assertThatThrownBy(() -> openAndRegister(manager))
                     .isInstanceOf(TooManyScannersException.class);
 
             // Count must not have changed after the failed attempt.
@@ -311,13 +331,11 @@ class ScannerManagerTest {
     void testPerServerLimit() throws Exception {
         putAndFlush(3);
         try (ScannerManager manager = createManager(8, 2)) {
-            TableBucket tableBucket = kvTablet.getTableBucket();
-
-            ScannerContext ctx1 = manager.createScanner(kvTablet, tableBucket, null);
-            ScannerContext ctx2 = manager.createScanner(kvTablet, tableBucket, null);
+            ScannerContext ctx1 = openAndRegister(manager);
+            ScannerContext ctx2 = openAndRegister(manager);
             assertThat(manager.activeScannerCount()).isEqualTo(2);
 
-            assertThatThrownBy(() -> manager.createScanner(kvTablet, tableBucket, null))
+            assertThatThrownBy(() -> openAndRegister(manager))
                     .isInstanceOf(TooManyScannersException.class);
 
             assertThat(manager.activeScannerCount()).isEqualTo(2);
@@ -333,8 +351,8 @@ class ScannerManagerTest {
         try (ScannerManager manager = createManager()) {
             TableBucket tableBucket = kvTablet.getTableBucket();
 
-            manager.createScanner(kvTablet, tableBucket, null);
-            manager.createScanner(kvTablet, tableBucket, null);
+            openAndRegister(manager);
+            openAndRegister(manager);
             assertThat(manager.activeScannerCount()).isEqualTo(2);
 
             manager.closeScannersForBucket(tableBucket);
@@ -348,10 +366,8 @@ class ScannerManagerTest {
     void testShutdown_closesAllScanners() throws Exception {
         putAndFlush(3);
         ScannerManager manager = createManager();
-        TableBucket tableBucket = kvTablet.getTableBucket();
-
-        manager.createScanner(kvTablet, tableBucket, null);
-        manager.createScanner(kvTablet, tableBucket, null);
+        openAndRegister(manager);
+        openAndRegister(manager);
         assertThat(manager.activeScannerCount()).isEqualTo(2);
 
         manager.close();

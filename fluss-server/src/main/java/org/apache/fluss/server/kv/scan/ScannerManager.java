@@ -22,7 +22,7 @@ import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.config.Configuration;
 import org.apache.fluss.exception.TooManyScannersException;
 import org.apache.fluss.metadata.TableBucket;
-import org.apache.fluss.server.kv.KvTablet;
+import org.apache.fluss.server.replica.Replica;
 import org.apache.fluss.utils.AutoCloseableAsync;
 import org.apache.fluss.utils.clock.Clock;
 import org.apache.fluss.utils.clock.SystemClock;
@@ -132,18 +132,24 @@ public class ScannerManager implements AutoCloseableAsync {
     }
 
     /**
-     * Creates a new scan session for the given bucket, taking a point-in-time RocksDB snapshot.
+     * Creates a new scan session for the given replica, taking a point-in-time RocksDB snapshot
+     * under the replica's leader-ISR read lock.
+     *
+     * <p>Snapshot opening, leadership validation, and session registration all happen while the
+     * replica's leader-ISR lock is held, so a concurrent leadership change cannot race with this
+     * operation: either the scanner is registered before the leader flips (and is then evicted by
+     * {@link #closeScannersForBucket(TableBucket)} during {@code makeFollowers} / {@code
+     * stopReplica}), or the leadership check fails and no scanner is ever created.
      *
      * <p>Returns {@code null} if the bucket is empty (no rows to scan). In that case no session
      * slot is consumed and the caller should return an empty response immediately.
      *
      * <p><b>Limit enforcement is two-phase:</b> a fast pre-check guards the common case; the
      * subsequent atomic increment + re-check prevents the TOCTOU race from permanently breaching
-     * configured limits. If registration fails after the snapshot is already opened, the context is
-     * closed and the exception is re-thrown to avoid leaking resources.
+     * configured limits. If registration fails after the snapshot is already opened, the context
+     * is closed and the exception is re-thrown to avoid leaking resources.
      *
-     * @param kvTablet the {@link KvTablet} for the bucket; used to open the snapshot
-     * @param tableBucket the bucket being scanned
+     * @param replica the leader {@link Replica} for the bucket being scanned
      * @param limit optional row-count limit ({@code null} or ≤ 0 means unlimited)
      * @return the newly registered {@link ScannerContext}, or {@code null} if the bucket is empty
      * @throws TooManyScannersException if the per-bucket or per-server limit is exceeded
@@ -151,27 +157,22 @@ public class ScannerManager implements AutoCloseableAsync {
      *     already closed (the bucket is shutting down)
      */
     @Nullable
-    public ScannerContext createScanner(
-            KvTablet kvTablet, TableBucket tableBucket, @Nullable Long limit) throws IOException {
-        checkLimits(tableBucket);
-
+    public ScannerContext createScanner(Replica replica, @Nullable Long limit) throws IOException {
+        checkLimits(replica.getTableBucket());
         String scannerId = generateScannerId();
-        ScannerContext context =
-                kvTablet.openScan(scannerId, limit != null ? limit : -1L, clock.milliseconds());
-        if (context == null) {
-            // Bucket is empty — no session slot consumed.
-            return null;
-        }
+        return replica.openScan(this, scannerId, limit != null ? limit : -1L, clock.milliseconds());
+    }
 
-        try {
-            registerContext(context, tableBucket);
-        } catch (TooManyScannersException e) {
-            // Limit was exceeded between the initial check and registration (race window).
-            // Close the already-opened context to avoid leaking the snapshot and lease.
-            closeScannerContext(context);
-            throw e;
-        }
-        return context;
+    /**
+     * Atomically registers an already-opened {@link ScannerContext}, enforcing the per-bucket and
+     * per-server limits. On {@link TooManyScannersException} the caller is responsible for closing
+     * the context to release the underlying RocksDB resources.
+     *
+     * <p>Called by {@link Replica#openScan} while the leader-ISR read lock is held so that
+     * registration cannot race with a leadership change.
+     */
+    public void register(ScannerContext context) {
+        registerContext(context);
     }
 
     /**
@@ -297,7 +298,8 @@ public class ScannerManager implements AutoCloseableAsync {
      * TooManyScannersException} and rolls back the increments if a concurrent create caused either
      * limit to be exceeded between the initial check and this call.
      */
-    private void registerContext(ScannerContext context, TableBucket tableBucket) {
+    private void registerContext(ScannerContext context) {
+        TableBucket tableBucket = context.getTableBucket();
         AtomicInteger bucketCount =
                 perBucketCount.computeIfAbsent(tableBucket, k -> new AtomicInteger(0));
 

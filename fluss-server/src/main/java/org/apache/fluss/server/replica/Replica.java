@@ -31,6 +31,7 @@ import org.apache.fluss.exception.LogStorageException;
 import org.apache.fluss.exception.NonPrimaryKeyTableException;
 import org.apache.fluss.exception.NotEnoughReplicasException;
 import org.apache.fluss.exception.NotLeaderOrFollowerException;
+import org.apache.fluss.exception.TooManyScannersException;
 import org.apache.fluss.fs.FsPath;
 import org.apache.fluss.metadata.ChangelogImage;
 import org.apache.fluss.metadata.LogFormat;
@@ -61,6 +62,7 @@ import org.apache.fluss.server.kv.KvTablet;
 import org.apache.fluss.server.kv.RemoteLogFetcher;
 import org.apache.fluss.server.kv.autoinc.AutoIncIDRange;
 import org.apache.fluss.server.kv.rocksdb.RocksDBKvBuilder;
+import org.apache.fluss.server.kv.scan.ScannerContext;
 import org.apache.fluss.server.kv.scan.ScannerManager;
 import org.apache.fluss.server.kv.snapshot.CompletedKvSnapshotCommitter;
 import org.apache.fluss.server.kv.snapshot.CompletedSnapshot;
@@ -213,13 +215,12 @@ public final class Replica {
     private @Nullable PeriodicSnapshotManager kvSnapshotManager;
 
     /**
-     * Optional reference to the server-wide {@link ScannerManager}. When set, active scanner
-     * sessions for this bucket are closed eagerly in {@link #dropKv()} as a safety net, even on
-     * code paths that do not go through {@link
-     * org.apache.fluss.server.replica.ReplicaManager#makeFollowers} or {@link
+     * Reference to the server-wide {@link ScannerManager}. Active scanner sessions for this bucket
+     * are closed eagerly in {@link #dropKv()} as a safety net, even on code paths that do not go
+     * through {@link org.apache.fluss.server.replica.ReplicaManager#makeFollowers} or {@link
      * org.apache.fluss.server.replica.ReplicaManager#stopReplicas}.
      */
-    @Nullable private volatile ScannerManager scannerManager;
+    private final ScannerManager scannerManager;
 
     // ------- metrics
     private Counter isrShrinks;
@@ -246,7 +247,8 @@ public final class Replica {
             BucketMetricGroup bucketMetricGroup,
             TableInfo tableInfo,
             Clock clock,
-            RemoteLogManager remoteLogManager)
+            RemoteLogManager remoteLogManager,
+            ScannerManager scannerManager)
             throws Exception {
         this.physicalPath = physicalPath;
         this.tableBucket = tableBucket;
@@ -279,6 +281,7 @@ public final class Replica {
         this.logTablet.updateIsDataLakeEnabled(tableConfig.isDataLakeEnabled());
         this.clock = clock;
         this.remoteLogManager = remoteLogManager;
+        this.scannerManager = checkNotNull(scannerManager, "scannerManager");
         registerMetrics();
     }
 
@@ -386,11 +389,6 @@ public final class Replica {
 
     public @Nullable KvTablet getKvTablet() {
         return kvTablet;
-    }
-
-    /** Injects the {@link ScannerManager} so that {@link #dropKv()} can close active scanners. */
-    public void setScannerManager(@Nullable ScannerManager scannerManager) {
-        this.scannerManager = scannerManager;
     }
 
     public TablePath getTablePath() {
@@ -722,10 +720,7 @@ public final class Replica {
         // ScannerManager.closeScannersForBucket directly on ReplicaManager, but this guard
         // ensures ResourceGuard leases are released even on unexpected code paths, preventing
         // KvTablet.close() from blocking indefinitely on resourceGuard.close().
-        ScannerManager sm = this.scannerManager;
-        if (sm != null) {
-            sm.closeScannersForBucket(tableBucket);
-        }
+        scannerManager.closeScannersForBucket(tableBucket);
         // close any closeable registry for kv
         if (closeableRegistry.unregisterCloseable(closeableRegistryForKv)) {
             IOUtils.closeQuietly(closeableRegistryForKv);
@@ -1398,6 +1393,69 @@ public final class Replica {
                         LOG.error(errorMsg, e);
                         throw new KvStorageException(errorMsg, e);
                     }
+                });
+    }
+
+    /**
+     * Opens a new full-scan session against this replica's KV store, taking a point-in-time
+     * RocksDB snapshot under the {@code leaderIsrUpdateLock} read lock.
+     *
+     * <p>The lock is held for the entire flow — leadership check, KV-tablet acquisition, snapshot
+     * creation, and registration with the {@link ScannerManager} — so a concurrent leadership
+     * change cannot leave a scanner registered for a follower bucket. Once a leadership change
+     * acquires the write lock, {@link
+     * org.apache.fluss.server.replica.ReplicaManager#makeFollowers} / {@code stopReplicas} will
+     * call {@link ScannerManager#closeScannersForBucket(TableBucket)} and any scanner registered
+     * before the flip is released eagerly.
+     *
+     * <p>Returns {@code null} if the bucket is empty at snapshot time; in that case no session
+     * slot is consumed.
+     *
+     * @param scannerManager the manager to register the new context with
+     * @param scannerId the server-assigned scanner ID
+     * @param limit maximum number of rows to return ({@code ≤ 0} = unlimited)
+     * @param initialAccessTimeMs initial last-access timestamp for TTL accounting
+     * @throws NonPrimaryKeyTableException if this replica is not a primary-key (KV) table
+     * @throws NotLeaderOrFollowerException if this replica is not currently the leader
+     * @throws TooManyScannersException if registering would breach the configured scanner limits
+     * @throws IOException if RocksDB is shutting down
+     */
+    @Nullable
+    public ScannerContext openScan(
+            ScannerManager scannerManager, String scannerId, long limit, long initialAccessTimeMs)
+            throws IOException {
+        if (!isKvTable()) {
+            throw new NonPrimaryKeyTableException(
+                    "the primary key table not exists for " + tableBucket);
+        }
+
+        return inReadLock(
+                leaderIsrUpdateLock,
+                () -> {
+                    if (!isLeader()) {
+                        throw new NotLeaderOrFollowerException(
+                                String.format(
+                                        "Leader not local for bucket %s on tabletServer %d",
+                                        tableBucket, localTabletServerId));
+                    }
+                    checkNotNull(
+                            kvTablet,
+                            "KvTablet for the replica to open scan shouldn't be null.");
+                    ScannerContext context =
+                            kvTablet.openScan(scannerId, limit, initialAccessTimeMs);
+                    if (context == null) {
+                        // Empty bucket — no session is registered.
+                        return null;
+                    }
+                    try {
+                        scannerManager.register(context);
+                    } catch (TooManyScannersException e) {
+                        // Limit was breached between the pre-check and registration.
+                        // Close the already-opened context to release the snapshot and lease.
+                        IOUtils.closeQuietly(context);
+                        throw e;
+                    }
+                    return context;
                 });
     }
 

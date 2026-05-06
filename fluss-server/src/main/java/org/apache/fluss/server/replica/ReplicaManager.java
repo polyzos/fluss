@@ -27,7 +27,6 @@ import org.apache.fluss.exception.FencedLeaderEpochException;
 import org.apache.fluss.exception.InvalidColumnProjectionException;
 import org.apache.fluss.exception.InvalidCoordinatorException;
 import org.apache.fluss.exception.InvalidRequiredAcksException;
-import org.apache.fluss.exception.InvalidTableException;
 import org.apache.fluss.exception.LogOffsetOutOfRangeException;
 import org.apache.fluss.exception.LogStorageException;
 import org.apache.fluss.exception.NotLeaderOrFollowerException;
@@ -80,7 +79,6 @@ import org.apache.fluss.server.entity.StopReplicaResultForBucket;
 import org.apache.fluss.server.entity.UserContext;
 import org.apache.fluss.server.kv.KvManager;
 import org.apache.fluss.server.kv.KvSnapshotResource;
-import org.apache.fluss.server.kv.KvTablet;
 import org.apache.fluss.server.kv.scan.ScannerManager;
 import org.apache.fluss.server.kv.snapshot.CompletedKvSnapshotCommitter;
 import org.apache.fluss.server.kv.snapshot.DefaultSnapshotContext;
@@ -212,7 +210,7 @@ public class ReplicaManager implements ServerReconfigurable {
 
     private final Clock clock;
 
-    @Nullable private ScannerManager scannerManager;
+    private final ScannerManager scannerManager;
 
     public ReplicaManager(
             Configuration conf,
@@ -228,6 +226,7 @@ public class ReplicaManager implements ServerReconfigurable {
             FatalErrorHandler fatalErrorHandler,
             TabletServerMetricGroup serverMetricGroup,
             UserMetrics userMetrics,
+            ScannerManager scannerManager,
             Clock clock,
             ExecutorService ioExecutor)
             throws IOException {
@@ -246,6 +245,7 @@ public class ReplicaManager implements ServerReconfigurable {
                 serverMetricGroup,
                 userMetrics,
                 new RemoteLogManager(conf, zkClient, coordinatorGateway, clock, ioExecutor),
+                scannerManager,
                 clock,
                 ioExecutor);
     }
@@ -266,6 +266,7 @@ public class ReplicaManager implements ServerReconfigurable {
             TabletServerMetricGroup serverMetricGroup,
             UserMetrics userMetrics,
             RemoteLogManager remoteLogManager,
+            ScannerManager scannerManager,
             Clock clock,
             ExecutorService ioExecutor)
             throws IOException {
@@ -315,6 +316,7 @@ public class ReplicaManager implements ServerReconfigurable {
         this.clock = clock;
         this.ioExecutor = ioExecutor;
         this.minInSyncReplicas = conf.get(ConfigOptions.LOG_REPLICA_MIN_IN_SYNC_REPLICAS_NUMBER);
+        this.scannerManager = checkNotNull(scannerManager, "scannerManager");
         registerMetrics();
     }
 
@@ -327,10 +329,6 @@ public class ReplicaManager implements ServerReconfigurable {
                 this::maybeShrinkIsr,
                 0L,
                 conf.get(ConfigOptions.LOG_REPLICA_MAX_LAG_TIME).toMillis() / 2);
-    }
-
-    public void setScannerManager(ScannerManager scannerManager) {
-        this.scannerManager = scannerManager;
     }
 
     public RemoteLogManager getRemoteLogManager() {
@@ -1164,9 +1162,7 @@ public class ReplicaManager implements ServerReconfigurable {
                 Replica replica = getReplicaOrException(data.getTableBucket());
                 if (replica.makeFollower(data)) {
                     replicasBecomeFollower.add(replica);
-                    if (scannerManager != null) {
-                        scannerManager.closeScannersForBucket(tb);
-                    }
+                    scannerManager.closeScannersForBucket(tb);
                 }
                 // stop the remote log tiering tasks for followers
                 remoteLogManager.stopLogTiering(replica);
@@ -1846,14 +1842,11 @@ public class ReplicaManager implements ServerReconfigurable {
         replicaFetcherManager.removeFetcherForBuckets(Collections.singleton(tb));
 
         // Close active scanner sessions for this bucket before tearing down the KV tablet.
-        // A concurrent scanKv RPC in flight can still reach getLeaderKvTablet(tb) and race
-        // with createScanner. Both KvTablet.openScan and ResourceGuard.acquireResource()
-        // synchronise with the subsequent replica/RocksDB close, so the worst case is an
-        // IOException surfaced cleanly as an RPC error — never cursor corruption or a
-        // post-shutdown snapshot.
-        if (scannerManager != null) {
-            scannerManager.closeScannersForBucket(tb);
-        }
+        // Replica#openScan registers scanners under the leaderIsrUpdateLock read lock and the
+        // make-follower / stop-replica flow flips leadership under the write lock, so any
+        // scanner that races with this stop is either registered before the leader flips (and
+        // released here) or rejected by the isLeader() check inside openScan.
+        scannerManager.closeScannersForBucket(tb);
 
         HostedReplica replica = getReplica(tb);
         if (replica instanceof OnlineReplica) {
@@ -1967,10 +1960,8 @@ public class ReplicaManager implements ServerReconfigurable {
                                 bucketMetricGroup,
                                 tableInfo,
                                 clock,
-                                remoteLogManager);
-                // Inject the ScannerManager so that Replica.dropKv() can eagerly close scanner
-                // sessions as a safety net on unexpected shutdown paths.
-                replica.setScannerManager(scannerManager);
+                                remoteLogManager,
+                                scannerManager);
                 allReplicas.put(tb, new OnlineReplica(replica));
                 replicaOpt = Optional.of(replica);
             } else if (hostedReplica instanceof OnlineReplica) {
@@ -2001,33 +1992,6 @@ public class ReplicaManager implements ServerReconfigurable {
 
     public HostedReplica getReplica(TableBucket tableBucket) {
         return allReplicas.getOrDefault(tableBucket, new NoneReplica());
-    }
-
-    /**
-     * Returns the {@link KvTablet} for the local leader replica of the given bucket.
-     *
-     * @throws NotLeaderOrFollowerException if this server is not the leader for the bucket
-     * @throws InvalidTableException if the bucket does not have KV storage (not a primary-key
-     *     table)
-     * @throws UnknownTableOrBucketException if the bucket is not known to this server
-     */
-    public KvTablet getLeaderKvTablet(TableBucket tableBucket) {
-        Replica replica = getReplicaOrException(tableBucket);
-        if (!replica.isLeader()) {
-            throw new NotLeaderOrFollowerException(
-                    String.format(
-                            "Leader not local for bucket %s on tablet server %d",
-                            tableBucket, serverId));
-        }
-        KvTablet kvTablet = replica.getKvTablet();
-        if (kvTablet == null) {
-            throw new InvalidTableException(
-                    String.format(
-                            "Bucket %s does not have KV storage. "
-                                    + "Full KV scan is only supported on primary-key tables.",
-                            tableBucket));
-        }
-        return kvTablet;
     }
 
     private boolean isRequiredAcksInvalid(int requiredAcks) {

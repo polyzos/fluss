@@ -258,6 +258,10 @@ public class TabletServer extends ServerBase {
                             conf.get(ConfigOptions.SERVER_IO_POOL_SIZE),
                             new ExecutorThreadFactory("tablet-server-io"));
 
+            // Create the ScannerManager before the ReplicaManager so that it can be wired in
+            // through the ReplicaManager's constructor (and reach Replica via constructor too).
+            this.scannerManager = new ScannerManager(conf, scheduler);
+
             this.replicaManager =
                     new ReplicaManager(
                             conf,
@@ -274,6 +278,7 @@ public class TabletServer extends ServerBase {
                             this,
                             tabletServerMetricGroup,
                             userMetrics,
+                            scannerManager,
                             clock,
                             ioExecutor);
             replicaManager.startup();
@@ -284,9 +289,6 @@ public class TabletServer extends ServerBase {
             dynamicConfigManager.register(replicaManager);
             // Start dynamicConfigManager after all reconfigurable components are registered
             dynamicConfigManager.startup();
-
-            this.scannerManager = new ScannerManager(conf, scheduler);
-            replicaManager.setScannerManager(scannerManager);
 
             this.tabletService =
                     new TabletService(

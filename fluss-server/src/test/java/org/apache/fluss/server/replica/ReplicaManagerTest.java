@@ -83,7 +83,6 @@ import org.apache.fluss.types.DataField;
 import org.apache.fluss.types.DataTypes;
 import org.apache.fluss.types.RowType;
 import org.apache.fluss.utils.CloseableIterator;
-import org.apache.fluss.utils.concurrent.FlussScheduler;
 import org.apache.fluss.utils.types.Tuple2;
 
 import org.junit.jupiter.api.Test;
@@ -2404,31 +2403,23 @@ class ReplicaManagerTest extends ReplicaTestBase {
                 null);
         kvTablet.flush(Long.MAX_VALUE, NOPErrorHandler.INSTANCE);
 
-        FlussScheduler testScheduler = new FlussScheduler(1);
-        testScheduler.startup();
-        try (ScannerManager scannerManager = new ScannerManager(conf, testScheduler)) {
+        Replica replica = replicaManager.getReplicaOrException(tb);
+        scannerManager.createScanner(replica, null);
+        assertThat(scannerManager.activeScannerCount()).isEqualTo(1);
 
-            replicaManager.setScannerManager(scannerManager);
-            scannerManager.createScanner(kvTablet, tb, null);
-            assertThat(scannerManager.activeScannerCount()).isEqualTo(1);
+        CompletableFuture<List<StopReplicaResultForBucket>> future = new CompletableFuture<>();
+        replicaManager.stopReplicas(
+                INITIAL_COORDINATOR_EPOCH,
+                Collections.singletonList(
+                        new StopReplicaData(
+                                tb,
+                                false,
+                                false,
+                                INITIAL_COORDINATOR_EPOCH,
+                                INITIAL_LEADER_EPOCH)),
+                future::complete);
+        future.get();
 
-            CompletableFuture<List<StopReplicaResultForBucket>> future = new CompletableFuture<>();
-            replicaManager.stopReplicas(
-                    INITIAL_COORDINATOR_EPOCH,
-                    Collections.singletonList(
-                            new StopReplicaData(
-                                    tb,
-                                    false,
-                                    false,
-                                    INITIAL_COORDINATOR_EPOCH,
-                                    INITIAL_LEADER_EPOCH)),
-                    future::complete);
-            future.get();
-
-            assertThat(scannerManager.activeScannerCount()).isEqualTo(0);
-        } finally {
-            testScheduler.shutdown();
-            replicaManager.setScannerManager(null);
-        }
+        assertThat(scannerManager.activeScannerCount()).isEqualTo(0);
     }
 }
