@@ -65,7 +65,6 @@ import org.apache.fluss.server.entity.StopReplicaData;
 import org.apache.fluss.server.entity.StopReplicaResultForBucket;
 import org.apache.fluss.server.kv.KvTablet;
 import org.apache.fluss.server.kv.rocksdb.RocksDBKv;
-import org.apache.fluss.server.kv.scan.ScannerManager;
 import org.apache.fluss.server.kv.snapshot.CompletedSnapshot;
 import org.apache.fluss.server.log.FetchParams;
 import org.apache.fluss.server.log.ListOffsetsParam;
@@ -2379,10 +2378,6 @@ class ReplicaManagerTest extends ReplicaTestBase {
                 });
     }
 
-    /**
-     * When a replica is stopped, {@link ScannerManager#closeScannersForBucket} must be called so
-     * that open scanner sessions are released before the KV store is destroyed.
-     */
     @Test
     void testStopReplicas_closesScanners() throws Exception {
         TableBucket tb = new TableBucket(DATA1_TABLE_ID_PK, 0);

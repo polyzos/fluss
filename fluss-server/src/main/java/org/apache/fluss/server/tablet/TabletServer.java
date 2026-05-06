@@ -258,8 +258,6 @@ public class TabletServer extends ServerBase {
                             conf.get(ConfigOptions.SERVER_IO_POOL_SIZE),
                             new ExecutorThreadFactory("tablet-server-io"));
 
-            // Create the ScannerManager before the ReplicaManager so that it can be wired in
-            // through the ReplicaManager's constructor (and reach Replica via constructor too).
             this.scannerManager = new ScannerManager(conf, scheduler);
 
             this.replicaManager =
@@ -290,11 +288,8 @@ public class TabletServer extends ServerBase {
             // Start dynamicConfigManager after all reconfigurable components are registered
             dynamicConfigManager.startup();
 
-            // Server-side cap on the per-batch payload size; clamped to int range because the
-            // ScanKvRequest.batch_size_bytes wire-field is int32.
             long configuredMaxBatch = conf.get(ConfigOptions.KV_SCANNER_MAX_BATCH_SIZE).getBytes();
-            int kvScanMaxBatchSizeBytes =
-                    (int) Math.min((long) Integer.MAX_VALUE, configuredMaxBatch);
+            int kvScanMaxBatchSizeBytes = (int) Math.min(Integer.MAX_VALUE, configuredMaxBatch);
 
             this.tabletService =
                     new TabletService(

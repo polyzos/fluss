@@ -216,13 +216,9 @@ public final class Replica {
     private @Nullable PeriodicSnapshotManager kvSnapshotManager;
 
     /**
-     * Reference to the server-wide {@link ScannerManager}. Active scanner sessions for this bucket
-     * are closed in {@link #dropKv()} <em>under the {@code leaderIsrUpdateLock} write lock</em> so
-     * that no new scanner can register between the leadership flip and the KV tablet teardown. This
-     * is the authoritative cleanup path; the additional {@code closeScannersForBucket} calls in
-     * {@link org.apache.fluss.server.replica.ReplicaManager#stopReplicas} (before {@code delete()})
-     * and {@link org.apache.fluss.server.replica.ReplicaManager#makeFollowers} (after {@code
-     * makeFollower(...)}) cover narrower windows but do not replace this guard.
+     * Server-wide {@link ScannerManager}. Active sessions for this bucket are closed in {@link
+     * #dropKv()} under the {@code leaderIsrUpdateLock} write lock; {@link #openScan} registers
+     * under the read lock, so registration cannot race a leadership flip.
      */
     private final ScannerManager scannerManager;
 
@@ -719,22 +715,16 @@ public final class Replica {
     }
 
     private void dropKv() {
-        // Close any active scanner sessions for this bucket BEFORE tearing down the KV tablet
-        // — otherwise outstanding ResourceGuard leases would block kvTablet.close() indefinitely
-        // on resourceGuard.close(). This call runs under leaderIsrUpdateLock(W) (held by every
-        // caller of dropKv: delete(), onBecomeNewLeader(), onBecomeNewFollower()), so no new
-        // scanner can register concurrently — Replica#openScan registers under the read lock.
+        // Release scanner leases first; otherwise resourceGuard.close() inside kvTablet.close()
+        // blocks waiting for them. Runs under leaderIsrUpdateLock(W), so no concurrent register.
         scannerManager.closeScannersForBucket(tableBucket);
-        // close any closeable registry for kv
+
         if (closeableRegistry.unregisterCloseable(closeableRegistryForKv)) {
             IOUtils.closeQuietly(closeableRegistryForKv);
         }
         if (kvTablet != null) {
-            // Unregister RocksDB statistics before dropping KvTablet
-            // This ensures statistics are cleaned up when KvTablet is destroyed
             bucketMetricGroup.unregisterRocksDBStatistics();
 
-            // drop the kv tablet
             checkNotNull(kvManager);
             kvManager.dropKv(tableBucket);
             kvTablet = null;
@@ -1401,28 +1391,14 @@ public final class Replica {
     }
 
     /**
-     * Opens a new full-scan session against this replica's KV store, taking a point-in-time RocksDB
-     * snapshot under the {@code leaderIsrUpdateLock} read lock.
+     * Opens a new full-scan session against this replica's KV store. The leader check, snapshot
+     * open, and {@link ScannerManager#register} all happen under {@code leaderIsrUpdateLock(R)}, so
+     * a leadership flip cannot leave a scanner registered for a non-leader bucket.
      *
-     * <p>The lock is held for the entire flow — leadership check, KV-tablet acquisition, snapshot
-     * creation, and registration with the {@link ScannerManager} — so a concurrent leadership
-     * change cannot leave a scanner registered for a follower bucket. Once a leadership change
-     * acquires the write lock, {@link org.apache.fluss.server.replica.ReplicaManager#makeFollowers}
-     * / {@code stopReplicas} will call {@link ScannerManager#closeScannersForBucket(TableBucket)}
-     * and any scanner registered before the flip is released eagerly.
-     *
-     * <p>The returned {@link OpenScanResult} always carries the log offset captured at snapshot
-     * time. If the bucket is empty, the result's {@link OpenScanResult#getContext context} is
-     * {@code null} and no session slot is consumed; the caller should still relay the offset on the
-     * response.
-     *
-     * @param scannerManager the manager to register the new context with
-     * @param scannerId the server-assigned scanner ID
-     * @param limit maximum number of rows to return ({@code ≤ 0} = unlimited)
-     * @param initialAccessTimeMs initial last-access timestamp for TTL accounting
-     * @throws NonPrimaryKeyTableException if this replica is not a primary-key (KV) table
-     * @throws NotLeaderOrFollowerException if this replica is not currently the leader
-     * @throws TooManyScannersException if registering would breach the configured scanner limits
+     * @param limit row-count cap ({@code ≤ 0} means unlimited)
+     * @throws NonPrimaryKeyTableException if this replica is not a primary-key table
+     * @throws NotLeaderOrFollowerException if this replica is not the leader
+     * @throws TooManyScannersException if scanner limits are exceeded
      * @throws IOException if RocksDB is shutting down
      */
     public OpenScanResult openScan(
@@ -1448,15 +1424,11 @@ public final class Replica {
                             kvTablet.openScan(scannerId, limit, initialAccessTimeMs);
                     ScannerContext context = result.getContext();
                     if (context == null) {
-                        // Empty bucket — no session is registered, but propagate the captured
-                        // log offset back to the caller.
                         return result;
                     }
                     try {
                         scannerManager.register(context);
                     } catch (TooManyScannersException e) {
-                        // Limit was breached between the pre-check and registration.
-                        // Close the already-opened context to release the snapshot and lease.
                         IOUtils.closeQuietly(context);
                         throw e;
                     }

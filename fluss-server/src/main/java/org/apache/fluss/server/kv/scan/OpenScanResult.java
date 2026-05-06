@@ -22,13 +22,9 @@ import org.apache.fluss.annotation.Internal;
 import javax.annotation.Nullable;
 
 /**
- * Result of opening a KV full-scan session, returned by {@link
- * org.apache.fluss.server.kv.KvTablet#openScan}, {@link
- * org.apache.fluss.server.replica.Replica#openScan}, and {@link ScannerManager#createScanner}.
- *
- * <p>Carries both the (optional) {@link ScannerContext} and the log offset captured under the same
- * lock as the RocksDB snapshot. The log offset must reach the client even on the empty-bucket fast
- * path so that a snapshot-to-log handoff can be performed without missing or duplicating records.
+ * Result of opening a KV full-scan session: an optional {@link ScannerContext} plus the log offset
+ * captured at snapshot time. The offset must reach the client even on the empty-bucket fast path so
+ * a snapshot-to-log handoff cannot miss or duplicate records.
  */
 @Internal
 public final class OpenScanResult {
@@ -41,19 +37,12 @@ public final class OpenScanResult {
         this.logOffset = logOffset;
     }
 
-    /**
-     * Returns the registered {@link ScannerContext}, or {@code null} if the bucket was empty at
-     * snapshot time (no session is created in that case).
-     */
+    /** {@code null} if the bucket was empty at snapshot time. */
     @Nullable
     public ScannerContext getContext() {
         return context;
     }
 
-    /**
-     * Returns the log offset of the latest record that was flushed into the KV store at the moment
-     * the RocksDB snapshot was opened. Always non-negative.
-     */
     public long getLogOffset() {
         return logOffset;
     }

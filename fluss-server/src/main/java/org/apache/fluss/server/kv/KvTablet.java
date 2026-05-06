@@ -765,24 +765,13 @@ public final class KvTablet {
     }
 
     /**
-     * Opens a new full-scan session, taking a point-in-time RocksDB snapshot under the {@code
-     * kvLock} read lock.
+     * Opens a new full-scan session under the {@code kvLock} read lock. Returns an empty-bucket
+     * result (context = {@code null}, all RocksDB resources released internally) when the bucket
+     * has no rows. The returned {@link ScannerContext} is unregistered; the caller owns
+     * registration and close.
      *
-     * <p>The returned {@link OpenScanResult} always carries the {@link OpenScanResult#getLogOffset
-     * log offset} captured at snapshot time (the latest record flushed into the KV store). On the
-     * empty-bucket fast path the result's {@link OpenScanResult#getContext context} is {@code null}
-     * and all RocksDB resources have been released internally; no session is registered.
-     *
-     * <p>The returned {@link ScannerContext} is <em>unregistered</em> — the caller ({@link
-     * org.apache.fluss.server.kv.scan.ScannerManager}) is responsible for registering it and for
-     * closing it when the scan is complete.
-     *
-     * @param scannerId the server-assigned scanner ID
-     * @param limit maximum number of rows to return across all batches ({@code ≤ 0} = unlimited)
-     * @param initialAccessTimeMs wall-clock time (ms) to use as the initial last-access timestamp
-     * @return an {@link OpenScanResult} carrying the captured log offset and (for non-empty
-     *     buckets) a cursor-positioned {@link ScannerContext}
-     * @throws IOException if the ResourceGuard is already closed (RocksDB is shutting down)
+     * @param limit row-count cap across all batches ({@code ≤ 0} means unlimited)
+     * @throws IOException if RocksDB is shutting down
      */
     public OpenScanResult openScan(String scannerId, long limit, long initialAccessTimeMs)
             throws IOException {
@@ -797,8 +786,8 @@ public final class KvTablet {
                     boolean success = false;
                     try {
                         snapshot = rocksDBKv.getDb().getSnapshot();
-                        // Capture the flushed log offset under the same lock that gates flushes,
-                        // so the value reflects exactly the data visible through the snapshot.
+                        // Capture under kvLock so the offset matches the data visible through
+                        // the snapshot.
                         long capturedLogOffset = flushedLogOffset;
                         readOptions = new ReadOptions().setSnapshot(snapshot);
                         iterator =
@@ -809,9 +798,6 @@ public final class KvTablet {
                                                 readOptions);
                         iterator.seekToFirst();
                         if (!iterator.isValid()) {
-                            // Empty bucket: no session will be registered; cleanup in finally.
-                            // Return the offset so the empty-bucket fast path can still hand it
-                            // to the client for snapshot-to-log handoff.
                             return new OpenScanResult(null, capturedLogOffset);
                         }
                         ScannerContext context =
@@ -830,8 +816,6 @@ public final class KvTablet {
                         return new OpenScanResult(context, capturedLogOffset);
                     } finally {
                         if (!success) {
-                            // Release in reverse allocation order. Each close is independent,
-                            // so a failure in one must not prevent the others from running.
                             IOUtils.closeQuietly(iterator);
                             IOUtils.closeQuietly(readOptions);
                             if (snapshot != null) {

@@ -48,66 +48,31 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Manages server-side KV full-scan sessions ({@link ScannerContext}).
+ * Manages server-side KV full-scan sessions ({@link ScannerContext}). Sessions are keyed by a
+ * server-assigned UUID and persist across multiple batched-fetch RPCs.
  *
- * <p>Each KV full scan opens a persistent server-side session that holds a point-in-time RocksDB
- * snapshot and a cursor. Sessions are keyed by a server-assigned UUID-based scanner ID and persist
- * across multiple batched-fetch RPCs from the same client.
+ * <p>Concurrency limits are enforced both per-bucket and per-server, with a pre-check followed by
+ * an atomic increment + re-check (rolled back on contention) so the configured caps cannot be
+ * permanently breached. Sessions idle longer than {@code kv.scanner.ttl} are evicted by a
+ * background task; their IDs are retained for {@code 2 × ttl} so that {@link
+ * #isRecentlyExpired(byte[])} can distinguish expired sessions from unknown ones.
  *
- * <h3>Concurrency limits</h3>
- *
- * <ul>
- *   <li><b>Per-bucket:</b> at most {@code maxPerBucket} concurrent sessions on any single bucket.
- *   <li><b>Per-server:</b> at most {@code maxPerServer} concurrent sessions across all buckets.
- * </ul>
- *
- * <p>Limit enforcement is two-phase: a fast pre-check guards the common case; the subsequent atomic
- * increment with re-check and rollback prevents the TOCTOU race from permanently breaching the
- * configured limits. Exceeding either limit causes {@link TooManyScannersException}.
- *
- * <h3>Empty bucket handling</h3>
- *
- * <p>If the target bucket contains no rows at the time the scan is opened, {@link
- * #createScanner(Replica, Long)} returns an {@link OpenScanResult} whose {@link
- * OpenScanResult#getContext context} is {@code null} without consuming a limit slot. The caller
- * should return an empty response immediately, echoing back {@link OpenScanResult#getLogOffset}.
- *
- * <h3>TTL eviction</h3>
- *
- * <p>A background evictor task runs every {@code kv.scanner.expiration-interval} and removes
- * sessions idle longer than {@code kv.scanner.ttl}. Recently evicted IDs are retained for {@code 2
- * × ttl} so callers can distinguish "expired" from "never existed."
- *
- * <h3>Leadership change</h3>
- *
- * {@link #closeScannersForBucket(TableBucket)} must be called when a bucket loses leadership to
- * release all RocksDB snapshot/iterator resources for that bucket promptly.
+ * <p>{@link #closeScannersForBucket(TableBucket)} must be called when a bucket loses leadership to
+ * release RocksDB resources promptly.
  */
 @ThreadSafe
 public class ScannerManager implements AutoCloseableAsync {
 
     private static final Logger LOG = LoggerFactory.getLogger(ScannerManager.class);
 
-    /**
-     * Sentinel zero counter returned by {@link #activeScannerCountForBucket(TableBucket)} and
-     * {@link #checkLimits(TableBucket)} when a bucket has no entry in {@link #perBucketCount}, to
-     * avoid creating a fresh {@link AtomicInteger} for purely-read paths.
-     */
+    /** Sentinel for read paths so a missing bucket entry does not allocate a counter. */
     private static final AtomicInteger ZERO = new AtomicInteger(0);
 
     private final Map<String, ScannerContext> scanners = new ConcurrentHashMap<>();
     private final Map<String, Long> recentlyExpiredIds = new ConcurrentHashMap<>();
-
-    /** Per-bucket active scanner count, used for O(1) per-bucket limit enforcement. */
     private final Map<TableBucket, AtomicInteger> perBucketCount = new ConcurrentHashMap<>();
-
-    /** Total active scanner count across all buckets on this tablet server. */
     private final AtomicInteger totalScanners = new AtomicInteger(0);
 
-    /**
-     * Set to {@code true} on entry to {@link #close()} so the background TTL evictor can short-
-     * circuit and avoid mutating counters concurrently with shutdown.
-     */
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     private final Clock clock;
@@ -149,32 +114,14 @@ public class ScannerManager implements AutoCloseableAsync {
     }
 
     /**
-     * Creates a new scan session for the given replica, taking a point-in-time RocksDB snapshot
-     * under the replica's leader-ISR read lock.
+     * Opens a new scan session against the given leader replica. The snapshot is taken under the
+     * replica's leader-ISR read lock; on {@link TooManyScannersException} the just-opened context
+     * is closed by {@link Replica#openScan} before the exception propagates. Returns an empty-
+     * bucket result (context = {@code null}) without consuming a slot when the bucket has no rows.
      *
-     * <p>Snapshot opening, leadership validation, and session registration all happen while the
-     * replica's leader-ISR lock is held, so a concurrent leadership change cannot race with this
-     * operation: either the scanner is registered before the leader flips (and is then evicted by
-     * {@link #closeScannersForBucket(TableBucket)} during {@code makeFollowers} / {@code
-     * stopReplica}), or the leadership check fails and no scanner is ever created.
-     *
-     * <p>The returned {@link OpenScanResult} always carries the log offset captured at snapshot
-     * time. If the bucket is empty (no rows to scan), the result's {@link OpenScanResult#getContext
-     * context} is {@code null} and no session slot is consumed; the caller should still relay the
-     * offset on the response.
-     *
-     * <p><b>Limit enforcement is two-phase:</b> a fast pre-check guards the common case; the
-     * subsequent atomic increment + re-check prevents the TOCTOU race from permanently breaching
-     * configured limits. If registration fails after the snapshot is already opened, the context is
-     * closed and the exception is re-thrown to avoid leaking resources.
-     *
-     * @param replica the leader {@link Replica} for the bucket being scanned
-     * @param limit optional row-count limit ({@code null} or ≤ 0 means unlimited)
-     * @return an {@link OpenScanResult} with the captured log offset and (for non-empty buckets)
-     *     the newly registered {@link ScannerContext}
+     * @param limit optional row-count cap ({@code null} or ≤ 0 means unlimited)
      * @throws TooManyScannersException if the per-bucket or per-server limit is exceeded
-     * @throws IOException if the underlying {@link org.apache.fluss.server.utils.ResourceGuard} is
-     *     already closed (the bucket is shutting down)
+     * @throws IOException if RocksDB is shutting down
      */
     public OpenScanResult createScanner(Replica replica, @Nullable Long limit) throws IOException {
         checkLimits(replica.getTableBucket());
@@ -183,59 +130,39 @@ public class ScannerManager implements AutoCloseableAsync {
     }
 
     /**
-     * Atomically registers an already-opened {@link ScannerContext}, enforcing the per-bucket and
-     * per-server limits. On {@link TooManyScannersException} the caller is responsible for closing
-     * the context to release the underlying RocksDB resources.
-     *
-     * <p>Called by {@link Replica#openScan} while the leader-ISR read lock is held so that
-     * registration cannot race with a leadership change.
+     * Registers an already-opened {@link ScannerContext}, enforcing the per-bucket and per-server
+     * limits. The caller must close the context if {@link TooManyScannersException} is thrown.
      */
     public void register(ScannerContext context) {
         registerContext(context);
     }
 
     /**
-     * Looks up an existing scanner session by its raw ID bytes. <em>Does not</em> refresh the
-     * last-access timestamp — callers must invoke {@link #markAccessed(ScannerContext)} only after
-     * the request has been validated, otherwise an invalid request (bad call-sequence id, missing
-     * batch size, leadership lost, etc.) would silently extend the session TTL and let an orphan
-     * scanner survive past its idle deadline.
-     *
-     * @return the {@link ScannerContext}, or {@code null} if not found (may have expired or never
-     *     existed)
+     * Looks up a scanner session. <em>Does not</em> refresh the last-access timestamp — call {@link
+     * #markAccessed(ScannerContext)} only after the request has been fully validated, so malformed
+     * requests cannot extend the idle TTL of an orphan session.
      */
     @Nullable
     public ScannerContext getScanner(byte[] scannerId) {
         return scanners.get(new String(scannerId, StandardCharsets.UTF_8));
     }
 
-    /**
-     * Refreshes the last-access timestamp on the given context. Must be called only when the caller
-     * has decided the request is well-formed and is about to do real work, so that rejected
-     * requests do not extend the idle TTL.
-     */
+    /** Refreshes the last-access timestamp; call only when about to do real work. */
     public void markAccessed(ScannerContext context) {
         context.updateLastAccessTime(clock.milliseconds());
     }
 
     /**
-     * Returns {@code true} if the given scanner ID belongs to a session that was recently evicted
-     * by the TTL evictor (within the last {@code 2 × ttlMs}).
-     *
-     * <p>Callers can use this to distinguish "scanner expired" from "unknown scanner ID."
+     * Returns {@code true} if the ID belongs to a session evicted within the last {@code 2 ×
+     * ttlMs}; lets callers distinguish "expired" from "unknown".
      */
     public boolean isRecentlyExpired(byte[] scannerId) {
         return recentlyExpiredIds.containsKey(new String(scannerId, StandardCharsets.UTF_8));
     }
 
     /**
-     * Removes and closes a known scanner context directly, avoiding a map lookup.
-     *
-     * <p>Uses a conditional remove ({@link java.util.concurrent.ConcurrentHashMap#remove(Object,
-     * Object)}) so that concurrent calls — e.g. from the TTL evictor and a close-scanner RPC
-     * arriving simultaneously — result in exactly one winner closing the context, preventing
-     * double-release of the non-idempotent {@link
-     * org.apache.fluss.server.utils.ResourceGuard.Lease}.
+     * Removes and closes the given scanner. Uses a conditional remove so the TTL evictor and an
+     * explicit close cannot both run the close path.
      */
     public void removeScanner(ScannerContext context) {
         if (scanners.remove(context.getIdString(), context)) {
@@ -244,16 +171,7 @@ public class ScannerManager implements AutoCloseableAsync {
         }
     }
 
-    /**
-     * Looks up and removes a scanner session by its raw ID bytes.
-     *
-     * <p>Delegates to {@link #removeScanner(ScannerContext)} to ensure a conditional {@link
-     * java.util.concurrent.ConcurrentHashMap#remove(Object, Object)} is used, which prevents a
-     * double-decrement of {@code perBucketCount} when the TTL evictor races with an explicit close
-     * request for the same scanner.
-     *
-     * <p>No-op if the ID is not found (already removed or expired).
-     */
+    /** Looks up and removes a scanner by raw ID bytes; no-op if not found. */
     public void removeScanner(byte[] scannerId) {
         String key = new String(scannerId, StandardCharsets.UTF_8);
         ScannerContext context = scanners.get(key);
@@ -262,26 +180,20 @@ public class ScannerManager implements AutoCloseableAsync {
         }
     }
 
-    /** Returns the total number of active scanner sessions on this tablet server. */
     @VisibleForTesting
     public int activeScannerCount() {
         return totalScanners.get();
     }
 
-    /** Returns the number of active scanner sessions for the given bucket. */
     @VisibleForTesting
     public int activeScannerCountForBucket(TableBucket tableBucket) {
         return perBucketCount.getOrDefault(tableBucket, ZERO).get();
     }
 
     /**
-     * Closes and removes all active scanner sessions for the given bucket. Must be called when a
-     * bucket loses leadership to prevent stale RocksDB snapshot/iterator leaks.
-     *
-     * <p>Closed scanner IDs are recorded in {@link #recentlyExpiredIds} so that a continuation RPC
-     * arriving after the close surfaces as {@code SCANNER_EXPIRED} (recoverable: client should
-     * restart against the new leader) rather than {@code UNKNOWN_SCANNER_ID}, which leaves the
-     * client unable to disambiguate "leadership moved" from "I made up an ID".
+     * Closes all active scanner sessions for the bucket on a leadership change. Records the IDs in
+     * {@link #recentlyExpiredIds} so continuation RPCs after the close surface SCANNER_EXPIRED
+     * (recoverable) instead of UNKNOWN_SCANNER_ID.
      */
     public void closeScannersForBucket(TableBucket tableBucket) {
         List<ScannerContext> toRemove = new ArrayList<>();
@@ -296,22 +208,15 @@ public class ScannerManager implements AutoCloseableAsync {
                     "Closing scanner {} for bucket {} due to leadership change.",
                     context.getIdString(),
                     tableBucket);
-            // Record before removal so a continuation racing with the close cannot observe a
-            // window where the ID is neither in `scanners` nor in `recentlyExpiredIds`.
+            // Record before removal so a racing continuation never sees the ID as both unknown
+            // and not-recently-expired.
             recentlyExpiredIds.put(context.getIdString(), now);
             removeScanner(context);
         }
-        // Drop any leftover per-bucket counter so we don't leak an empty AtomicInteger after
-        // the bucket has lost leadership. decrementCounts() also tears down empty entries
-        // opportunistically; this is the belt-and-suspenders cleanup at the end.
         perBucketCount.remove(tableBucket);
     }
 
-    /**
-     * Fast pre-check of per-server and per-bucket limits before opening the snapshot. This is a
-     * best-effort check; a small race window exists between the check and {@link #registerContext}.
-     * The race is handled by the atomic re-check inside {@link #registerContext}.
-     */
+    /** Fast best-effort pre-check; the atomic re-check in {@link #registerContext} is the gate. */
     private void checkLimits(TableBucket tableBucket) {
         if (totalScanners.get() >= maxPerServer) {
             throw new TooManyScannersException(
@@ -319,8 +224,6 @@ public class ScannerManager implements AutoCloseableAsync {
                             "Cannot create scanner for bucket %s: server-wide limit of %d reached.",
                             tableBucket, maxPerServer));
         }
-        // Read via ZERO sentinel so a failed pre-check does not leak an empty AtomicInteger
-        // into perBucketCount; the entry is created lazily by registerContext() on success.
         if (perBucketCount.getOrDefault(tableBucket, ZERO).get() >= maxPerBucket) {
             throw new TooManyScannersException(
                     String.format(
@@ -329,11 +232,6 @@ public class ScannerManager implements AutoCloseableAsync {
         }
     }
 
-    /**
-     * Atomically increments the counters and puts the context in the map. Throws {@link
-     * TooManyScannersException} and rolls back the increments if a concurrent create caused either
-     * limit to be exceeded between the initial check and this call.
-     */
     private void registerContext(ScannerContext context) {
         TableBucket tableBucket = context.getTableBucket();
 
@@ -346,8 +244,6 @@ public class ScannerManager implements AutoCloseableAsync {
                             tableBucket, maxPerServer));
         }
 
-        // Lazily allocate the per-bucket counter only after the server-wide check passes,
-        // so a server-overload reject path doesn't pollute perBucketCount.
         AtomicInteger bucketCount =
                 perBucketCount.computeIfAbsent(tableBucket, k -> new AtomicInteger(0));
         int newBucketCount = bucketCount.incrementAndGet();
@@ -370,16 +266,12 @@ public class ScannerManager implements AutoCloseableAsync {
                 newBucketCount);
     }
 
-    /** TTL evictor — invoked periodically by the background scheduler. */
     private void evictExpiredScanners() {
-        // If close() has begun, skip eviction entirely so we cannot race with shutdown's
-        // own teardown of the scanners map and counters.
         if (closed.get()) {
             return;
         }
         long now = clock.milliseconds();
 
-        // Prune stale entries from the recently-expired cache to bound memory usage.
         recentlyExpiredIds
                 .entrySet()
                 .removeIf(e -> now - e.getValue() > recentlyExpiredRetentionMs);
@@ -387,7 +279,6 @@ public class ScannerManager implements AutoCloseableAsync {
         for (Map.Entry<String, ScannerContext> entry : scanners.entrySet()) {
             ScannerContext context = entry.getValue();
             if (context.isExpired(scannerTtlMs, now)) {
-                // Conditional remove prevents double-close if removeScanner() fires concurrently.
                 if (scanners.remove(entry.getKey(), context)) {
                     LOG.info(
                             "Evicted idle scanner {} for bucket {} (idle > {}ms).",
@@ -440,14 +331,10 @@ public class ScannerManager implements AutoCloseableAsync {
 
     @Override
     public void close() {
-        // Idempotent: a second close() is a no-op.
         if (!closed.compareAndSet(false, true)) {
             return;
         }
-        // Note: we cancel but do not join the evictor. The evictor may still be mid-iteration
-        // when close() begins, but it checks the `closed` flag at the top and short-circuits
-        // before mutating any counters; combined with conditional remove(key, value) on
-        // `scanners`, each ScannerContext is closed by exactly one side.
+
         if (evictorTask != null) {
             evictorTask.cancel(false);
             evictorTask = null;
@@ -459,12 +346,6 @@ public class ScannerManager implements AutoCloseableAsync {
                 closeScannerContext(entry.getValue());
             }
         }
-
-        // Note: totalScanners and perBucketCount are not forcibly reset here. Because both
-        // shutdown and the evictor use conditional remove(key, value) — and the evictor
-        // bails out via the `closed` flag — each scanner is decremented exactly once, so
-        // the counters naturally reach zero. A forced reset would risk driving counters
-        // negative if a stray decrement still completes after close().
         recentlyExpiredIds.clear();
     }
 }

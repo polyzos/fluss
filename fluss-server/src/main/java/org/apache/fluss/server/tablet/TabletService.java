@@ -149,11 +149,6 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
     private final TabletServerMetadataProvider metadataFunctionProvider;
     private final ScannerManager scannerManager;
 
-    /**
-     * Server-side cap on per-batch payload size for KV full-scan responses. The effective batch
-     * size used in {@link #scanKv} is {@code min(client-requested batch_size_bytes, this value)},
-     * which protects the server against OOM if a client passes an excessively large value.
-     */
     private final int kvScanMaxBatchSizeBytes;
 
     public TabletService(
@@ -458,38 +453,48 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
     @Override
     public CompletableFuture<ScanKvResponse> scanKv(ScanKvRequest request) {
         ScanKvResponse response = new ScanKvResponse();
-        // Tracks a live session that must be force-closed if anything after it throws.
-        // A scan that produced a partial but un-returned batch is not resumable: the RocksDB
-        // cursor has already advanced past rows whose data never reached the client, so we
-        // tear the session down and force the client to restart. This matches the non-resumable
-        // contract documented on ScannerExpiredException.
         ScannerContext openedContext = null;
-        // Tracks the context whose `inUse` flag we own so that finally{} can release it. May
-        // diverge from openedContext (which is nulled out on success) so we keep it separate.
         ScannerContext acquiredContext = null;
         try {
-            ScannerContext context;
-            // True only on the initial (bucket_scan_req) path, where we must echo the snapshot
-            // log offset back to the client. On continuations the field stays absent.
-            boolean isNewScan = false;
-            long initialLogOffset = 0L;
-
             if (request.hasBucketScanReq() && request.hasScannerId()) {
                 throw new InvalidScanRequestException(
                         "ScanKvRequest must not set both bucket_scan_req and scanner_id.");
             }
-            // close_scanner only makes sense on a continuation (paired with scanner_id);
-            // pairing it with a fresh bucket_scan_req would open and immediately tear down a
-            // session, wasting a slot and confusing the client contract.
             if (request.hasBucketScanReq()
                     && request.hasCloseScanner()
                     && request.isCloseScanner()) {
                 throw new InvalidScanRequestException(
                         "ScanKvRequest must not set close_scanner together with bucket_scan_req.");
             }
+            if (!request.hasBucketScanReq() && !request.hasScannerId()) {
+                throw new InvalidScanRequestException(
+                        "ScanKvRequest must have either bucket_scan_req (new scan) "
+                                + "or scanner_id (continuation).");
+            }
+
+            boolean isCloseRequest = request.hasCloseScanner() && request.isCloseScanner();
+
+            // Validate batch_size_bytes up-front so malformed requests never open a snapshot.
+            int effectiveBatchSize = 0;
+            if (!isCloseRequest) {
+                if (!request.hasBatchSizeBytes()) {
+                    throw new InvalidScanRequestException(
+                            "batch_size_bytes is required for data-fetching scan requests.");
+                }
+                int requestedBatchSize = request.getBatchSizeBytes();
+                if (requestedBatchSize <= 0) {
+                    throw new InvalidScanRequestException(
+                            "batch_size_bytes must be greater than 0.");
+                }
+                effectiveBatchSize = Math.min(requestedBatchSize, kvScanMaxBatchSizeBytes);
+            }
+
+            ScannerContext context;
+
+            boolean isNewScan = false;
+            long initialLogOffset = 0L;
 
             if (request.hasBucketScanReq()) {
-                // New scan: open a fresh scanner session
                 PbScanReqForBucket bucketReq = request.getBucketScanReq();
                 long tableId = bucketReq.getTableId();
                 authorizeTable(READ, tableId);
@@ -509,28 +514,17 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
 
                 context = openResult.getContext();
                 if (context == null) {
-                    // Bucket is empty — return an empty response immediately without registering a
-                    // session, but echo the captured log offset so the client can perform a
-                    // consistent snapshot-to-log handoff.
+                    // Empty bucket: no session registered; still return the captured offset.
                     response.setHasMoreResults(false);
                     response.setLogOffset(initialLogOffset);
                     return CompletableFuture.completedFuture(response);
                 }
                 openedContext = context;
             } else {
-                if (!request.hasScannerId()) {
-                    throw new InvalidScanRequestException(
-                            "ScanKvRequest must have either bucket_scan_req (new scan) "
-                                    + "or scanner_id (continuation).");
-                }
                 byte[] scannerId = request.getScannerId();
                 context = scannerManager.getScanner(scannerId);
                 if (context == null) {
-                    // If the client is sending a close request and the scanner is already gone
-                    // (auto-closed when fully drained, or evicted by TTL), this is a benign
-                    // no-op — return a finished response instead of surfacing an error that
-                    // the client cannot act on.
-                    if (request.hasCloseScanner() && request.isCloseScanner()) {
+                    if (isCloseRequest) {
                         response.setScannerId(scannerId);
                         response.setHasMoreResults(false);
                         return CompletableFuture.completedFuture(response);
@@ -548,23 +542,18 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 openedContext = context;
             }
 
-            // Acquire single-thread access to the cursor before any state mutation. Without
-            // this, two concurrent scanKv RPCs sharing a scannerId would both observe the same
-            // pre-mutation callSeqId, both pass the in-order check, and both race
-            // iterator.next() - corrupting RocksDB state at the JNI boundary. The loser of the
-            // CAS gets a clear error so the client can retry sequentially.
+            // Cursor-exclusion CAS: serialises concurrent same-scannerId RPCs and rejects if
+            // close() has begun.
             if (!context.tryAcquireForUse()) {
                 throw new InvalidScanRequestException(
                         String.format(
-                                "Concurrent scan request on scanner ID for bucket %s; only one "
-                                        + "in-flight scanKv RPC per scanner is allowed.",
+                                "Concurrent scan request on scanner ID for bucket %s, or session "
+                                        + "is closing; only one in-flight scanKv RPC per scanner "
+                                        + "is allowed.",
                                 context.getTableBucket()));
             }
             acquiredContext = context;
 
-            // Validate call-sequence ordering to detect duplicate or out-of-order requests.
-            // Use long arithmetic to avoid a silent 32-bit overflow at Integer.MAX_VALUE
-            // continuations. Skipped on the new-scan path (no scannerId on the wire).
             if (!request.hasBucketScanReq() && request.hasCallSeqId()) {
                 long expectedSeqId = (long) context.getCallSeqId() + 1L;
                 int requestSeqId = request.getCallSeqId();
@@ -576,30 +565,18 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 }
             }
 
-            // Handle explicit close request. Honour the close even on a non-leader: the local
-            // session resources are still ours to release, and we don't want a leadership flip
-            // racing with a close to leak a snapshot.
-            if (request.hasCloseScanner() && request.isCloseScanner()) {
-                scannerManager.removeScanner(context);
-                openedContext = null;
+            // Honour close even on a non-leader: the local session is still ours to release.
+            if (isCloseRequest) {
                 response.setScannerId(context.getScannerId());
                 response.setHasMoreResults(false);
                 return CompletableFuture.completedFuture(response);
             }
 
-            // Continuation: re-verify that this server is still the leader for the bucket
-            // before serving more data. closeScannersForBucket() will eventually evict the
-            // scanner on a leadership flip (and surface SCANNER_EXPIRED on later RPCs), but
-            // there is a small window between the leader flip and that callback during which
-            // the scanner remains in the map. Catching the flip here lets the client redirect
-            // to the new leader instead of silently consuming a stale snapshot.
+            // Catch a leadership flip ahead of the eventual closeScannersForBucket callback so
+            // the client can redirect rather than consume a stale snapshot.
             if (!request.hasBucketScanReq()) {
                 Replica replica = replicaManager.getReplicaOrException(context.getTableBucket());
                 if (!replica.isLeader()) {
-                    // Drop the local session so resources aren't held while the client
-                    // redirects; closeScannersForBucket() will be a no-op when it runs.
-                    scannerManager.removeScanner(context);
-                    openedContext = null;
                     throw new NotLeaderOrFollowerException(
                             String.format(
                                     "Leader is no longer local for bucket %s; client should "
@@ -608,31 +585,12 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 }
             }
 
-            // batch_size_bytes is optional in proto; require it for data-fetching requests and
-            // clamp to the server-side cap so a malicious or buggy client cannot trigger an OOM
-            // by passing Integer.MAX_VALUE.
-            if (!request.hasBatchSizeBytes()) {
-                throw new InvalidScanRequestException(
-                        "batch_size_bytes is required for data-fetching scan requests.");
-            }
-            int requestedBatchSize = request.getBatchSizeBytes();
-            if (requestedBatchSize <= 0) {
-                throw new InvalidScanRequestException("batch_size_bytes must be greater than 0.");
-            }
-            int effectiveBatchSize = Math.min(requestedBatchSize, kvScanMaxBatchSizeBytes);
-
-            // Refresh the idle-TTL deadline only now that the request is fully validated and we
-            // are about to do real work. Earlier refreshes (during getScanner) would let any
-            // malformed request - bad callSeqId, missing batch size, lost leadership - keep an
-            // orphan session alive past its idle deadline.
+            // Refresh TTL only now that the request is fully validated.
             scannerManager.markAccessed(context);
 
-            // Build the next batch using the builder's own running size as the gating signal so
-            // the threshold reflects the actual serialised batch (header + per-record framing),
-            // not just the raw value bytes. We always append at least one record (when data is
-            // available) so an unusually small effectiveBatchSize — e.g. one smaller than the
-            // empty-builder header — cannot produce an empty has_more=true response that would
-            // make the client loop indefinitely.
+            // Gate on builder.sizeInBytes() (not raw bytes) so the threshold reflects the
+            // serialised batch. Always append at least one record so a tiny effectiveBatchSize
+            // cannot produce an empty has_more=true response.
             DefaultValueRecordBatch.Builder builder = DefaultValueRecordBatch.builder();
             boolean appendedAny = false;
             while (context.isValid()
@@ -645,10 +603,7 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
             boolean hasMore = context.isValid();
             if (!hasMore) {
                 // RocksIterator.next() does not throw on internal errors; an unchecked status
-                // here would silently turn an iterator-internal failure into has_more=false,
-                // dropping every row past the failure point and letting the client conclude
-                // the scan completed cleanly. Surface the error so the catch block maps it to
-                // KV_STORAGE_EXCEPTION and the finally block force-closes the session.
+                // would silently truncate the scan and report has_more=false to the client.
                 context.checkIteratorStatus();
             }
             DefaultValueRecordBatch batch = builder.build();
@@ -662,23 +617,19 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                 response.setLogOffset(initialLogOffset);
             }
 
-            // Update callSeqId AFTER the response is prepared so that a client retry with the
-            // same callSeqId (due to a transient failure) can be detected and rejected.
+            // Update callSeqId AFTER the response is prepared so a duplicate retry can be
+            // detected via the in-order check.
             if (request.hasCallSeqId()) {
                 context.setCallSeqId(request.getCallSeqId());
             }
 
-            // Auto-close the session when all data has been drained.
-            if (!hasMore) {
-                scannerManager.removeScanner(context);
+            // Keep the session alive only if there's more to read; otherwise leave openedContext
+            // set so finally drains it.
+            if (hasMore) {
+                openedContext = null;
             }
-            // Response successfully prepared — session state is consistent; do not force-close.
-            openedContext = null;
 
         } catch (Exception e) {
-            // Restore the interrupt flag if a lower-level call wrapped an InterruptedException.
-            // No method in the try block declares `throws InterruptedException` directly, but a
-            // future refactor or a rethrown wrapper should not silently lose the signal.
             if (e instanceof InterruptedException || e.getCause() instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
@@ -686,17 +637,9 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
             response.setErrorCode(apiError.error().code());
             response.setErrorMessage(apiError.message() != null ? apiError.message() : "");
         } finally {
-            // Release the cursor-exclusion flag before any force-close: the close path is
-            // CAS-guarded on its own `closed` flag, so the order is purely cosmetic, but
-            // releasing first keeps the invariant "inUse=true means a thread is mid-handler"
-            // tight. Calling releaseAfterUse on an already-closed context is a no-op.
             if (acquiredContext != null) {
                 acquiredContext.releaseAfterUse();
             }
-            // If we made it past createScanner/getScanner but failed to deliver a complete
-            // response, close the session rather than leaking it to TTL. The cursor has
-            // already advanced past rows whose values were never sent; resuming would drop
-            // data. Forcing a restart is the safe option.
             if (openedContext != null) {
                 scannerManager.removeScanner(openedContext);
             }

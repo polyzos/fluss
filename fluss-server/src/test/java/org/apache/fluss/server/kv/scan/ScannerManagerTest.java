@@ -54,6 +54,7 @@ import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.fluss.compression.ArrowCompressionInfo.DEFAULT_COMPRESSION;
@@ -153,11 +154,6 @@ class ScannerManagerTest {
         }
     }
 
-    // -------------------------------------------------------------------------
-    //  Helpers
-    // -------------------------------------------------------------------------
-
-    /** Creates a {@link ScannerManager} with a long TTL so the evictor never fires during tests. */
     private ScannerManager createManager() {
         Configuration c = new Configuration();
         c.set(ConfigOptions.KV_SCANNER_TTL, Duration.ofHours(1));
@@ -167,7 +163,6 @@ class ScannerManagerTest {
         return new ScannerManager(c, scheduler, clock);
     }
 
-    /** Creates a {@link ScannerManager} with configurable limits and a long evictor interval. */
     private ScannerManager createManager(int maxPerBucket, int maxPerServer) {
         Configuration c = new Configuration();
         c.set(ConfigOptions.KV_SCANNER_TTL, Duration.ofHours(1));
@@ -177,9 +172,6 @@ class ScannerManagerTest {
         return new ScannerManager(c, scheduler, clock);
     }
 
-    /**
-     * Creates a {@link ScannerManager} with a short TTL and evictor interval for eviction tests.
-     */
     private ScannerManager createManagerWithShortTtl(long ttlMs, long expirationIntervalMs) {
         Configuration c = new Configuration();
         c.set(ConfigOptions.KV_SCANNER_TTL, Duration.ofMillis(ttlMs));
@@ -191,11 +183,7 @@ class ScannerManagerTest {
         return new ScannerManager(c, scheduler, clock);
     }
 
-    /**
-     * Helper used by tests to open a scanner context directly against the KvTablet (bypassing
-     * Replica) and register it with the manager. The Replica-mediated flow is covered by
-     * integration tests; here we want to exercise ScannerManager in isolation.
-     */
+    /** Opens a scanner directly via KvTablet and registers it; mirrors Replica#openScan. */
     private ScannerContext openAndRegister(ScannerManager manager) throws Exception {
         ScannerContext ctx =
                 kvTablet.openScan(java.util.UUID.randomUUID().toString(), -1L, clock.milliseconds())
@@ -206,17 +194,12 @@ class ScannerManagerTest {
         try {
             manager.register(ctx);
         } catch (RuntimeException e) {
-            // Mirror the production behaviour in Replica#openScan: if registration fails
-            // (e.g. TooManyScannersException), close the already-opened context to release
-            // the underlying RocksDB snapshot/iterator/lease so the test KvTablet can shut
-            // down cleanly.
             ctx.close();
             throw e;
         }
         return ctx;
     }
 
-    /** Writes {@code count} rows into the KvTablet and flushes to RocksDB. */
     private void putAndFlush(int count) throws Exception {
         List<KvRecord> rows = new ArrayList<>();
         for (int i = 0; i < count; i++) {
@@ -228,14 +211,9 @@ class ScannerManagerTest {
         kvTablet.flush(Long.MAX_VALUE, NOPErrorHandler.INSTANCE);
     }
 
-    // -------------------------------------------------------------------------
-    //  Tests
-    // -------------------------------------------------------------------------
-
     @Test
     void testCreateScanner_emptyBucket_returnsNull() throws Exception {
         try (ScannerManager manager = createManager()) {
-            // Bucket has no data — openScan must return null; no slot consumed.
             ScannerContext context = openAndRegister(manager);
             assertThat(context).isNull();
             assertThat(manager.activeScannerCount()).isEqualTo(0);
@@ -263,19 +241,14 @@ class ScannerManagerTest {
     void testGetScanner_doesNotRefreshLastAccessTime() throws Exception {
         putAndFlush(3);
         try (ScannerManager manager = createManager()) {
-            // Create scanner at t=0.
             ScannerContext context = openAndRegister(manager);
             assertThat(context).isNotNull();
             byte[] scannerId = context.getScannerId();
 
-            // Advance clock far past the initial access time and look up the scanner.
             clock.advanceTime(5000, TimeUnit.MILLISECONDS);
             ScannerContext fetched = manager.getScanner(scannerId);
             assertThat(fetched).isSameAs(context);
 
-            // getScanner alone must NOT refresh the last-access time: an invalid request
-            // (bad callSeqId, missing batch size, lost leadership) would otherwise extend
-            // the idle TTL and let an orphan session survive past its deadline.
             assertThat(context.isExpired(1000L, clock.milliseconds())).isTrue();
 
             manager.removeScanner(context);
@@ -290,10 +263,8 @@ class ScannerManagerTest {
             assertThat(context).isNotNull();
 
             clock.advanceTime(5000, TimeUnit.MILLISECONDS);
-            // Must explicitly mark the session as accessed; lookup is non-mutating.
             manager.markAccessed(context);
 
-            // With a 1-hour TTL, isExpired must be false right after the refresh.
             assertThat(context.isExpired(3_600_000L, clock.milliseconds())).isFalse();
 
             manager.removeScanner(context);
@@ -307,14 +278,11 @@ class ScannerManagerTest {
             ScannerContext context = openAndRegister(manager);
             assertThat(context).isNotNull();
 
-            // First claim wins.
             assertThat(context.tryAcquireForUse()).isTrue();
-            // A second concurrent claim must fail until the first releases.
             assertThat(context.tryAcquireForUse()).isFalse();
 
             context.releaseAfterUse();
 
-            // After release, a fresh claim succeeds again.
             assertThat(context.tryAcquireForUse()).isTrue();
             context.releaseAfterUse();
 
@@ -322,12 +290,6 @@ class ScannerManagerTest {
         }
     }
 
-    /**
-     * Stress-test the cursor-exclusion CAS: many threads race to acquire a single context, and
-     * exactly one must win. This is the invariant that protects {@link
-     * org.apache.fluss.server.tablet.TabletService#scanKv} from concurrent same-scannerId RPCs
-     * racing the RocksDB iterator at the JNI boundary.
-     */
     @Test
     void testTryAcquireForUse_exactlyOneWinnerUnderContention() throws Exception {
         putAndFlush(3);
@@ -369,13 +331,6 @@ class ScannerManagerTest {
         }
     }
 
-    /**
-     * On a healthy iterator, {@link ScannerContext#checkIteratorStatus()} must be a no-op so the
-     * post-loop check in {@link org.apache.fluss.server.tablet.TabletService#scanKv} does not
-     * spuriously fail clean end-of-range scans. The error path (RocksDB-internal failure) is
-     * exercised at the integration level — fabricating a JNI-level error is impractical in a unit
-     * test, so this test pins the no-error contract.
-     */
     @Test
     void testCheckIteratorStatus_healthyIteratorIsNoOp() throws Exception {
         putAndFlush(3);
@@ -383,13 +338,10 @@ class ScannerManagerTest {
             ScannerContext context = openAndRegister(manager);
             assertThat(context).isNotNull();
 
-            // Drain the cursor so isValid() flips to false through the natural end-of-range.
             while (context.isValid()) {
                 context.advance();
             }
 
-            // status() must report ok for an iterator that ended cleanly — otherwise every
-            // successful scan would surface KV_STORAGE_EXCEPTION at the post-loop guard.
             context.checkIteratorStatus();
 
             manager.removeScanner(context);
@@ -399,17 +351,14 @@ class ScannerManagerTest {
     @Test
     void testTtlEviction() throws Exception {
         putAndFlush(3);
-        // TTL = 200 ms, evictor every 200 ms — wide enough for slow CI schedulers.
         ScannerManager manager = createManagerWithShortTtl(200, 200);
         try {
             ScannerContext context = openAndRegister(manager);
             assertThat(context).isNotNull();
             byte[] scannerId = context.getScannerId();
 
-            // Advance ManualClock past TTL so the evictor considers the session idle.
             clock.advanceTime(500, TimeUnit.MILLISECONDS);
 
-            // Wait for the real scheduler to invoke the cleanup task.
             retry(
                     Duration.ofSeconds(10),
                     () -> assertThat(manager.activeScannerCount()).isEqualTo(0));
@@ -433,7 +382,6 @@ class ScannerManagerTest {
             assertThatThrownBy(() -> openAndRegister(manager))
                     .isInstanceOf(TooManyScannersException.class);
 
-            // Count must not have changed after the failed attempt.
             assertThat(manager.activeScannerCountForBucket(tableBucket)).isEqualTo(2);
 
             manager.removeScanner(ctx1);
@@ -476,12 +424,6 @@ class ScannerManagerTest {
         }
     }
 
-    /**
-     * Leadership-induced closure must record the scanner ID in {@code recentlyExpiredIds} so a
-     * continuation RPC arriving after the close surfaces SCANNER_EXPIRED (recoverable: client
-     * restarts against the new leader) rather than UNKNOWN_SCANNER_ID, which would leave the client
-     * unable to disambiguate "leadership moved" from "I made up an ID".
-     */
     @Test
     void testCloseScannersForBucket_marksRecentlyExpired() throws Exception {
         putAndFlush(3);
@@ -510,5 +452,52 @@ class ScannerManagerTest {
         manager.close();
 
         assertThat(manager.activeScannerCount()).isEqualTo(0);
+    }
+
+    @Test
+    void testTryAcquireForUse_rejectsAfterClose() throws Exception {
+        putAndFlush(3);
+        try (ScannerManager manager = createManager()) {
+            ScannerContext ctx = openAndRegister(manager);
+            assertThat(ctx).isNotNull();
+
+            manager.removeScanner(ctx);
+
+            assertThat(ctx.tryAcquireForUse()).isFalse();
+        }
+    }
+
+    /** close() must spin until inUse=false; iterating after close is undefined at the JNI. */
+    @Test
+    void testClose_waitsForInUse() throws Exception {
+        putAndFlush(3);
+        try (ScannerManager manager = createManager()) {
+            ScannerContext ctx = openAndRegister(manager);
+            assertThat(ctx).isNotNull();
+
+            assertThat(ctx.tryAcquireForUse()).isTrue();
+
+            CountDownLatch closeStarted = new CountDownLatch(1);
+            Thread closer =
+                    new Thread(
+                            () -> {
+                                closeStarted.countDown();
+                                ctx.close();
+                            },
+                            "scanner-context-closer");
+            closer.start();
+
+            assertThat(closeStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            Thread.sleep(50);
+            assertThat(closer.isAlive()).as("close() must spin while inUse=true").isTrue();
+
+            ctx.releaseAfterUse();
+            closer.join(TimeUnit.SECONDS.toMillis(5));
+            assertThat(closer.isAlive()).isFalse();
+
+            assertThat(ctx.tryAcquireForUse()).isFalse();
+
+            manager.removeScanner(ctx);
+        }
     }
 }

@@ -34,23 +34,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Server-side state for a single KV full-scan session.
+ * Server-side state for a single KV full-scan session: a pinned RocksDB {@link Snapshot}, a {@link
+ * RocksIterator} cursor, and a {@link ResourceGuard.Lease} that keeps the underlying RocksDB alive
+ * for the lifetime of the scan.
  *
- * <p>A {@code ScannerContext} holds a point-in-time RocksDB {@link Snapshot}, the {@link
- * ReadOptions} pinning it, and a cursor ({@link RocksIterator}) that persists across multiple
- * batched-fetch RPCs from the same client. It also holds a {@link ResourceGuard.Lease} that
- * prevents the underlying RocksDB instance from being closed while the scan is in progress.
- *
- * <p>Instances are created by {@link org.apache.fluss.server.kv.KvTablet#openScan} and registered
- * by {@link ScannerManager}. They must be closed when the scan completes, the client requests an
- * explicit close, or the session expires due to inactivity.
- *
- * <p><b>Thread safety:</b> The iterator cursor ({@link #advance()}, {@link #isValid()}, {@link
- * #currentValue()}) must be driven by only one thread at a time. Callers that mutate cursor or
- * sequence-id state must first acquire exclusive use via {@link #tryAcquireForUse()} and release it
- * with {@link #releaseAfterUse()} when done; this prevents two concurrent client RPCs sharing a
- * scanner ID from racing the iterator (which would corrupt RocksDB state at the JNI boundary).
- * {@link #close()} is thread-safe.
+ * <p>Cursor methods ({@link #advance()}, {@link #isValid()}, {@link #currentValue()}) are
+ * single-threaded; callers must hold the {@link #tryAcquireForUse()} flag while mutating cursor or
+ * sequence-id state. {@link #close()} is thread-safe and fences on that flag.
  */
 @NotThreadSafe
 public class ScannerContext implements Closeable {
@@ -63,38 +53,20 @@ public class ScannerContext implements Closeable {
     private final Snapshot snapshot;
     private final ResourceGuard.Lease resourceLease;
 
-    /**
-     * Log offset of the latest record flushed to the KV store at the moment this scanner's RocksDB
-     * snapshot was opened. Sent to the client on the first response so that downstream consumers
-     * can perform a consistent snapshot-to-log handoff.
-     */
+    /** Log offset captured when the snapshot was opened. */
     private final long logOffset;
 
     private long remainingLimit;
-    // Initial value -1 so that the first client call_seq_id of 0 satisfies the server's
-    // in-order check: expectedSeqId = callSeqId + 1 = -1 + 1 = 0.
-    // callSeqId validation is only performed for continuation requests (those carrying a
-    // scanner_id), never for the initial open request (those carrying a bucket_scan_req).
-    // volatile because a continuation may be served by a different RPC worker thread than the
-    // one that last advanced this counter.
+
+    // -1 so the first client call_seq_id of 0 satisfies expectedSeqId = callSeqId + 1.
+    // volatile: a continuation may run on a different RPC worker than the previous one.
     private volatile int callSeqId = -1;
 
-    /**
-     * Wall-clock timestamp (ms) of the most recent request that touched this session. Used by
-     * {@link ScannerManager} for TTL-based eviction. {@code volatile} so the evictor thread cannot
-     * observe a stale timestamp written by the most recent RPC worker.
-     */
+    /** Last-access wall-clock (ms); volatile for the TTL evictor. */
     private volatile long lastAccessTime;
 
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    /**
-     * Cursor-exclusion flag. Two concurrent {@code scanKv} RPCs sharing a scanner ID would both
-     * pass the {@code callSeqId} check (each sees the same pre-mutation value) and then race on
-     * {@link RocksIterator#next()}, which is unsafe at the JNI boundary. Acquiring this flag at the
-     * top of the handler and releasing it in {@code finally} serialises the cursor without blocking
-     * — the loser of the CAS receives an explicit "concurrent scan" error.
-     */
     private final AtomicBoolean inUse = new AtomicBoolean(false);
 
     public ScannerContext(
@@ -121,10 +93,7 @@ public class ScannerContext implements Closeable {
         this.lastAccessTime = initialAccessTimeMs;
     }
 
-    /**
-     * Returns the log offset captured at the moment this scanner's RocksDB snapshot was opened. See
-     * {@link #logOffset}.
-     */
+    /** Log offset captured when the snapshot was opened. */
     public long getLogOffset() {
         return logOffset;
     }
@@ -133,11 +102,7 @@ public class ScannerContext implements Closeable {
         return scannerIdBytes;
     }
 
-    /**
-     * Returns the scanner ID as a UTF-8 {@link String}. Package-private: used by {@link
-     * ScannerManager} as the key in its internal {@code scanners} map. The wire-format
-     * representation is always {@link #getScannerId()} (raw bytes).
-     */
+    /** Scanner ID as a UTF-8 string; used as the key in {@link ScannerManager#scanners}. */
     String getIdString() {
         return scannerId;
     }
@@ -154,10 +119,7 @@ public class ScannerContext implements Closeable {
         return iterator.value();
     }
 
-    /**
-     * Advances the cursor by one entry and decrements the remaining-rows limit if applicable. Must
-     * only be called when {@link #isValid()} returns {@code true}.
-     */
+    /** Advances the cursor; must be called only when {@link #isValid()} is {@code true}. */
     public void advance() {
         iterator.next();
         if (remainingLimit > 0) {
@@ -166,12 +128,10 @@ public class ScannerContext implements Closeable {
     }
 
     /**
-     * Validates the underlying RocksDB iterator's status. {@link RocksIterator#next()} does not
-     * throw on RocksDB-internal errors — the iterator silently transitions to invalid and the error
-     * is carried by {@link RocksIterator#status()}. Callers MUST invoke this once iteration has
-     * stopped (i.e. {@link #isValid()} returned {@code false}) so that a clean end-of-range is
-     * distinguishable from an error path; otherwise an internal failure would silently truncate the
-     * scan and the client would conclude the scan completed when in fact rows were dropped.
+     * Surfaces RocksDB-internal iterator errors. {@link RocksIterator#next()} does not throw on
+     * such errors; instead the iterator silently transitions to invalid. Callers MUST invoke this
+     * once iteration has stopped, otherwise an internal failure would be indistinguishable from a
+     * clean end-of-range and the client would think the scan completed when rows were dropped.
      *
      * @throws KvStorageException if the iterator reports an internal error
      */
@@ -190,8 +150,8 @@ public class ScannerContext implements Closeable {
     }
 
     /**
-     * Updates the call-sequence ID. Must be called <em>after</em> the response payload has been
-     * fully prepared, so that a client retry with the same {@code callSeqId} can be detected.
+     * Updates the call-sequence ID. Must be called <em>after</em> the response payload is fully
+     * prepared so a client retry with the same id can be detected.
      */
     public void setCallSeqId(int callSeqId) {
         this.callSeqId = callSeqId;
@@ -202,31 +162,35 @@ public class ScannerContext implements Closeable {
         this.lastAccessTime = nowMs;
     }
 
-    /**
-     * Returns {@code true} if the session has been idle for longer than {@code ttlMs}, based on the
-     * provided current time.
-     */
+    /** Returns {@code true} if idle for longer than {@code ttlMs}. */
     public boolean isExpired(long ttlMs, long nowMs) {
         return nowMs - lastAccessTime > ttlMs;
     }
 
     /**
-     * Atomically tries to claim exclusive use of this context's cursor and sequence-id state.
-     * Returns {@code true} if the caller now holds the exclusive-use flag and may safely advance
-     * the iterator and update {@link #setCallSeqId(int)}; {@code false} if another thread is
-     * already inside a {@code scanKv} call for this scanner ID.
-     *
-     * <p>Callers MUST pair every successful acquire with a {@link #releaseAfterUse()} in a {@code
-     * finally} block.
+     * Tries to claim exclusive use of the cursor. Returns {@code false} if another thread already
+     * holds it, or if {@link #close()} has been initiated. Every successful acquire MUST be paired
+     * with {@link #releaseAfterUse()} in a {@code finally}, otherwise {@code close()} blocks.
      */
     public boolean tryAcquireForUse() {
-        return inUse.compareAndSet(false, true);
+        if (closed.get()) {
+            return false;
+        }
+        if (!inUse.compareAndSet(false, true)) {
+            return false;
+        }
+        // Re-check after the CAS in case close() flipped `closed` in between; let close() proceed.
+        if (closed.get()) {
+            inUse.set(false);
+            return false;
+        }
+        return true;
     }
 
     /**
-     * Releases the exclusive-use flag obtained via {@link #tryAcquireForUse()}. Calling this on a
-     * context that has already been {@link #close()}d is harmless: the context is no longer
-     * reachable through {@link ScannerManager}, so no other thread will observe the flag.
+     * Releases the flag obtained via {@link #tryAcquireForUse()}. MUST be called BEFORE any path
+     * that may trigger {@link #close()} on the same thread, otherwise {@code close()} self-
+     * deadlocks on its inUse fence.
      */
     public void releaseAfterUse() {
         inUse.set(false);
@@ -235,6 +199,12 @@ public class ScannerContext implements Closeable {
     @Override
     public void close() {
         if (closed.compareAndSet(false, true)) {
+            // Fence: closing the iterator while another thread is mid iterator.next() is
+            // undefined at the RocksDB JNI boundary. tryAcquireForUse() re-checks `closed`
+            // after winning its CAS, so any racing waiter releases inUse and lets us through.
+            while (inUse.get()) {
+                Thread.yield();
+            }
             try {
                 iterator.close();
             } finally {
@@ -242,10 +212,6 @@ public class ScannerContext implements Closeable {
                     readOptions.close();
                 } finally {
                     try {
-                        // Wrap releaseSnapshot in its own try/finally so that snapshot.close()
-                        // always runs even if releaseSnapshot throws — otherwise the native
-                        // snapshot handle would leak while the ResourceGuard.Lease is still
-                        // released, masking the leak from later kvTablet.close() shutdown checks.
                         try {
                             rocksDBKv.getDb().releaseSnapshot(snapshot);
                         } finally {

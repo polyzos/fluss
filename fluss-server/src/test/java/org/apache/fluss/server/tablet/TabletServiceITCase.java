@@ -1080,15 +1080,6 @@ public class TabletServiceITCase {
         assertThat(newRow.getLong(1)).isEqualTo(3L);
     }
 
-    // -------------------------------------------------------------------------
-    //  scanKv RPC tests (FIP-17 KV full-scan sessions)
-    //
-    //  After applying DATA_1_WITH_KEY_AND_VALUE the merged final RocksDB state
-    //  contains exactly two rows (keys 1 and 2; key 3 is tombstoned). Each test
-    //  triggers a snapshot before scanning so the prewrite buffer is flushed
-    //  into RocksDB and visible to the scanner's snapshot iterator.
-    // -------------------------------------------------------------------------
-
     @Test
     void testScanKv_newScan_happyPath() throws Exception {
         long tableId =
@@ -1108,14 +1099,12 @@ public class TabletServiceITCase {
                         .get());
         FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tb);
 
-        // 1 MiB easily fits the merged state (two rows) into a single batch.
         ScanKvResponse response =
                 leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, 1024 * 1024)).get();
 
         assertThat(response.hasErrorCode()).isFalse();
         assertThat(response.getScannerId()).isNotEmpty();
         assertThat(response.isHasMoreResults()).isFalse();
-        // The captured log offset must always be carried back on the first response.
         assertThat(response.hasLogOffset()).isTrue();
         assertThat(response.getLogOffset()).isGreaterThanOrEqualTo(0L);
         assertThat(response.hasRecords()).isTrue();
@@ -1159,8 +1148,7 @@ public class TabletServiceITCase {
                             .get();
             assertThat(current.hasErrorCode()).isFalse();
             assertThat(current.getScannerId()).isEqualTo(scannerId);
-            // The log offset is only carried on the first (open) response; continuations
-            // must not re-set it.
+            // log_offset is carried only on the open response.
             assertThat(current.hasLogOffset()).isFalse();
             if (current.hasRecords()) {
                 totalRecords +=
@@ -1168,7 +1156,7 @@ public class TabletServiceITCase {
             }
         }
         assertThat(totalRecords).isEqualTo(2);
-        // After draining, the session is auto-closed: a continuation should now be unknown.
+        // After draining, the session is auto-closed.
         ScanKvResponse afterDrain =
                 leaderGateWay.scanKv(newScanKvContinueRequest(scannerId, seq, 1024)).get();
         assertThat(afterDrain.getErrorCode()).isEqualTo(Errors.UNKNOWN_SCANNER_ID.code());
@@ -1194,7 +1182,7 @@ public class TabletServiceITCase {
                         .get());
         FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tb);
 
-        // Use a tiny batch so the session stays open after the first response.
+        // Tiny batch keeps the session open after the first response.
         ScanKvResponse open = leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, 1)).get();
         assertThat(open.hasErrorCode()).isFalse();
         assertThat(open.isHasMoreResults()).isTrue();
@@ -1204,7 +1192,6 @@ public class TabletServiceITCase {
         assertThat(close.hasErrorCode()).isFalse();
         assertThat(close.getScannerId()).isEqualTo(scannerId);
         assertThat(close.isHasMoreResults()).isFalse();
-        // No records on a close response.
         assertThat(close.hasRecords()).isFalse();
     }
 
@@ -1230,10 +1217,9 @@ public class TabletServiceITCase {
         ScanKvResponse open = leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, 1)).get();
         byte[] scannerId = open.getScannerId();
 
-        // First close removes the session.
         leaderGateWay.scanKv(newScanKvCloseRequest(scannerId)).get();
 
-        // Second close on the already-gone session must be a benign no-op (not an error).
+        // Second close on the already-gone session must be a benign no-op.
         ScanKvResponse second = leaderGateWay.scanKv(newScanKvCloseRequest(scannerId)).get();
         assertThat(second.hasErrorCode()).isFalse();
         assertThat(second.getScannerId()).isEqualTo(scannerId);
@@ -1251,7 +1237,6 @@ public class TabletServiceITCase {
         TabletServerGateway leaderGateWay =
                 FLUSS_CLUSTER_EXTENSION.newTabletServerClientForNode(leader);
 
-        // No openScan was ever issued — this id is fabricated.
         byte[] fakeId = "not-a-real-scanner-id".getBytes();
         ScanKvResponse response =
                 leaderGateWay.scanKv(newScanKvContinueRequest(fakeId, 0, 1024)).get();
@@ -1278,33 +1263,22 @@ public class TabletServiceITCase {
                         .get());
         FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tb);
 
-        // Open a long-lived session.
         ScanKvResponse open = leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, 1)).get();
         assertThat(open.hasErrorCode()).isFalse();
         assertThat(open.isHasMoreResults()).isTrue();
         byte[] scannerId = open.getScannerId();
 
-        // Evict the session by stopping the leader replica (delete=false). Internally this
-        // calls scannerManager.closeScannersForBucket, which both removes the session and
-        // records the id in recentlyExpiredIds. The bucket itself remains hosted.
+        // stopReplica(delete=false) routes through closeScannersForBucket, which records
+        // the id in recentlyExpiredIds.
         LeaderAndIsr la = FLUSS_CLUSTER_EXTENSION.waitLeaderAndIsrReady(tb);
         stopReplicaWithLatestEpoch(leaderGateWay, tb, la);
 
-        // Continuation against the (still-live) tablet server now sees SCANNER_EXPIRED, not
-        // UNKNOWN_SCANNER_ID — the recently-expired cache lets the client distinguish
-        // "session was reaped" from "you fabricated an id".
         ScanKvResponse cont =
                 leaderGateWay.scanKv(newScanKvContinueRequest(scannerId, 0, 1024)).get();
         assertThat(cont.getErrorCode()).isEqualTo(Errors.SCANNER_EXPIRED.code());
         assertThat(cont.getErrorMessage()).contains("expired");
     }
 
-    /**
-     * Models a mid-scan leadership flip via {@code stopReplica(delete=false)}, which is the RPC
-     * path the coordinator drives when transitioning a leader away. Internally this calls {@code
-     * scannerManager.closeScannersForBucket}, the same chain a real leader -> follower transition
-     * takes via {@code makeFollower -> dropKv}, so the client-observable signal is identical.
-     */
     @Test
     void testScanKv_leadershipFlipMidScan() throws Exception {
         long tableId =
@@ -1329,17 +1303,9 @@ public class TabletServiceITCase {
         assertThat(open.isHasMoreResults()).isTrue();
         byte[] scannerId = open.getScannerId();
 
-        // Drive the leader-side teardown. closeScannersForBucket runs synchronously inside
-        // ReplicaManager.stopReplicas and records the scanner id in recentlyExpiredIds
-        // before stopReplica returns, so by the time the next continuation arrives the
-        // session is gone but addressable as expired.
         LeaderAndIsr la = FLUSS_CLUSTER_EXTENSION.waitLeaderAndIsrReady(tb);
         stopReplicaWithLatestEpoch(leaderGateWay, tb, la);
 
-        // The continuation now sees a redirect-style signal so the client knows to find
-        // the new leader rather than retrying blindly. SCANNER_EXPIRED is the canonical
-        // response from the recently-expired cache; NOT_LEADER_OR_FOLLOWER is acceptable
-        // if the in-handler leadership re-check ever wins the race.
         ScanKvResponse cont =
                 leaderGateWay.scanKv(newScanKvContinueRequest(scannerId, 0, 1024)).get();
         assertThat(cont.getErrorCode())
@@ -1368,8 +1334,6 @@ public class TabletServiceITCase {
         ScanKvResponse open = leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, 1)).get();
         byte[] scannerId = open.getScannerId();
 
-        // Initial server callSeqId is -1, so the first continuation MUST send 0. Sending 5
-        // is detected as out-of-order and rejected.
         ScanKvResponse bad =
                 leaderGateWay.scanKv(newScanKvContinueRequest(scannerId, 5, 1024)).get();
         assertThat(bad.getErrorCode()).isEqualTo(Errors.INVALID_SCAN_REQUEST.code());
@@ -1395,8 +1359,6 @@ public class TabletServiceITCase {
                         .get());
         FLUSS_CLUSTER_EXTENSION.triggerAndWaitSnapshot(tb);
 
-        // Integer.MAX_VALUE >> kv.scanner.max-batch-size (10 MiB by default). The server
-        // must silently clamp and serve the request — not reject it and not OOM.
         ScanKvResponse response =
                 leaderGateWay.scanKv(newScanKvOpenRequest(tableId, 0, Integer.MAX_VALUE)).get();
         assertThat(response.hasErrorCode()).isFalse();
@@ -1416,9 +1378,6 @@ public class TabletServiceITCase {
         TabletServerGateway leaderGateWay =
                 FLUSS_CLUSTER_EXTENSION.newTabletServerClientForNode(leader);
 
-        // Setting both bucket_scan_req (new scan) AND scanner_id (continuation) is an
-        // ambiguous request and must be rejected at the head of scanKv before any state
-        // is mutated.
         ScanKvRequest bad = new ScanKvRequest();
         bad.setBucketScanReq().setTableId(tableId).setBucketId(0);
         bad.setScannerId("ambiguous".getBytes());
@@ -1428,10 +1387,6 @@ public class TabletServiceITCase {
         assertThat(response.getErrorMessage())
                 .contains("must not set both bucket_scan_req and scanner_id");
     }
-
-    // -------------------------------------------------------------------------
-    //  scanKv request helpers
-    // -------------------------------------------------------------------------
 
     private static ScanKvRequest newScanKvOpenRequest(long tableId, int bucketId, int batchSize) {
         ScanKvRequest req = new ScanKvRequest();
@@ -1456,12 +1411,7 @@ public class TabletServiceITCase {
         return req;
     }
 
-    /**
-     * Sends a stopReplica RPC for the given bucket using the coordinator epoch carried in {@code
-     * la}. The {@code FLUSS_CLUSTER_EXTENSION.stopReplica} helper hardcodes {@code
-     * coordinatorEpoch=0}, which is rejected by tablet servers once any earlier test in the same
-     * JVM has bumped the coordinator epoch above zero.
-     */
+    /** Sends stopReplica using the current coordinator epoch (vs. the helper's hardcoded 0). */
     private static void stopReplicaWithLatestEpoch(
             TabletServerGateway leaderGateWay, TableBucket tb, LeaderAndIsr la) throws Exception {
         leaderGateWay

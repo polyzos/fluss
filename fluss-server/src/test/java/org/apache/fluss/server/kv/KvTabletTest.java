@@ -1863,8 +1863,6 @@ class KvTabletTest {
     @Test
     void testOpenScan_emptyBucket_returnsNullContext() throws Exception {
         initLogTabletAndKvTablet(DATA1_SCHEMA_PK, new HashMap<>());
-        // No data has been written — the result wraps a null context but still carries the
-        // captured log offset for the empty-bucket fast path.
         OpenScanResult result = kvTablet.openScan("scanner-empty", -1L, 0L);
         assertThat(result).isNotNull();
         assertThat(result.getContext()).isNull();
@@ -1901,11 +1899,11 @@ class KvTabletTest {
         assertThat(count).isEqualTo(numRows);
     }
 
+    /** Snapshot isolation: rows written after openScan must not appear in the scan. */
     @Test
     void testOpenScan_snapshotIsolation() throws Exception {
         initLogTabletAndKvTablet(DATA1_SCHEMA_PK, new HashMap<>());
 
-        // Write and flush 3 rows before opening the scan.
         List<KvRecord> initialRows =
                 Arrays.asList(
                         kvRecordFactory.ofRecord("0".getBytes(), new Object[] {0, "v0"}),
@@ -1917,7 +1915,6 @@ class KvTabletTest {
         ScannerContext context = kvTablet.openScan("scanner-snap", -1L, 0L).getContext();
         assertThat(context).isNotNull();
 
-        // Write 2 more rows AFTER opening the scan, then flush.
         List<KvRecord> lateRows =
                 Arrays.asList(
                         kvRecordFactory.ofRecord("3".getBytes(), new Object[] {3, "v3"}),
@@ -1925,7 +1922,6 @@ class KvTabletTest {
         kvTablet.putAsLeader(kvRecordBatchFactory.ofRecords(lateRows), null);
         kvTablet.flush(Long.MAX_VALUE, NOPErrorHandler.INSTANCE);
 
-        // The scan must still see only the 3 rows that existed at snapshot time.
         int count = 0;
         while (context.isValid()) {
             context.advance();
@@ -1961,7 +1957,6 @@ class KvTabletTest {
         }
         context.close();
 
-        // The scan must stop after exactly `limit` rows.
         assertThat(count).isEqualTo((int) limit);
     }
 
@@ -1977,13 +1972,11 @@ class KvTabletTest {
         kvTablet.putAsLeader(kvRecordBatchFactory.ofRecords(rows), null);
         kvTablet.flush(Long.MAX_VALUE, NOPErrorHandler.INSTANCE);
 
-        // Open two independent scans.
         ScannerContext ctx1 = kvTablet.openScan("scanner-a", -1L, 0L).getContext();
         ScannerContext ctx2 = kvTablet.openScan("scanner-b", -1L, 0L).getContext();
         assertThat(ctx1).isNotNull();
         assertThat(ctx2).isNotNull();
 
-        // Drain ctx1 fully.
         int count1 = 0;
         while (ctx1.isValid()) {
             ctx1.advance();
@@ -1991,7 +1984,6 @@ class KvTabletTest {
         }
         ctx1.close();
 
-        // ctx2 cursor must be unaffected; it should still see all 3 rows.
         int count2 = 0;
         while (ctx2.isValid()) {
             ctx2.advance();
