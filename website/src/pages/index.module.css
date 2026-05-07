@@ -283,36 +283,6 @@
 .heroCodeDots span:nth-child(2) { background: #FEBC2E; }
 .heroCodeDots span:nth-child(3) { background: #28C840; }
 
-.heroCodeTabs {
-    display: inline-flex;
-    gap: 2px;
-}
-
-.heroCodeTab {
-    appearance: none;
-    background: transparent;
-    border: 0;
-    color: rgba(219, 234, 254, 0.55);
-    font-family: var(--fluss-font-mono);
-    font-size: 0.8125rem;
-    font-weight: 600;
-    padding: 6px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: color var(--fluss-motion-fast) var(--fluss-ease-out),
-                background-color var(--fluss-motion-fast) var(--fluss-ease-out);
-}
-
-.heroCodeTab:hover {
-    color: rgba(219, 234, 254, 0.9);
-}
-
-.heroCodeTabActive,
-.heroCodeTabActive:hover {
-    color: #FFFFFF;
-    background: rgba(34, 211, 238, 0.15);
-}
-
 /* Trust strip below hero */
 .trustStrip {
     position: relative;
@@ -1130,15 +1100,20 @@
 }
 
 /* Full-width canvas for the SVG diagram. Aspect-ratio matches the SVG
- * viewBox so the box reserves the correct height before paint.
- * Bumped to 1000:400 (5:2) — wider, less tall — and max-width raised
- * to 1240px so the wider canvas can actually use the page width. */
+ * viewBox so the box reserves the correct height before paint. The
+ * diagram is a four-column architectural map (sources / hot tier /
+ * read patterns / engines), so we use a 1200×640 (15:8) viewBox to give
+ * each column breathing room without crowding labels.
+ *
+ * The diagram breaks out of its parent .container to reclaim the page's
+ * full viewport width (capped at 1480px), since the four-column layout
+ * needs more horizontal room than a typical reading column. */
 .archDiagram {
     position: relative;
-    width: 100%;
-    max-width: 1240px;
-    aspect-ratio: 1000 / 400;
-    margin: 0 auto;
+    width: min(100vw - 32px, 1480px);
+    aspect-ratio: 1200 / 640;
+    margin-left: 50%;
+    transform: translateX(-50%);
 }
 
 .archDiagram svg {
@@ -1150,6 +1125,8 @@
 
 @media (max-width: 996px) {
     .archDiagram {
-        max-width: 100%;
+        width: 100%;
+        margin-left: 0;
+        transform: none;
     }
 }
