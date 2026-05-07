@@ -70,11 +70,7 @@ export default function HomepageIntroduce(): JSX.Element {
             One Platform. Streams, tables, and the lake.
           </Heading>
           <p className={styles.lead}>
-            <b>Apache Fluss (Incubating)</b> is an open-source columnar streaming
-            storage system. It collapses the message broker, online KV store,
-            stream-processing state backend, and lakehouse offline store into a
-            single coherent foundation, so the systems above it don&apos;t have
-            to keep them in sync.
+            One Table, One SQL Query, Different Freshness Layers
           </p>
         </div>
 

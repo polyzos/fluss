@@ -85,11 +85,10 @@
 .heroInner {
     position: relative;
     display: grid;
-    /* Text column gets just enough room for the H1 to wrap to 3-4 balanced
-       lines at the largest viewport size; the rest goes to the diagram so
-       it renders as wide as we can fit alongside the text. */
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
-    gap: var(--fluss-space-16);
+    /* Text column on the left, code panel on the right. Equal split so
+       the title block and the SQL editor share the hero horizontally. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--fluss-space-12);
     align-items: center;
 }
 
@@ -228,59 +227,69 @@
     height: 18px;
 }
 
-/* Wraps the diagram title and the SVG so they sit as a single column inside
-   the right-hand grid cell of the hero. */
-.heroDiagramColumn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--fluss-space-2);
+/* Right column of the hero: holds the tabbed code panel. */
+.heroCodeColumn {
     width: 100%;
+    min-width: 0;
 }
 
-/* Positioned absolutely inside .heroDiagram so it sits just above the
-   "Apache Fluss" block in the SVG (which starts at ~22% from the top of
-   the diagram's viewBox). z-index keeps it above the SVG.
-
-   The whole title uses the same cyan → blue → white gradient as the hero
-   H1's `.accent` span, so the two headings read as a pair. */
-.heroDiagramTitle {
-    position: absolute;
-    top: 11%;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 2;
-    margin: 0;
-    font-family: var(--fluss-font-display);
-    font-size: clamp(1.375rem, 1.6vw + 0.875rem, 1.875rem);
-    font-weight: 700;
-    line-height: 1.15;
-    letter-spacing: -0.018em;
-    text-align: center;
-    white-space: nowrap;
-    background: linear-gradient(120deg, var(--fluss-cyan) 0%, var(--fluss-blue-300) 60%, #FFFFFF 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-}
-
-/* Hero diagram (right column). Aspect-ratio matches the SVG viewBox. */
-.heroDiagram {
-    position: relative;
-    width: 100%;
-    max-width: 1180px;
-    aspect-ratio: 720 / 500;
+/* Combined chrome row: traffic-light dots on the left, engine tabs on the
+   right. Replaces the standalone .codeChrome row in the hero so the tabs
+   share a single header strip with the dots. */
+.heroCodeHeader {
     display: flex;
     align-items: center;
-    justify-content: center;
-    margin: 0 auto;
+    gap: var(--fluss-space-3);
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.heroDiagram svg {
-    width: 100%;
-    height: 100%;
-    overflow: visible;
-    filter: drop-shadow(0 24px 60px rgba(34, 211, 238, 0.25));
+.heroCodeDots {
+    display: inline-flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.heroCodeDots span {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.heroCodeDots span:nth-child(1) { background: #FF5F57; }
+.heroCodeDots span:nth-child(2) { background: #FEBC2E; }
+.heroCodeDots span:nth-child(3) { background: #28C840; }
+
+.heroCodeTabs {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.heroCodeTab {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: rgba(219, 234, 254, 0.55);
+    font-family: var(--fluss-font-mono);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: color var(--fluss-motion-fast) var(--fluss-ease-out),
+                background-color var(--fluss-motion-fast) var(--fluss-ease-out);
+}
+
+.heroCodeTab:hover {
+    color: rgba(219, 234, 254, 0.9);
+}
+
+.heroCodeTabActive,
+.heroCodeTabActive:hover {
+    color: #FFFFFF;
+    background: rgba(34, 211, 238, 0.15);
 }
 
 /* Trust strip below hero */
@@ -324,12 +333,7 @@
     }
     .heroInner {
         grid-template-columns: 1fr;
-        gap: var(--fluss-space-16);
-    }
-    .heroDiagram {
-        order: -1;
-        max-width: 480px;
-        margin: 0 auto;
+        gap: var(--fluss-space-12);
     }
     .trustStrip {
         flex-direction: column;
@@ -1057,4 +1061,59 @@
     letter-spacing: 0.04em;
     color: var(--fluss-ink-500);
     text-align: center;
+}
+
+/* =========================================================================
+   Architecture section (full-width diagram below the hero)
+   ========================================================================= */
+.archSection {
+    /* Sits directly below the dark hero, so it inherits a dark canvas. The
+       gradient fades the cyan/blue accents toward the bottom so the next
+       (light) section transitions cleanly. */
+    padding: var(--fluss-space-20) 0 var(--fluss-space-24);
+    background:
+        radial-gradient(1100px 480px at 50% 0%, rgba(34, 211, 238, 0.14), transparent 60%),
+        radial-gradient(900px 460px at 0% 100%, rgba(59, 130, 246, 0.18), transparent 60%),
+        linear-gradient(180deg, var(--fluss-blue-950) 0%, var(--fluss-blue-900) 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* Reuses the cyan → blue → white gradient of the hero H1's `.accent` span,
+   so the architecture title reads as a continuation of the hero. */
+.archTitle {
+    background: linear-gradient(120deg, var(--fluss-cyan) 0%, var(--fluss-blue-300) 60%, #FFFFFF 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* Architecture section has no lead paragraph between the H2 and the diagram,
+   so we collapse the header's bottom spacing and the title's own bottom
+   margin to put the SVG directly under "Unlocking the Streamhouse Architecture". */
+.archSection .sectionHeader,
+.archSection .archTitle {
+    margin-bottom: 0;
+}
+
+/* Full-width canvas for the SVG diagram. Aspect-ratio matches the SVG
+   viewBox so the box reserves the correct height before paint. */
+.archDiagram {
+    position: relative;
+    width: 100%;
+    max-width: 1100px;
+    aspect-ratio: 720 / 500;
+    margin: 0 auto;
+}
+
+.archDiagram svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    filter: drop-shadow(0 24px 60px rgba(34, 211, 238, 0.25));
+}
+
+@media (max-width: 996px) {
+    .archDiagram {
+        max-width: 100%;
+    }
 }

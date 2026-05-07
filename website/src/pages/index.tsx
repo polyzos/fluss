@@ -20,9 +20,57 @@ import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import HomepageIntroduce from '@site/src/components/HomepageIntroduce';
-import {useEffect, useRef} from 'react';
+import {useEffect, useRef, useState} from 'react';
+import {Highlight} from 'prism-react-renderer';
+import flussPrismDark from '@site/src/utils/prismDark';
 
 import styles from './index.module.css';
+
+/**
+ * Canonical Fluss + Flink SQL snippet, sourced from
+ * docs/engine-flink/getting-started.md.
+ */
+const HERO_FLINK_SQL = `-- Register Apache Fluss as a Flink catalog
+CREATE CATALOG fluss_catalog WITH (
+  'type'              = 'fluss',
+  'bootstrap.servers' = 'coordinator-server:9123'
+);
+USE CATALOG fluss_catalog;
+
+-- Create a primary-key table
+CREATE TABLE pk_table (
+  shop_id    BIGINT,
+  user_id    BIGINT,
+  num_orders INT,
+  PRIMARY KEY (shop_id, user_id) NOT ENFORCED
+) WITH ('bucket.num' = '4');
+
+INSERT INTO pk_table VALUES (1234, 1234, 1);
+SELECT * FROM pk_table WHERE shop_id = 1234;
+`;
+
+/**
+ * Canonical Fluss + Spark SQL snippet, sourced from
+ * docs/engine-spark/getting-started.md.
+ */
+const HERO_SPARK_SQL = `-- Register Apache Fluss as a Spark catalog (via spark-sql --conf):
+--   spark.sql.catalog.fluss_catalog = org.apache.fluss.spark.SparkCatalog
+--   spark.sql.catalog.fluss_catalog.bootstrap.servers = localhost:9123
+USE fluss_catalog;
+
+-- Create the same primary-key table
+CREATE TABLE pk_table (
+  shop_id    BIGINT,
+  user_id    BIGINT,
+  num_orders INT
+) TBLPROPERTIES (
+  'primary.key' = 'shop_id,user_id',
+  'bucket.num'  = '4'
+);
+
+INSERT INTO pk_table VALUES (1234, 1234, 1);
+SELECT * FROM pk_table ORDER BY shop_id;
+`;
 
 /**
  * Toggle a body-level class while the hero is in view, so we can drive the
@@ -334,13 +382,12 @@ function HomepageHeader({heroRef}: {heroRef: React.RefObject<HTMLElement>}) {
                         </h1>
 
                         <p className={styles.heroSubtitle}>
-                            Apache Fluss (Incubating) is a streaming storage built
-                            for real-time analytics &amp; AI which can serve as the
-                            real-time data layer for Lakehouse architectures. With
-                            its columnar stream and real-time update capabilities,
-                            Fluss integrates seamlessly with Apache Flink to enable
-                            high-throughput, low-latency, cost-effective streaming
-                            data warehouses tailored for real-time applications.
+                            Apache Fluss (Incubating) is an open-source,
+                            lakehouse-native streaming storage. It collapses the
+                            message broker, online KV store, stream-processing
+                            state backend, and lakehouse offline store into a
+                            single coherent foundation, making the Lakehouse
+                            truly real-time.
                         </p>
 
                         <div className={styles.heroCtas}>
@@ -371,17 +418,96 @@ function HomepageHeader({heroRef}: {heroRef: React.RefObject<HTMLElement>}) {
                         </div>
                     </div>
 
-                    <div className={styles.heroDiagramColumn}>
-                        <div className={styles.heroDiagram} aria-hidden="false">
-                            <h2 className={styles.heroDiagramTitle}>
-                                Powering The Streaming Lakehouse
-                            </h2>
-                            <HeroDiagram />
-                        </div>
+                    <div className={styles.heroCodeColumn}>
+                        <HeroCodePanel />
                     </div>
                 </div>
             </div>
         </header>
+    );
+}
+
+/**
+ * Renders a SQL snippet with Prism syntax highlighting using the project's
+ * shared dark Prism theme (so colours match the Fluss palette). The theme's
+ * background is overridden because the surrounding code card already paints
+ * its own background.
+ */
+function HeroSqlBlock({code}: {code: string}) {
+    return (
+        <Highlight code={code.trimEnd()} language="sql" theme={flussPrismDark}>
+            {({className, tokens, getLineProps, getTokenProps}) => (
+                <pre
+                    role="tabpanel"
+                    className={clsx(styles.codeBody, className)}
+                    style={{background: 'transparent'}}>
+                    {tokens.map((line, i) => (
+                        <div key={i} {...getLineProps({line})}>
+                            {line.map((token, key) => (
+                                <span key={key} {...getTokenProps({token})} />
+                            ))}
+                        </div>
+                    ))}
+                </pre>
+            )}
+        </Highlight>
+    );
+}
+
+function HeroCodePanel() {
+    const [active, setActive] = useState<'flink' | 'spark'>('flink');
+    return (
+        <div className={styles.codeCard} aria-label="Apache Fluss code example">
+            <div className={styles.heroCodeHeader}>
+                <span className={styles.heroCodeDots} aria-hidden="true">
+                    <span /><span /><span />
+                </span>
+                <div className={styles.heroCodeTabs} role="tablist" aria-label="Engine">
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={active === 'flink'}
+                        className={clsx(
+                            styles.heroCodeTab,
+                            active === 'flink' && styles.heroCodeTabActive,
+                        )}
+                        onClick={() => setActive('flink')}>
+                        Flink SQL
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={active === 'spark'}
+                        className={clsx(
+                            styles.heroCodeTab,
+                            active === 'spark' && styles.heroCodeTabActive,
+                        )}
+                        onClick={() => setActive('spark')}>
+                        Spark SQL
+                    </button>
+                </div>
+            </div>
+
+            <HeroSqlBlock code={active === 'flink' ? HERO_FLINK_SQL : HERO_SPARK_SQL} />
+        </div>
+    );
+}
+
+function ArchitectureSection() {
+    return (
+        <section className={clsx(styles.section, styles.sectionDark, styles.archSection)}>
+            <div className={clsx('container', styles.container)}>
+                <div className={clsx(styles.sectionHeader, styles.sectionHeaderCenter)}>
+                    <span className={styles.eyebrow}>Architecture</span>
+                    <h2 className={clsx(styles.sectionTitle, styles.archTitle)}>
+                        Unlocking the Streamhouse Architecture
+                    </h2>
+                </div>
+                <div className={styles.archDiagram}>
+                    <HeroDiagram />
+                </div>
+            </div>
+        </section>
     );
 }
 
@@ -827,6 +953,7 @@ export default function Home(): JSX.Element {
             wrapperClassName={clsx(styles.homepageWrapper, 'fluss-home')}>
             <HomepageHeader heroRef={heroRef}/>
             <main>
+                <ArchitectureSection/>
                 <HomepageIntroduce/>
                 <SystemsTaxSection/>
                 <HomepageFeatures/>
