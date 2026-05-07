@@ -237,7 +237,13 @@
 }
 
 .basis {
-  margin: var(--fluss-space-3) 0 0;
+  /* `margin-top: auto` in a flex column pushes this block to the
+     bottom of the card. Combined with the grid's default stretch
+     alignment (so all cards in a row share the tallest card's height),
+     every "Architectural basis" section starts at the same horizontal
+     line across the row regardless of how long each card's body text
+     is. */
+  margin: auto 0 0;
   padding-top: var(--fluss-space-3);
   border-top: 1px dashed rgba(255, 255, 255, 0.12);
   font-size: 0.8125rem;

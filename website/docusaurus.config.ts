@@ -229,7 +229,7 @@ const config: Config = {
       title: '',
       logo: {
         alt: 'Fluss',
-        src: 'img/logo/svg/colored_logo.svg',
+        src: 'img/logo/svg/white_color_logo.svg',
         srcDark: 'img/logo/svg/white_color_logo.svg',
       },
       items: [

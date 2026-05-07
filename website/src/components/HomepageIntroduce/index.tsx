@@ -67,7 +67,7 @@ export default function HomepageIntroduce(): JSX.Element {
         <div className={styles.header}>
           <span className={styles.eyebrow}>What is Apache Fluss?</span>
           <Heading as="h2" className={styles.title}>
-            One Platform. Streams, tables, and the lake.
+            One Platform. Streams, Tables, and the Lakehouse.
           </Heading>
           <p className={styles.lead}>
             One Table, One SQL Query, Different Freshness Layers

@@ -35,7 +35,7 @@ const PILLARS: Pillar[] = [
         title: 'Unified Architecture',
         summary: 'One system for messaging, applications, analytics, and AI.',
         body: 'Consolidates the roles previously played by a message queue, a key-value store, and an OLAP engine into a single coherent platform that serves transports, lookups, and queries from the same data.',
-        basis: 'Dual representation of PK Tables (append-only log + leader-side RocksDB KV).',
+        basis: 'Dual representation of PK Tables (Log Store & KV Store).',
         Svg: require('@site/static/img/feature_update.svg').default,
     },
     {
@@ -111,8 +111,8 @@ export default function HomepageFeatures(): JSX.Element {
                     </Heading>
                     <p className={styles.lead}>
                         Each pillar is a direct consequence of a specific architectural
-                        mechanism, not a marketing claim. Together they collapse the
-                        fragmented real-time stack into a single coherent foundation.
+                        mechanism. Together they collapse the fragmented real-time stack
+                        into a single coherent foundation.
                     </p>
                 </div>
 

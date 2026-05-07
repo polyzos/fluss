@@ -223,24 +223,28 @@
     transform: translateY(-1px);
 }
 
-/* Ghost button — pinned to the dark-mode --fluss-blue-100 override
- * (translucent brand blue). Default state is intentionally faint;
- * the :hover rule below brightens the text to white. */
+/* Ghost button — pure white at full opacity so the link reads as
+ * clearly as the other hero CTAs against the dark hero background.
+ * The :hover state adds a subtle underline so the interactive
+ * affordance is still distinguishable from the default state. */
 .btnGhost {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     height: 48px;
     padding: 0 8px;
-    color: rgba(37, 99, 235, 0.18);
-    font-weight: 500;
+    color: #FFFFFF;
+    font-weight: 600;
     font-size: 0.9375rem;
-    transition: color var(--fluss-motion-fast) var(--fluss-ease-out);
+    transition: color var(--fluss-motion-fast) var(--fluss-ease-out),
+                text-decoration-color var(--fluss-motion-fast) var(--fluss-ease-out);
 }
 
 .btnGhost:hover {
     color: #FFFFFF;
-    text-decoration: none;
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.6);
+    text-underline-offset: 4px;
 }
 
 .btnIcon {
@@ -282,6 +286,37 @@
 .heroCodeDots span:nth-child(1) { background: #FF5F57; }
 .heroCodeDots span:nth-child(2) { background: #FEBC2E; }
 .heroCodeDots span:nth-child(3) { background: #28C840; }
+
+/* Engine tabs (Flink SQL / Spark SQL) inside the hero code card. */
+.heroCodeTabs {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.heroCodeTab {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: rgba(219, 234, 254, 0.55);
+    font-family: var(--fluss-font-mono);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: color var(--fluss-motion-fast) var(--fluss-ease-out),
+                background-color var(--fluss-motion-fast) var(--fluss-ease-out);
+}
+
+.heroCodeTab:hover {
+    color: rgba(219, 234, 254, 0.9);
+}
+
+.heroCodeTabActive,
+.heroCodeTabActive:hover {
+    color: #FFFFFF;
+    background: rgba(34, 211, 238, 0.15);
+}
 
 /* Trust strip below hero */
 .trustStrip {
@@ -854,24 +889,52 @@
 }
 
 .taxGrid {
+    /* The grid declares THREE shared rows (auto / 1fr / auto) for
+       label / main-box / footnote. Each .taxColumn below uses
+       `grid-template-rows: subgrid` so its inner rows align to these
+       shared tracks. Net effect: the main-box row resolves to the
+       same height in both columns regardless of how each column's
+       footnote wraps, so the Before stack and the After card start
+       and end at the exact same Y. */
     display: grid;
     grid-template-columns: 1fr 60px 1fr;
-    gap: var(--fluss-space-6);
-    align-items: start;
+    grid-template-rows: auto 1fr auto;
+    column-gap: var(--fluss-space-6);
+    row-gap: var(--fluss-space-4);
+    align-items: stretch;
 }
 
 @media (max-width: 996px) {
     .taxGrid {
         grid-template-columns: 1fr;
-        gap: var(--fluss-space-12);
+        /* Drop the shared 3-row template on mobile — each column stacks
+           independently and the boxes naturally take their content
+           height. */
+        grid-template-rows: none;
+        column-gap: 0;
+        row-gap: var(--fluss-space-12);
     }
 }
 
 .taxColumn {
-    display: flex;
-    flex-direction: column;
-    gap: var(--fluss-space-4);
+    /* Subgrid: inherits the parent .taxGrid's three rows so label,
+       main-box, and footnote in BOTH columns line up to the same Y
+       coordinates. */
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: 1 / -1;
     min-width: 0;
+}
+
+@media (max-width: 996px) {
+    .taxColumn {
+        /* Fall back to a regular 3-row grid on mobile (subgrid only
+           makes sense when the parent has multi-column tracks to
+           share). */
+        grid-template-rows: auto 1fr auto;
+        grid-row: auto;
+        gap: var(--fluss-space-4);
+    }
 }
 
 .taxLabel {
@@ -905,6 +968,16 @@
     display: flex;
     flex-direction: column;
     gap: var(--fluss-space-2);
+    /* Pin to the full height of the grid row so the Before stack ends
+       at exactly the same Y as the After card. `align-self: stretch`
+       is the default for grid items, but `height: 100%` makes the
+       intent explicit and works even when inner content has its own
+       intrinsic block size. `min-height: 0` lets the flex children
+       shrink/grow inside without being held up by their content
+       min-size. */
+    height: 100%;
+    min-height: 0;
+    align-self: stretch;
 }
 
 .taxStackItem {
@@ -914,6 +987,10 @@
     gap: var(--fluss-space-3);
     align-items: flex-start;
     padding: var(--fluss-space-4) var(--fluss-space-5);
+    /* Each Before item shares the stack's grown height equally so the
+       five cards expand together rather than leaving empty space at
+       the bottom of the column. */
+    flex: 1;
     border-radius: var(--fluss-radius-md);
     background:
         linear-gradient(90deg, rgba(244, 63, 94, 0.10) 0%, rgba(255, 255, 255, 0.04) 40%);
@@ -957,11 +1034,23 @@
 
 /* Arrow column */
 .taxArrow {
+    /* Parent .taxGrid now has three rows; the arrow spans all of them
+       so it stays vertically centred between the Before stack and the
+       After card. */
+    grid-row: 1 / -1;
     display: flex;
     align-items: center;
     justify-content: center;
     height: 100%;
     min-height: 200px;
+}
+
+@media (max-width: 996px) {
+    .taxArrow {
+        /* On mobile the parent grid collapses to a single column with
+           no row template, so the spanning rule no longer applies. */
+        grid-row: auto;
+    }
 }
 
 .taxArrow svg {
@@ -990,6 +1079,12 @@
     color: #FFFFFF;
     box-shadow: var(--fluss-shadow-glow);
     border: 1px solid rgba(255, 255, 255, 0.1);
+    /* Pin to the full height of the grid row so the After card ends at
+       exactly the same Y as the Before stack. See .taxStack above for
+       the same rationale. */
+    height: 100%;
+    min-height: 0;
+    align-self: stretch;
 }
 
 .taxAfterHeader {
@@ -1051,7 +1146,10 @@
     font-family: var(--fluss-font-mono);
     font-size: 0.75rem;
     letter-spacing: 0.04em;
-    color: rgba(219, 234, 254, 0.65);
+    /* Brighter near-white so the footnote is clearly readable on the
+       deep-blue tax-section background. Was rgba(219,234,254,0.65),
+       which read as a faint, low-contrast lavender. */
+    color: rgba(255, 255, 255, 0.92);
     text-align: center;
 }
 

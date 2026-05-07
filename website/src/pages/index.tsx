@@ -20,7 +20,7 @@ import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import HomepageIntroduce from '@site/src/components/HomepageIntroduce';
-import {useEffect, useRef} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {Highlight} from 'prism-react-renderer';
 import flussPrismDark from '@site/src/utils/prismDark';
 
@@ -47,6 +47,30 @@ CREATE TABLE pk_table (
 
 INSERT INTO pk_table VALUES (1234, 1234, 1);
 SELECT * FROM pk_table WHERE shop_id = 1234;
+`;
+
+/**
+ * Canonical Fluss + Spark SQL snippet, sourced from
+ * docs/engine-spark/getting-started.md. Demonstrates registering Fluss
+ * as a Spark catalog and creating the equivalent primary-key table.
+ */
+const HERO_SPARK_SQL = `-- Register Apache Fluss as a Spark catalog (via spark-sql --conf):
+--   spark.sql.catalog.fluss_catalog = org.apache.fluss.spark.SparkCatalog
+--   spark.sql.catalog.fluss_catalog.bootstrap.servers = localhost:9123
+USE fluss_catalog;
+
+-- Create the same primary-key table
+CREATE TABLE pk_table (
+  shop_id    BIGINT,
+  user_id    BIGINT,
+  num_orders INT
+) TBLPROPERTIES (
+  'primary.key' = 'shop_id,user_id',
+  'bucket.num'  = '4'
+);
+
+INSERT INTO pk_table VALUES (1234, 1234, 1);
+SELECT * FROM pk_table ORDER BY shop_id;
 `;
 
 /**
@@ -547,15 +571,40 @@ function HeroSqlBlock({code}: {code: string}) {
 }
 
 function HeroCodePanel() {
+    const [active, setActive] = useState<'flink' | 'spark'>('flink');
     return (
         <div className={styles.codeCard} aria-label="Apache Fluss code example">
             <div className={styles.heroCodeHeader}>
                 <span className={styles.heroCodeDots} aria-hidden="true">
                     <span /><span /><span />
                 </span>
+                <div className={styles.heroCodeTabs} role="tablist" aria-label="Engine">
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={active === 'flink'}
+                        className={clsx(
+                            styles.heroCodeTab,
+                            active === 'flink' && styles.heroCodeTabActive,
+                        )}
+                        onClick={() => setActive('flink')}>
+                        Flink SQL
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={active === 'spark'}
+                        className={clsx(
+                            styles.heroCodeTab,
+                            active === 'spark' && styles.heroCodeTabActive,
+                        )}
+                        onClick={() => setActive('spark')}>
+                        Spark SQL
+                    </button>
+                </div>
             </div>
 
-            <HeroSqlBlock code={HERO_FLINK_SQL} />
+            <HeroSqlBlock code={active === 'flink' ? HERO_FLINK_SQL : HERO_SPARK_SQL} />
         </div>
     );
 }
@@ -598,7 +647,7 @@ function SystemsTaxSection() {
         },
         {
             label: 'Sync layer',
-            sub: 'bespoke pipelines and freshness monitors that drift silently.',
+            sub: 'Bespoke pipelines and freshness monitors that drift silently.',
         },
     ];
 
@@ -731,8 +780,8 @@ function CompareSection() {
         },
         {
             dimension: 'Storage model',
-            kafka: 'Append-only row log; tiered to S3 · GCS · ABFS via KIP-405',
-            fluss: 'Columnar Arrow IPC log & LSM-backed KV index for PK Tables; tiered into Paimon · Iceberg · Lance as the cold layer ("shared data": one logical table, two physical layouts)',
+            kafka: 'Append-only row log',
+            fluss: 'Columnar Arrow IPC log & KV index for PK Tables; Tiered into Paimon · Iceberg · Lance as the cold layer ("shared data": one logical table, two physical layouts)',
         },
         {
             dimension: 'Metadata plane · partitioning',
@@ -770,9 +819,9 @@ function CompareSection() {
         <section className={styles.section}>
             <div className={clsx('container', styles.container)}>
                 <div className={styles.sectionHeader}>
-                    <span className={styles.eyebrow}>Where Fluss fits</span>
+                    <span className={styles.eyebrow}>Apache Fluss vs Apache Kafka</span>
                     <h2 className={styles.sectionTitle}>
-                        Streams, tables, and the lake, in one storage layer.
+                        Where Streams Meet The Lakehouse
                     </h2>
                     {/* Override .sectionLead's default 720px max-width so the
                         lead spans the same width as the comparison table below
@@ -809,57 +858,6 @@ function CompareSection() {
     );
 }
 
-function FlinkSection() {
-    return (
-        <section className={clsx(styles.section, styles.sectionWash)}>
-            <div className={clsx('container', styles.container)}>
-                <div className={styles.flinkBand}>
-                    <div>
-                        <span className={styles.eyebrow}>Apache Flink integration</span>
-                        <h2 className={styles.sectionTitle}>Flink&apos;s natural storage layer.</h2>
-                        <p className={styles.sectionLead}>
-                            Apache Fluss is designed to be a first-class storage layer for
-                            Apache Flink as a source, sink, lookup-join target, and
-                            CDC-friendly substrate. Define a catalog, point at Fluss, and
-                            you have streaming and analytical access on the same tables.
-                        </p>
-                        <Link className={styles.btnPrimary} to="/docs/quickstart/flink">
-                            Run the Flink quickstart
-                            <span aria-hidden="true">→</span>
-                        </Link>
-                        <div className={styles.versionBadges} aria-label="Supported Flink versions">
-                            <span className={styles.badge}>Flink 1.18</span>
-                            <span className={styles.badge}>Flink 1.19</span>
-                            <span className={styles.badge}>Flink 1.20</span>
-                            <span className={styles.badge}>Flink 2.x</span>
-                        </div>
-                    </div>
-
-                    <div className={styles.codeCard} aria-label="Flink SQL example">
-                        <div className={styles.codeChrome} aria-hidden="true">
-                            <span /><span /><span />
-                        </div>
-                        <pre className={styles.codeBody}>
-{`-- Register Apache Fluss as a Flink catalog
-`}<span className="tk-keyword">CREATE CATALOG</span>{` fluss `}<span className="tk-keyword">WITH</span>{` (
-  `}<span className="tk-string">'type'</span>{`             = `}<span className="tk-string">'fluss'</span>{`,
-  `}<span className="tk-string">'bootstrap.servers'</span>{` = `}<span className="tk-string">'fluss-server:9123'</span>{`
-);
-
-`}<span className="tk-keyword">USE CATALOG</span>{` fluss;
-
-`}<span className="tk-comment">-- Stream + query the same table, with sub-second freshness</span>{`
-`}<span className="tk-keyword">SELECT</span>{` user_id, `}<span className="tk-fn">SUM</span>{`(amount)
-`}<span className="tk-keyword">FROM</span>{`   orders
-`}<span className="tk-keyword">GROUP BY</span>{` user_id;`}
-                        </pre>
-                    </div>
-                </div>
-            </div>
-        </section>
-    );
-}
-
 function FreshnessSection() {
     return (
         <section className={styles.section}>
@@ -872,7 +870,7 @@ function FreshnessSection() {
                     <p className={styles.sectionLead}>
                         Traditional lake pipelines trade freshness for scale. Apache Fluss
                         keeps lake-grade economics while moving end-to-end latency from
-                        hours to seconds.
+                        hours to milliseconds.
                     </p>
                 </div>
 
@@ -895,8 +893,8 @@ function FreshnessSection() {
                     </div>
 
                     <div className={clsx(styles.freshTile, styles.freshTileHighlight)} role="listitem">
-                        <div className={styles.freshLatency}>Seconds</div>
-                        <div className={styles.freshLabel}>Apache Fluss + Iceberg / Paimon</div>
+                        <div className={styles.freshLatency}>Milliseconds</div>
+                        <div className={styles.freshLabel}>Apache Fluss x Iceberg / Paimon / Lance</div>
                         <div className={styles.freshSub}>
                             One storage layer for hot and cold. Live queries on streaming
                             data, with native lake tiering.
@@ -926,20 +924,24 @@ function QuickstartSection() {
                     <div className={styles.codeChrome} aria-hidden="true">
                         <span /><span /><span />
                     </div>
-                    <pre className={styles.codeBody}>
-{`# 1. Start a local cluster
-`}<span className="tk-fn">./bin/local-cluster.sh</span>{` start
+                    {/* Re-use the hero's Prism-based SQL highlighter so the
+                        Quickstart block gets the same dark theme + token
+                        colours as the hero code card, instead of the
+                        hand-rolled tk-* spans. */}
+                    <HeroSqlBlock
+                        code={`# 1. Start a local cluster
+./bin/local-cluster.sh start
 
-`}<span className="tk-comment"># 2. Open the Flink SQL client and register Fluss</span>{`
-`}<span className="tk-fn">./bin/sql-client.sh</span>{`
+# 2. Open the Flink SQL client and register Fluss
+./bin/sql-client.sh
 
-`}<span className="tk-keyword">CREATE CATALOG</span>{` fluss `}<span className="tk-keyword">WITH</span>{` (
-  `}<span className="tk-string">'type'</span>{` = `}<span className="tk-string">'fluss'</span>{`,
-  `}<span className="tk-string">'bootstrap.servers'</span>{` = `}<span className="tk-string">'localhost:9123'</span>{`
+CREATE CATALOG fluss WITH (
+  'type' = 'fluss',
+  'bootstrap.servers' = 'localhost:9123'
 );
 
-`}<span className="tk-comment"># 3. You're streaming and querying, on the same table.</span>
-                    </pre>
+# 3. You're streaming and querying, on the same table.`}
+                    />
                 </div>
 
                 <div style={{textAlign: 'center', marginTop: 'var(--fluss-space-8)'}}>
@@ -1042,9 +1044,26 @@ function FinalCta() {
     );
 }
 
+/**
+ * Tags <body> with `fluss-home-page` while the homepage is mounted, so
+ * navbar-level CSS (which lives outside the Layout's wrapperClassName)
+ * can scope homepage-only rules — e.g. hiding the Ask-AI / colour-mode
+ * toggle on the landing page only.
+ */
+function useHomeBodyClass() {
+    useEffect(() => {
+        if (typeof document === 'undefined') return;
+        document.body.classList.add('fluss-home-page');
+        return () => {
+            document.body.classList.remove('fluss-home-page');
+        };
+    }, []);
+}
+
 export default function Home(): JSX.Element {
     const heroRef = useRef<HTMLElement>(null);
     useHeroVisibilityClass(heroRef);
+    useHomeBodyClass();
 
     return (
         <Layout
@@ -1058,9 +1077,8 @@ export default function Home(): JSX.Element {
                 <SystemsTaxSection/>
                 <HomepageFeatures/>
                 <CompareSection/>
-                <FlinkSection/>
-                <FreshnessSection/>
                 <QuickstartSection/>
+                <FreshnessSection/>
                 <CommunitySection/>
                 <FinalCta/>
             </main>
