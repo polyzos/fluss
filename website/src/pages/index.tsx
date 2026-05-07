@@ -112,23 +112,22 @@ const SLACK_INVITE =
 
 function HeroDiagram() {
     // Inline SVG: producers → Apache Fluss Cluster (Log Tables + PK Tables)
-    // → engines (Flink, Trino, Spark, ML/AI), with a Lakehouse tier below
-    // (Iceberg / Paimon / Lance) connected by a bidirectional Tiering
-    // Service edge.
+    // → engines, with a Lakehouse tier below connected by a bidirectional
+    // Tiering Service edge.
     //
-    // Layout uses a single shared vertical centre y = 220:
-    //   - The Fluss block sits at y = 110-330 (centre 220).
-    //   - The 3 producer boxes are vertically symmetric around 220.
-    //   - The 4 consumer boxes are vertically symmetric around 220.
-    //   - All arrows fan from / converge to the block's mid-edges.
+    // ViewBox is 1000 × 400 (2.5:1) — wider than tall, so the canvas reads
+    // as a horizontal flow at the page width. The Fluss block exploits the
+    // extra width by laying out Log Tables and PK Tables SIDE BY SIDE
+    // (rather than stacked), which lets the block be ~25% shorter without
+    // sacrificing legibility. All text sizes are reduced ~2px across the
+    // board so the diagram doesn't feel cramped at the new aspect ratio.
     //
-    // Every edge uses the same flowing cyan style and the same arrowhead
-    // marker; the marker's `auto-start-reverse` orientation lets the
-    // bidirectional Tiering Service arrow reuse the same head shape on
-    // both ends. The animation respects prefers-reduced-motion.
+    // Vertical centerline (where producer arrows aim and Union Read flows)
+    // is y = 140. Tiering edge sits in the y=240→290 gap between Fluss and
+    // Lakehouse.
     return (
         <svg
-            viewBox="0 0 720 500"
+            viewBox="0 0 1000 400"
             xmlns="http://www.w3.org/2000/svg"
             role="img"
             aria-labelledby="heroDiagramTitle heroDiagramDesc">
@@ -145,17 +144,11 @@ function HeroDiagram() {
             </desc>
 
             <defs>
-                {/* Single cyan arrowhead, shared by every edge. Filled
-                    triangle for a cleaner, more professional look on dashed
-                    lines. auto-start-reverse lets it serve as both
-                    marker-start and marker-end on the bidirectional
-                    Tiering Service arrow. */}
                 <marker id="hgArrowLive" viewBox="0 0 10 10" refX="9" refY="5"
-                        markerWidth="8" markerHeight="8"
+                        markerWidth="7" markerHeight="7"
                         orient="auto-start-reverse">
                     <path d="M0 0 L 10 5 L 0 10 Z" fill="#22D3EE" />
                 </marker>
-                {/* Scoped animation; respects prefers-reduced-motion. */}
                 <style
                     dangerouslySetInnerHTML={{
                         __html: `
@@ -174,41 +167,35 @@ function HeroDiagram() {
                 />
             </defs>
 
-            <g fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace" fontSize="14">
+            <g fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace" fontSize="12">
 
-                {/* Producers (3 boxes, vertically centred around y = 220).
-                    Width 200 so the longest label, "Change Data Capture",
-                    fits cleanly at the shared 14px monospace size. */}
+                {/* Producers (3 boxes, vertically distributed around the
+                    Fluss block centerline y = 140). */}
                 {[
-                    {y: 127, label: 'API Clients'},
-                    {y: 197, label: 'Change Data Capture'},
-                    {y: 267, label: 'Flink/Spark'},
+                    {y: 58, label: 'API Clients'},
+                    {y: 118, label: 'Change Data Capture'},
+                    {y: 178, label: 'Flink/Spark'},
                 ].map((p, i) => (
                     <g key={i}>
-                        <rect x="20" y={p.y} width="200" height="50" rx="10"
+                        <rect x="20" y={p.y} width="200" height="44" rx="10"
                               fill="#0A2A6B"
                               stroke="rgba(147,184,255,0.35)"
                               strokeWidth="1" />
-                        <text x="120" y={p.y + 30} textAnchor="middle"
+                        <text x="120" y={p.y + 27} textAnchor="middle"
                               fill="#E6ECFA">
                             {p.label}
                         </text>
                     </g>
                 ))}
 
-                {/* Producer arrows into Fluss. Each arrow uses strong
-                    horizontal tangents at BOTH endpoints (control points
-                    pulled most of the way across the gap) so the merging
-                    arrows read as smooth S-curves rather than near-straight
-                    diagonals, the pattern most professional architecture
-                    diagrams use for converging edges.
-                    The middle arrow has no vertical offset to traverse, so
-                    it stays a clean straight line. */}
-                {[150, 220, 290].map((y, i) => {
-                    const isStraight = y === 220;
+                {/* Producer arrows into Fluss. All converge on the Fluss
+                    block's left-edge midpoint (290, 140). Top + bottom use
+                    smooth S-curves; the middle is a near-straight line. */}
+                {[80, 140, 200].map((y, i) => {
+                    const isStraight = y === 140;
                     const d = isStraight
-                        ? `M220 ${y} L 260 ${y}`
-                        : `M220 ${y} C 252 ${y}, 228 220, 260 220`;
+                        ? `M220 ${y} L 290 ${y}`
+                        : `M220 ${y} C 258 ${y}, 252 140, 290 140`;
                     return (
                         <path
                             key={i}
@@ -223,141 +210,140 @@ function HeroDiagram() {
                     );
                 })}
 
-                {/* Apache Fluss Cluster (the hot tier) */}
-                <rect x="260" y="110" width="220" height="220" rx="16"
+                {/* Apache Fluss Cluster (the hot tier).
+                    Wider + shorter than before: 400 × 200 (was 220 × 220).
+                    The extra width lets Log Tables + PK Tables sit
+                    side-by-side instead of stacked, which is what reduces
+                    the height. */}
+                <rect x="290" y="40" width="400" height="200" rx="14"
                       fill="#0A2A6B"
                       stroke="rgba(34,211,238,0.5)"
                       strokeWidth="1.25" />
-                <text x="370" y="142" textAnchor="middle"
-                      fill="#A5F3FC" fontSize="16" fontWeight="600">
+                <text x="490" y="68" textAnchor="middle"
+                      fill="#A5F3FC" fontSize="14" fontWeight="600">
                     Apache Fluss
                 </text>
 
-                {/* Internal pieces (centred around block centre y = 220) */}
+                {/* Internal pieces — Log Tables (left) + PK Tables (right). */}
                 <g>
-                    <rect x="290" y="170" width="160" height="44" rx="8"
+                    <rect x="315" y="92" width="170" height="40" rx="8"
                           fill="#061B3F"
                           stroke="rgba(147,184,255,0.35)" />
-                    <text x="370" y="198" textAnchor="middle"
-                          fill="#E6ECFA" fontSize="14">Log Tables</text>
+                    <text x="400" y="117" textAnchor="middle"
+                          fill="#E6ECFA" fontSize="12">Log Tables</text>
 
-                    <rect x="290" y="222" width="160" height="44" rx="8"
+                    <rect x="495" y="92" width="170" height="40" rx="8"
                           fill="#061B3F"
                           stroke="rgba(147,184,255,0.35)" />
-                    <text x="370" y="250" textAnchor="middle"
-                          fill="#E6ECFA" fontSize="14">PK Tables</text>
+                    <text x="580" y="117" textAnchor="middle"
+                          fill="#E6ECFA" fontSize="12">PK Tables</text>
                 </g>
 
-                {/* Capability caption (three lines so it fits inside the
-                    block). Uses Fluss blue-300 so it reads as a distinct
-                    secondary accent, not a desaturated grey caption. */}
+                {/* Capability caption — single line now that the block is
+                    wide enough. */}
                 <text textAnchor="middle"
-                      fill="#93B8FF" fontSize="12"
+                      fill="#93B8FF" fontSize="11"
                       fontWeight="500" opacity="0.95">
-                    <tspan x="370" y="284">Column Pruning,</tspan>
-                    <tspan x="370" y="302">Predicate Pushdowns,</tspan>
-                    <tspan x="370" y="320">Realtime Updates</tspan>
+                    <tspan x="490" y="172">
+                        Column Pruning · Predicate Pushdown · Realtime Updates
+                    </tspan>
+                    <tspan x="490" y="194">
+                        Sub-second Freshness
+                    </tspan>
                 </text>
 
-                {/* Query Engines box. Vertically centred on y = 220 (the
-                    same axis as the Fluss block) and tall enough to fit
-                    five engine names with even spacing. */}
-                <text x="625" y="108" textAnchor="middle"
-                      fill="#22D3EE" fontSize="11"
+                {/* Query Engines box (right column). */}
+                <text x="870" y="32" textAnchor="middle"
+                      fill="#22D3EE" fontSize="10"
                       fontWeight="600" letterSpacing="1.4">
                     QUERY ENGINES
                 </text>
-                <rect x="540" y="120" width="170" height="200" rx="14"
+                <rect x="760" y="40" width="220" height="200" rx="14"
                       fill="#0A2A6B"
                       stroke="rgba(34,211,238,0.5)"
                       strokeWidth="1.25" />
-                <text x="625" y="150" textAnchor="middle"
-                      fill="#A5F3FC" fontSize="16" fontWeight="600">
+                <text x="870" y="70" textAnchor="middle"
+                      fill="#A5F3FC" fontSize="14" fontWeight="600">
                     Engines
                 </text>
-                <line x1="560" y1="166" x2="690" y2="166"
+                <line x1="780" y1="86" x2="960" y2="86"
                       stroke="rgba(147,184,255,0.25)" strokeWidth="1" />
                 {[
-                    {y: 192, label: 'Apache Flink'},
-                    {y: 220, label: 'Trino'},
-                    {y: 248, label: 'Apache Spark'},
-                    {y: 276, label: 'StarRocks'},
-                    {y: 304, label: 'DuckDB'},
+                    {y: 112, label: 'Apache Flink'},
+                    {y: 138, label: 'Trino'},
+                    {y: 164, label: 'Apache Spark'},
+                    {y: 190, label: 'StarRocks'},
+                    {y: 216, label: 'DuckDB'},
                 ].map((e, i) => (
-                    <text key={i} x="625" y={e.y} textAnchor="middle"
-                          fill="#E6ECFA" fontSize="14">
+                    <text key={i} x="870" y={e.y} textAnchor="middle"
+                          fill="#E6ECFA" fontSize="12">
                         {e.label}
                     </text>
                 ))}
 
                 {/* Y-junction merging Fluss and Lakehouse reads into a single
                     Union Read edge that points into the Engines box.
-                    Merge node at (510, 220). */}
-
-                {/* Fluss → merge (hot tier, straight horizontal feed) */}
+                    Merge node at (725, 140). */}
                 <path
                     className="fluss-hero-live"
-                    d="M480 220 L 510 220"
+                    d="M690 140 L 725 140"
                     stroke="#22D3EE"
                     strokeWidth="1.75"
                     strokeDasharray="4 4"
                     fill="none"
                 />
-
-                {/* Lakehouse → merge (cold tier, arcs up to the same node) */}
+                {/* Lakehouse → merge (cold tier, arcs up). */}
                 <path
                     className="fluss-hero-live"
-                    d="M480 433 C 520 433, 510 280, 510 220"
+                    d="M690 325 C 725 325, 725 220, 725 140"
                     stroke="#22D3EE"
                     strokeWidth="1.75"
                     strokeDasharray="4 4"
                     fill="none"
                 />
-
-                {/* Merged segment → Engines (single arrow, carries the
-                    Union Read label) */}
+                {/* Merge → Engines (carries the Union Read label). */}
                 <path
                     className="fluss-hero-live"
-                    d="M510 220 L 540 220"
+                    d="M725 140 L 760 140"
                     stroke="#22D3EE"
                     strokeWidth="1.75"
                     strokeDasharray="4 4"
                     fill="none"
                     markerEnd="url(#hgArrowLive)"
                 />
-                <text x="525" y="210" textAnchor="middle"
-                      fill="#22D3EE" fontSize="11"
+                <text x="742" y="130" textAnchor="middle"
+                      fill="#22D3EE" fontSize="10"
                       fontWeight="600" letterSpacing="0.6">
                     Union Read
                 </text>
 
-                {/* Tiering Service: bidirectional animated cyan edge */}
+                {/* Tiering Service: bidirectional animated cyan edge in the
+                    gap between Fluss bottom and Lakehouse top. */}
                 <path className="fluss-hero-live"
-                      d="M370 333 L 370 388"
+                      d="M490 240 L 490 290"
                       stroke="#22D3EE"
                       strokeWidth="1.75"
                       strokeDasharray="4 4"
                       fill="none"
                       markerStart="url(#hgArrowLive)"
                       markerEnd="url(#hgArrowLive)" />
-                <text x="385" y="365"
-                      fill="#A5F3FC" opacity="0.9" fontSize="13">
+                <text x="505" y="270"
+                      fill="#A5F3FC" opacity="0.9" fontSize="11">
                     Tiering Service
                 </text>
 
-                {/* Lakehouse (cold tier). Width and x matched to the Fluss
-                    block above so they form a single, tightly aligned
-                    centre column. */}
-                <rect x="260" y="390" width="220" height="86" rx="12"
+                {/* Lakehouse (cold tier). Width matches Fluss above so the
+                    centre column reads as one tightly aligned stack. */}
+                <rect x="290" y="290" width="400" height="70" rx="10"
                       fill="#061B3F"
                       stroke="rgba(59,130,246,0.55)"
                       strokeDasharray="3 3" />
-                <text x="370" y="420" textAnchor="middle"
-                      fill="#A5F3FC" fontSize="16" fontWeight="600">
+                <text x="490" y="316" textAnchor="middle"
+                      fill="#A5F3FC" fontSize="14" fontWeight="600">
                     Lakehouse
                 </text>
-                <text x="370" y="450" textAnchor="middle"
-                      fill="#C2CCE2" fontSize="14">
+                <text x="490" y="343" textAnchor="middle"
+                      fill="#C2CCE2" fontSize="12">
                     Iceberg / Paimon / Lance
                 </text>
             </g>
@@ -515,7 +501,7 @@ function SystemsTaxSection() {
     const beforeStack = [
         {
             label: 'Message broker',
-            sub: 'Kafka, for streaming event transport.',
+            sub: 'Kafka, for event transport.',
         },
         {
             label: 'Stream processor',
@@ -523,7 +509,7 @@ function SystemsTaxSection() {
         },
         {
             label: 'Online store',
-            sub: 'Redis or DynamoDB, for sub-millisecond feature lookup.',
+            sub: 'Redis or DynamoDB, for sub-millisecond lookup.',
         },
         {
             label: 'Offline store',
@@ -531,17 +517,35 @@ function SystemsTaxSection() {
         },
         {
             label: 'Sync layer',
-            sub: 'Bespoke pipelines + freshness monitors that drift silently.',
+            sub: 'bespoke pipelines and freshness monitors that drift silently.',
         },
     ];
 
-    const afterRequirements = [
-        'Event log: durable, replayable, offset-ordered.',
-        'KV store: sub-millisecond point lookups on the same leader.',
-        'Streaming compute substrate: leader-resident state, no Flink slot state.',
-        'Cold archive: open-format tiering to Iceberg / Paimon / Lance.',
-        'Vector-compatible layer: multi-modal context for ML and AI.',
-        'First-class audit trail: deterministic, replayable by design.',
+    const afterRequirements: {label: string; sub: string}[] = [
+        {
+            label: 'Event log',
+            sub: 'durable, replayable, offset-ordered streams',
+        },
+        {
+            label: 'PK lookup',
+            sub: 'sub-millisecond key/value lookups',
+        },
+        {
+            label: 'State externalization for Flink',
+            sub: 'Delta Joins, Partial Updates, Deduplication and Aggregation Merge Engine use Fluss as a state store',
+        },
+        {
+            label: 'Open-format cold tier',
+            sub: 'automatic tiering to Iceberg · Paimon · Lance',
+        },
+        {
+            label: 'Multi-modal ready',
+            sub: 'Lance integration for vectors and ML context',
+        },
+        {
+            label: 'Deterministic audit trail',
+            sub: '$changelog & $binlog virtual tables, replayable by design',
+        },
     ];
 
     return (
@@ -579,7 +583,7 @@ function SystemsTaxSection() {
                             ))}
                         </div>
                         <p className={styles.taxFootnote}>
-                            5 systems · 4 sync boundaries · continuous engineering tax
+                            5 systems · 4 sync boundaries owned by you · continuous engineering tax
                         </p>
                     </div>
 
@@ -610,15 +614,19 @@ function SystemsTaxSection() {
                             <div className={styles.taxAfterHeader}>
                                 <div className={styles.taxAfterTitle}>Apache Fluss</div>
                                 <div className={styles.taxAfterSub}>
-                                    One columnar streaming store that natively speaks
-                                    every requirement of a real-time AI platform.
+                                    One columnar streaming store designed for the
+                                    real-time AI data plane.
                                 </div>
                             </div>
                             <ul className={styles.taxAfterList}>
-                                {afterRequirements.map((r, i) => (
-                                    <li key={i}>
+                                {afterRequirements.map((r) => (
+                                    <li key={r.label}>
                                         <span className={styles.taxCheck} aria-hidden="true">✓</span>
-                                        {r}
+                                        <span>
+                                            <strong>{r.label}</strong>
+                                            {' · '}
+                                            {r.sub}
+                                        </span>
                                     </li>
                                 ))}
                             </ul>
@@ -634,36 +642,46 @@ function SystemsTaxSection() {
 }
 
 function CompareSection() {
-    const rows = [
+    const rows: {dimension: string; kafka: string; fluss: string}[] = [
         {
-            label: 'Storage model',
-            kafka: 'Append-only log, row-oriented',
-            lake: 'Columnar tables (batch-friendly)',
-            fluss: 'Columnar log + primary-key tables',
+            dimension: 'Positioning',
+            kafka: 'Distributed event streaming platform / durable commit log',
+            fluss: 'Streaming storage for real-time analytics, lakehouse-native',
         },
         {
-            label: 'Freshness',
-            kafka: 'Seconds (logs only)',
-            lake: 'Minutes to hours (commit-bound)',
-            fluss: 'Sub-second, end-to-end',
+            dimension: 'Storage model',
+            kafka: 'Append-only row log; tiered to S3 · GCS · ABFS via KIP-405',
+            fluss: 'Columnar Arrow IPC log & LSM-backed KV index for PK Tables; tiered into Paimon · Iceberg · Lance as the cold layer ("shared data": one logical table, two physical layouts)',
         },
         {
-            label: 'Direct analytical query',
-            kafka: 'No (consume + transform)',
-            lake: 'Yes, but on cold data',
-            fluss: 'Yes, on live + cold data',
+            dimension: 'Metadata plane · partitioning',
+            kafka: 'KRaft controllers · hash-keyed topic partitions',
+            fluss: 'CoordinatorServer & TabletServers · buckets & first-class partitioned tables',
         },
         {
-            label: 'Lake integration',
-            kafka: 'Via separate pipeline',
-            lake: 'Native (it is the lake)',
-            fluss: 'Native tiering to Iceberg & Paimon',
+            dimension: 'Logical unit · writes',
+            kafka: 'Topic (log only)',
+            fluss: 'Tables as the core abstraction: Log Tables for append-only streams and Primary Key Tables for native upserts, partial updates, and deletes',
         },
         {
-            label: 'State / lookup',
-            kafka: 'External KV store required',
-            lake: 'Not designed for it',
-            fluss: 'Built-in lookups & upserts',
+            dimension: 'Schema · CDC · types',
+            kafka: 'External Schema Registry; CDC via Connect · Debezium; nested types out-of-band in payload',
+            fluss: 'First-class schemas with evolution; native $changelog · $binlog virtual tables; native ARRAY · MAP · ROW with deep nesting',
+        },
+        {
+            dimension: 'Read path',
+            kafka: 'No server-side pruning or predicate pushdown; no native PK lookup',
+            fluss: 'Server-side zero-copy column · partition · predicate pushdown; built-in PK lookup via LSM',
+        },
+        {
+            dimension: 'State externalization (with Flink)',
+            kafka: 'App holds join state (RocksDB) and aggregation state',
+            fluss: 'Delta Joins externalize join state to Fluss; Aggregation Merge Engine pushes aggregation into storage; merge engines: Default · FirstRow · Versioned · Aggregation',
+        },
+        {
+            dimension: 'Strong fit',
+            kafka: 'Event-driven systems · log aggregation · microservice pub/sub · cross-language transport',
+            fluss: 'Real-time analytics on wide tables · streaming lakehouse · dimension joins · CDC-heavy pipelines · Flink-centric stacks',
         },
     ];
 
@@ -675,7 +693,10 @@ function CompareSection() {
                     <h2 className={styles.sectionTitle}>
                         Streams, tables, and the lake, in one storage layer.
                     </h2>
-                    <p className={styles.sectionLead}>
+                    {/* Override .sectionLead's default 720px max-width so the
+                        lead spans the same width as the comparison table below
+                        and fills each line edge-to-edge before wrapping. */}
+                    <p className={styles.sectionLead} style={{maxWidth: 'none'}}>
                         Kafka is great for transport. The lakehouse is great for analytics.
                         Apache Fluss closes the gap between them with columnar streaming
                         storage that is queryable in seconds and tiers natively to your lake.
@@ -686,18 +707,16 @@ function CompareSection() {
                     <table className={styles.compareTable}>
                         <thead>
                             <tr>
-                                <th scope="col"></th>
-                                <th scope="col">Kafka</th>
-                                <th scope="col">Iceberg / Paimon alone</th>
+                                <th scope="col">Dimension</th>
+                                <th scope="col">Apache Kafka</th>
                                 <th scope="col" className={styles.colHighlight}>Apache Fluss</th>
                             </tr>
                         </thead>
                         <tbody>
                             {rows.map((r) => (
-                                <tr key={r.label}>
-                                    <td>{r.label}</td>
+                                <tr key={r.dimension}>
+                                    <td>{r.dimension}</td>
                                     <td>{r.kafka}</td>
-                                    <td>{r.lake}</td>
                                     <td className={styles.colHighlight}>{r.fluss}</td>
                                 </tr>
                             ))}

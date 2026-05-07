@@ -21,15 +21,12 @@
  * work well for content-centric websites.
  */
 
-/* Self-hosted fonts via @fontsource (no external requests) */
-@import '@fontsource/inter/400.css';
-@import '@fontsource/inter/500.css';
-@import '@fontsource/inter/600.css';
-@import '@fontsource/inter/700.css';
-@import '@fontsource/inter/800.css';
-@import '@fontsource/roboto/400.css';
-@import '@fontsource/roboto/500.css';
-@import '@fontsource/roboto/700.css';
+/* Self-hosted variable fonts via @fontsource (no external requests).
+ * Geist is OFL-licensed (https://vercel.com/font); the variable bundles
+ * carry the full 100-900 weight axis in a single woff2 per family, so
+ * picking weights becomes a styling decision rather than a load decision. */
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
 
 /* =========================================================================
    Fluss Design Tokens (2026 redesign)
@@ -150,10 +147,42 @@ html {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Match the body bg so the browser's default white html surface
+   * doesn't show as a thin line at the top during overscroll / before
+   * the body paint. The variable flips with theme via tokens above. */
+  background: var(--fluss-canvas);
 }
 
 body {
   background: var(--fluss-canvas);
+}
+
+/* Page scrollbar — keep the thumb bright in dark mode so it stays
+ * visible against the deep-blue canvas instead of fading to grey
+ * via the browser's auto-dark heuristic.
+ *   `scrollbar-color`        — Firefox / future-spec
+ *   `::-webkit-scrollbar-*`  — Chromium / Safari
+ * Thumb / track in BOTH modes get an explicit treatment so the page
+ * scrollbar reads consistently. */
+[data-theme='dark'] html {
+  scrollbar-color: rgba(255, 255, 255, 0.42) rgba(255, 255, 255, 0.06);
+}
+[data-theme='dark'] body::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+[data-theme='dark'] body::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+}
+[data-theme='dark'] body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.32);
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+[data-theme='dark'] body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.55);
+  background-clip: padding-box;
 }
 
 /* Subtle dot-grid texture on the homepage canvas in light mode.

@@ -31,10 +31,15 @@
     overflow: hidden;
     margin-top: -60px;
     padding: calc(var(--fluss-space-32) + 60px) 0 var(--fluss-space-24);
+    /* Hero gradient pinned to the dark-mode rendering for BOTH themes.
+     * The bottom stop is the dark-mode --fluss-blue-800 override value
+     * (#DBEAFE, light blue) so the gradient fades from deep blue to light
+     * blue identically in light and dark — composited with the cyan +
+     * brand-blue radial overlays above for the layered hero look. */
     background:
         radial-gradient(1200px 600px at 80% 0%, rgba(34, 211, 238, 0.18), transparent 60%),
         radial-gradient(900px 500px at 10% 100%, rgba(59, 130, 246, 0.25), transparent 60%),
-        linear-gradient(180deg, var(--fluss-blue-950) 0%, var(--fluss-blue-900) 60%, var(--fluss-blue-800) 100%);
+        linear-gradient(180deg, #06122B 0%, #0B1E47 60%, #DBEAFE 100%);
     color: #FFFFFF;
 }
 
@@ -129,7 +134,17 @@
 }
 
 .heroTitle .accent {
-    background: linear-gradient(120deg, var(--fluss-cyan) 0%, var(--fluss-blue-300) 60%, #FFFFFF 100%);
+    /* Hero accent gradient — traverses cyan → blue → violet → white so it
+     * reads obviously as a gradient on the deep-blue feature surface,
+     * not as a near-monochrome glow. The four-stop curve plants violet
+     * as a mid-anchor, which gives the cyan→white sweep visible motion. */
+    background: linear-gradient(
+        120deg,
+        var(--fluss-cyan) 0%,
+        var(--fluss-blue-300) 35%,
+        #C4B5FD 65%,
+        #FFFFFF 100%
+    );
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -151,6 +166,9 @@
     align-items: center;
 }
 
+/* Primary CTA button — pinned to the dark-mode rendering for both themes.
+ * #3B82F6 is the dark-mode --fluss-blue-600 override; #60A5FA is the
+ * dark-mode --fluss-blue-500 override. */
 .btnPrimary {
     display: inline-flex;
     align-items: center;
@@ -159,7 +177,7 @@
     height: 48px;
     padding: 0 22px;
     border-radius: var(--fluss-radius-md);
-    background: var(--fluss-blue-600);
+    background: #3B82F6;
     color: #FFFFFF;
     font-weight: 600;
     font-size: 0.9375rem;
@@ -172,7 +190,7 @@
 
 .btnPrimary:hover {
     transform: translateY(-1px);
-    background: var(--fluss-blue-500);
+    background: #60A5FA;
     color: #FFFFFF;
     text-decoration: none;
     box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35), 0 16px 48px rgba(37, 99, 235, 0.32);
@@ -205,13 +223,16 @@
     transform: translateY(-1px);
 }
 
+/* Ghost button — pinned to the dark-mode --fluss-blue-100 override
+ * (translucent brand blue). Default state is intentionally faint;
+ * the :hover rule below brightens the text to white. */
 .btnGhost {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     height: 48px;
     padding: 0 8px;
-    color: var(--fluss-blue-100);
+    color: rgba(37, 99, 235, 0.18);
     font-weight: 500;
     font-size: 0.9375rem;
     transition: color var(--fluss-motion-fast) var(--fluss-ease-out);
@@ -351,13 +372,13 @@
 .section {
     position: relative;
     padding: var(--fluss-space-24) 0;
-    /* Layered gradient washes give light mode a "designed" feel instead of
-       flat white. Two radial accents + a top-down soft wash + transparent
-       canvas (so the body dot-grid shows through behind). */
+    /* Always-dark — pinned to deep-blue gradient for both modes.
+     * Cyan + brand-blue radial overlays sit on a dark base. */
     background:
         radial-gradient(1100px 520px at 85% -10%, rgba(34, 211, 238, 0.14), transparent 60%),
-        radial-gradient(900px 460px at -5% 110%, rgba(37, 99, 235, 0.12), transparent 60%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.4) 100%);
+        radial-gradient(900px 460px at -5% 110%, rgba(37, 99, 235, 0.18), transparent 60%),
+        linear-gradient(180deg, #06122B 0%, #0B1E47 100%);
+    color: rgba(219, 234, 254, 0.88);
 }
 
 .sectionTight {
@@ -371,11 +392,11 @@
 
 .sectionWash {
     background:
-        radial-gradient(1100px 460px at 50% -10%, rgba(34, 211, 238, 0.18), transparent 60%),
-        radial-gradient(800px 380px at 100% 100%, rgba(124, 58, 237, 0.10), transparent 60%),
-        linear-gradient(180deg, var(--fluss-blue-50) 0%, #DDE9FB 100%);
-    border-top: 1px solid rgba(37, 99, 235, 0.10);
-    border-bottom: 1px solid rgba(37, 99, 235, 0.10);
+        radial-gradient(1100px 460px at 50% -10%, rgba(34, 211, 238, 0.20), transparent 60%),
+        radial-gradient(800px 380px at 100% 100%, rgba(124, 58, 237, 0.16), transparent 60%),
+        linear-gradient(180deg, #0B1E47 0%, #06122B 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .eyebrow {
@@ -384,16 +405,16 @@
     gap: 8px;
     padding: 5px 14px;
     border-radius: var(--fluss-radius-pill);
-    background: linear-gradient(120deg, rgba(34, 211, 238, 0.12) 0%, rgba(37, 99, 235, 0.10) 100%);
-    border: 1px solid rgba(37, 99, 235, 0.22);
-    color: var(--fluss-blue-700);
+    background: linear-gradient(120deg, rgba(34, 211, 238, 0.18) 0%, rgba(37, 99, 235, 0.14) 100%);
+    border: 1px solid rgba(96, 165, 250, 0.32);
+    color: #93C5FD;
     font-family: var(--fluss-font-display);
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     margin-bottom: var(--fluss-space-4);
-    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+    box-shadow: 0 2px 8px rgba(34, 211, 238, 0.12);
 }
 
 .eyebrow::before {
@@ -418,7 +439,7 @@
     letter-spacing: -0.02em;
     text-wrap: balance;
     margin: 0 0 var(--fluss-space-4);
-    color: var(--fluss-ink-950);
+    color: #FFFFFF;
 }
 
 .sectionDark .sectionTitle {
@@ -428,7 +449,7 @@
 .sectionLead {
     font-size: 1.125rem;
     line-height: 1.65;
-    color: var(--fluss-ink-500);
+    color: rgba(219, 234, 254, 0.78);
     max-width: 720px;
     margin: 0 0 var(--fluss-space-12);
     text-wrap: pretty;
@@ -462,11 +483,11 @@
     position: relative;
     border-radius: var(--fluss-radius-xl);
     overflow: hidden;
-    border: 1px solid rgba(37, 99, 235, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     background:
-        radial-gradient(800px 240px at 100% 0%, rgba(34, 211, 238, 0.10), transparent 60%),
-        var(--fluss-paper);
-    box-shadow: var(--fluss-shadow-lg);
+        radial-gradient(800px 240px at 100% 0%, rgba(34, 211, 238, 0.12), transparent 60%),
+        #0B1E47;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 6px 16px rgba(0, 0, 0, 0.32);
 }
 
 .compareWrap::before {
@@ -485,17 +506,17 @@
 }
 
 .compareTable thead th {
-    background: linear-gradient(180deg, #EAF1FB 0%, #D9E5F8 100%);
-    color: var(--fluss-ink-950);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.02) 100%);
+    color: rgba(219, 234, 254, 0.92);
     font-weight: 600;
     text-align: left;
     padding: var(--fluss-space-4) var(--fluss-space-5);
-    border-bottom: 1px solid rgba(37, 99, 235, 0.18);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
     white-space: nowrap;
 }
 
 .compareTable thead th.colHighlight {
-    background: linear-gradient(180deg, var(--fluss-blue-700) 0%, var(--fluss-blue-600) 100%);
+    background: linear-gradient(180deg, #1A47B8 0%, #2563EB 100%);
     color: #FFFFFF;
 }
 
@@ -504,37 +525,37 @@
 }
 
 .compareTable tbody tr:hover td {
-    background-color: rgba(37, 99, 235, 0.04);
+    background-color: rgba(255, 255, 255, 0.03);
 }
 
 .compareTable tbody tr:hover td:first-child {
-    background-color: rgba(37, 99, 235, 0.06);
+    background-color: rgba(255, 255, 255, 0.05);
 }
 
 .compareTable tbody tr:hover td.colHighlight {
-    background-color: rgba(37, 99, 235, 0.14);
+    background-color: rgba(96, 165, 250, 0.14);
 }
 
 .compareTable tbody td {
     padding: var(--fluss-space-4) var(--fluss-space-5);
-    border-top: 1px solid var(--fluss-ink-100);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
     vertical-align: top;
-    color: var(--fluss-ink-700);
+    color: rgba(219, 234, 254, 0.85);
     transition: background-color var(--fluss-motion-fast) var(--fluss-ease-out);
 }
 
 .compareTable tbody td:first-child {
     font-weight: 600;
-    color: var(--fluss-ink-950);
-    background: linear-gradient(90deg, rgba(37, 99, 235, 0.04) 0%, transparent 100%);
+    color: #FFFFFF;
+    background: linear-gradient(90deg, rgba(96, 165, 250, 0.08) 0%, transparent 100%);
     width: 28%;
 }
 
 .compareTable tbody td.colHighlight {
-    background: linear-gradient(180deg, rgba(37, 99, 235, 0.08) 0%, rgba(34, 211, 238, 0.10) 100%);
-    color: var(--fluss-ink-950);
+    background: linear-gradient(180deg, rgba(96, 165, 250, 0.10) 0%, rgba(34, 211, 238, 0.10) 100%);
+    color: #FFFFFF;
     font-weight: 500;
-    box-shadow: inset 1px 0 0 rgba(37, 99, 235, 0.12), inset -1px 0 0 rgba(37, 99, 235, 0.12);
+    box-shadow: inset 1px 0 0 rgba(96, 165, 250, 0.20), inset -1px 0 0 rgba(96, 165, 250, 0.20);
 }
 
 @media (max-width: 800px) {
@@ -651,10 +672,10 @@
     padding: var(--fluss-space-6);
     border-radius: var(--fluss-radius-lg);
     background:
-        radial-gradient(400px 160px at 100% 0%, rgba(34, 211, 238, 0.08), transparent 60%),
-        linear-gradient(180deg, #FFFFFF 0%, #F6F9FE 100%);
-    border: 1px solid rgba(37, 99, 235, 0.12);
-    box-shadow: var(--fluss-shadow-sm);
+        radial-gradient(400px 160px at 100% 0%, rgba(34, 211, 238, 0.10), transparent 60%),
+        rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
     transition: transform var(--fluss-motion-base) var(--fluss-ease-out),
                 box-shadow var(--fluss-motion-base) var(--fluss-ease-out),
                 border-color var(--fluss-motion-base) var(--fluss-ease-out);
@@ -662,15 +683,15 @@
 
 .freshTile:hover {
     transform: translateY(-3px);
-    box-shadow: var(--fluss-shadow-md);
-    border-color: rgba(37, 99, 235, 0.30);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    border-color: rgba(96, 165, 250, 0.32);
 }
 
 .freshTileHighlight {
-    background: linear-gradient(180deg, var(--fluss-blue-700) 0%, var(--fluss-blue-800) 100%);
+    background: linear-gradient(180deg, #1A47B8 0%, #11317A 100%);
     border-color: transparent;
     color: #FFFFFF;
-    box-shadow: var(--fluss-shadow-glow);
+    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.35), 0 16px 48px rgba(34, 211, 238, 0.28);
 }
 
 .freshLatency {
@@ -679,7 +700,7 @@
     font-weight: 700;
     letter-spacing: -0.02em;
     margin-bottom: var(--fluss-space-1);
-    color: var(--fluss-ink-950);
+    color: #FFFFFF;
 }
 
 .freshTileHighlight .freshLatency {
@@ -688,7 +709,7 @@
 
 .freshLabel {
     font-size: 0.875rem;
-    color: var(--fluss-ink-500);
+    color: rgba(219, 234, 254, 0.78);
 }
 
 .freshTileHighlight .freshLabel {
@@ -698,7 +719,7 @@
 .freshSub {
     margin-top: var(--fluss-space-3);
     font-size: 0.9375rem;
-    color: var(--fluss-ink-700);
+    color: rgba(219, 234, 254, 0.85);
 }
 
 .freshTileHighlight .freshSub {
@@ -852,13 +873,14 @@
    ========================================================================= */
 .taxSection {
     padding: var(--fluss-space-24) 0;
+    /* Always-dark — pinned to deep-blue gradient for both modes. */
     background:
-        radial-gradient(900px 500px at 50% -10%, rgba(37, 99, 235, 0.16), transparent 60%),
-        radial-gradient(700px 360px at 0% 100%, rgba(244, 63, 94, 0.06), transparent 60%),
-        radial-gradient(700px 360px at 100% 100%, rgba(34, 211, 238, 0.10), transparent 60%),
-        linear-gradient(180deg, #F4F8FE 0%, #E8EFFA 100%);
-    border-top: 1px solid rgba(37, 99, 235, 0.10);
-    border-bottom: 1px solid rgba(37, 99, 235, 0.10);
+        radial-gradient(900px 500px at 50% -10%, rgba(37, 99, 235, 0.20), transparent 60%),
+        radial-gradient(700px 360px at 0% 100%, rgba(244, 63, 94, 0.10), transparent 60%),
+        radial-gradient(700px 360px at 100% 100%, rgba(34, 211, 238, 0.14), transparent 60%),
+        linear-gradient(180deg, #06122B 0%, #0B1E47 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .taxGrid {
@@ -897,9 +919,9 @@
 }
 
 .taxLabelBefore {
-    background: rgba(244, 63, 94, 0.08);
-    color: #BE123C;
-    border: 1px solid rgba(244, 63, 94, 0.2);
+    background: rgba(244, 63, 94, 0.16);
+    color: #FDA4AF;
+    border: 1px solid rgba(244, 63, 94, 0.32);
 }
 
 .taxLabelAfter {
@@ -924,10 +946,10 @@
     padding: var(--fluss-space-4) var(--fluss-space-5);
     border-radius: var(--fluss-radius-md);
     background:
-        linear-gradient(90deg, rgba(244, 63, 94, 0.04) 0%, rgba(255, 255, 255, 0.95) 40%);
-    border: 1px solid rgba(244, 63, 94, 0.12);
+        linear-gradient(90deg, rgba(244, 63, 94, 0.10) 0%, rgba(255, 255, 255, 0.04) 40%);
+    border: 1px solid rgba(244, 63, 94, 0.22);
     border-left: 3px solid #FB7185;
-    box-shadow: var(--fluss-shadow-sm);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
     transition: transform var(--fluss-motion-base) var(--fluss-ease-out),
                 border-color var(--fluss-motion-base) var(--fluss-ease-out),
                 box-shadow var(--fluss-motion-base) var(--fluss-ease-out);
@@ -935,15 +957,15 @@
 
 .taxStackItem:hover {
     transform: translateX(3px);
-    box-shadow: var(--fluss-shadow-md);
-    border-color: rgba(244, 63, 94, 0.22);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    border-color: rgba(244, 63, 94, 0.42);
 }
 
 .taxStackIndex {
     font-family: var(--fluss-font-mono);
     font-size: 0.75rem;
     font-weight: 700;
-    color: var(--fluss-ink-300);
+    color: rgba(255, 255, 255, 0.42);
     line-height: 1.5;
     padding-top: 2px;
 }
@@ -952,14 +974,14 @@
     font-family: var(--fluss-font-display);
     font-size: 0.9375rem;
     font-weight: 600;
-    color: var(--fluss-ink-950);
+    color: #FFFFFF;
     line-height: 1.3;
 }
 
 .taxStackSub {
     font-size: 0.8125rem;
     line-height: 1.45;
-    color: var(--fluss-ink-500);
+    color: rgba(219, 234, 254, 0.78);
     margin-top: 2px;
 }
 
@@ -1059,7 +1081,7 @@
     font-family: var(--fluss-font-mono);
     font-size: 0.75rem;
     letter-spacing: 0.04em;
-    color: var(--fluss-ink-500);
+    color: rgba(219, 234, 254, 0.65);
     text-align: center;
 }
 
@@ -1078,10 +1100,22 @@
     border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-/* Reuses the cyan → blue → white gradient of the hero H1's `.accent` span,
-   so the architecture title reads as a continuation of the hero. */
-.archTitle {
-    background: linear-gradient(120deg, var(--fluss-cyan) 0%, var(--fluss-blue-300) 60%, #FFFFFF 100%);
+/* Mirrors the hero H1's `.accent` four-stop gradient (cyan → blue → violet →
+ * white) so the architecture title reads as a deliberate continuation of the
+ * hero, not just a slightly tinted heading.
+ *
+ * Selector is scoped under `.archSection` (specificity 0,2,0) deliberately:
+ * `.sectionDark .sectionTitle { color: #FFFFFF }` would otherwise beat the
+ * bare `.archTitle` (0,1,0) `color: transparent` and force solid-white text,
+ * masking the gradient. Matching specificity + later source order wins. */
+.archSection .archTitle {
+    background: linear-gradient(
+        120deg,
+        var(--fluss-cyan) 0%,
+        var(--fluss-blue-300) 35%,
+        #C4B5FD 65%,
+        #FFFFFF 100%
+    );
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -1096,12 +1130,14 @@
 }
 
 /* Full-width canvas for the SVG diagram. Aspect-ratio matches the SVG
-   viewBox so the box reserves the correct height before paint. */
+ * viewBox so the box reserves the correct height before paint.
+ * Bumped to 1000:400 (5:2) — wider, less tall — and max-width raised
+ * to 1240px so the wider canvas can actually use the page width. */
 .archDiagram {
     position: relative;
     width: 100%;
-    max-width: 1100px;
-    aspect-ratio: 720 / 500;
+    max-width: 1240px;
+    aspect-ratio: 1000 / 400;
     margin: 0 auto;
 }
 
