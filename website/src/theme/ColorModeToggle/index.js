@@ -15,26 +15,8 @@
  * limitations under the License.
  */
 
-import React from 'react';
-import OriginalColorModeToggle from '@theme-original/ColorModeToggle';
-import {useLocation} from '@docusaurus/router';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
-
-/**
- * Wraps the default Docusaurus colour-mode toggle so it doesn't render at
- * all on the landing page. On every other route the original toggle is
- * rendered unchanged. The match handles both bare `/` and the baseUrl
- * variant (e.g. `/fluss/`) plus optional trailing-slash differences.
- */
-export default function ColorModeToggleWrapper(props) {
-    const {pathname} = useLocation();
-    const {siteConfig: {baseUrl}} = useDocusaurusContext();
-
-    const normalize = (p) => (p.endsWith('/') ? p : p + '/');
-    const isHome = normalize(pathname) === normalize(baseUrl);
-
-    if (isHome) {
-        return null;
-    }
-    return <OriginalColorModeToggle {...props} />;
-}
+// Pass-through re-export of the default Docusaurus colour-mode toggle so it
+// renders identically on every page (including the landing page). This file
+// is kept (rather than fully un-swizzled) so the existing webpack alias for
+// `@theme/ColorModeToggle` continues to resolve cleanly.
+export {default} from '@theme-original/ColorModeToggle';

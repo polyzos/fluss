@@ -1049,13 +1049,28 @@ function FinalCta() {
  * navbar-level CSS (which lives outside the Layout's wrapperClassName)
  * can scope homepage-only rules — e.g. hiding the Ask-AI / colour-mode
  * toggle on the landing page only.
+ *
+ * Also pins <html data-theme="light"> while mounted: the landing page is
+ * authored as a single (always-light) design with no dark-mode variant,
+ * so we override Docusaurus' theme attribute here and restore the user's
+ * previous preference on unmount (so docs/blog still honour dark mode).
  */
 function useHomeBodyClass() {
     useEffect(() => {
         if (typeof document === 'undefined') return;
         document.body.classList.add('fluss-home-page');
+
+        const html = document.documentElement;
+        const previousTheme = html.getAttribute('data-theme');
+        html.setAttribute('data-theme', 'light');
+
         return () => {
             document.body.classList.remove('fluss-home-page');
+            if (previousTheme !== null) {
+                html.setAttribute('data-theme', previousTheme);
+            } else {
+                html.removeAttribute('data-theme');
+            }
         };
     }, []);
 }
@@ -1072,13 +1087,19 @@ export default function Home(): JSX.Element {
             wrapperClassName={clsx(styles.homepageWrapper, 'fluss-home')}>
             <HomepageHeader heroRef={heroRef}/>
             <main>
-                <ArchitectureSection/>
+                {/* Narrative arc:
+                    Hero → What it is (HomepageIntroduce) → How it's built
+                    (Architecture) → Why you need it (SystemsTax) → What you
+                    get (HomepageFeatures) → How it differs (Compare) → What
+                    it delivers (Freshness) → How to try it (Quickstart) →
+                    Who builds it (Community) → Start now (FinalCta). */}
                 <HomepageIntroduce/>
+                <ArchitectureSection/>
                 <SystemsTaxSection/>
                 <HomepageFeatures/>
                 <CompareSection/>
-                <QuickstartSection/>
                 <FreshnessSection/>
+                <QuickstartSection/>
                 <CommunitySection/>
                 <FinalCta/>
             </main>

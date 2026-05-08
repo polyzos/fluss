@@ -133,11 +133,9 @@
   --ifm-menu-color-background-active: #EFF6FF;
   --ifm-menu-color-background-hover:  #EFF6FF;
 
-  /* Navbar: keep the dark Fluss palette across the WHOLE site (not just
-     the homepage hero), so the navbar never flips to a stark white pane
-     on scroll or on docs/blog/community pages. The `body.fluss-on-hero`
-     rules below still override the background to transparent over the
-     hero itself. */
+  /* Navbar: a single dark Fluss palette across the WHOLE site (homepage,
+     docs, blog, community) so the navbar reads identically on every
+     page — no per-route transparent / frosted variants. */
   --ifm-navbar-background-color: rgba(11, 30, 71, 0.92);
   --ifm-navbar-link-color: #CBD5E1;
   --ifm-navbar-link-hover-color: #FFFFFF;
@@ -2179,24 +2177,17 @@ ul[class*='tag'] li {
 
 /* =========================================================================
    ========================================================================
-   HOMEPAGE NAVBAR : transparent over hero, solid otherwise
-   Driven by body.fluss-on-hero (set by IntersectionObserver in index.tsx).
+   GLOBAL NAVBAR : same look on every page (homepage, docs, blog, etc.)
+   No transparent-on-hero variant, no homepage-frosted variant — the
+   navbar is rendered as a single consistent dark pane site-wide.
    ========================================================================
    ========================================================================= */
 
 .navbar {
   background-color: var(--ifm-navbar-background-color);
   box-shadow: var(--ifm-navbar-shadow);
-  transition: background-color var(--fluss-motion-base) var(--fluss-ease-out),
-              backdrop-filter var(--fluss-motion-base) var(--fluss-ease-out),
-              box-shadow var(--fluss-motion-base) var(--fluss-ease-out),
-              border-color var(--fluss-motion-base) var(--fluss-ease-out);
 }
 
-/* Navbar text/icon colours: applied globally so the navbar reads as the
-   same dark/cyan pane on every page, not only on the homepage hero. The
-   `body.fluss-on-hero` block below only adjusts background/box-shadow
-   while the hero is in view; text colours are already correct here. */
 .navbar__brand,
 .navbar__title,
 .navbar__link {
@@ -2208,84 +2199,9 @@ ul[class*='tag'] li {
   color: #FFFFFF;
 }
 
-.navbar__toggle,
-.navbar__toggle svg {
-  color: #E2E8F0;
-  fill: #E2E8F0;
-}
-
-/* When the hero is on screen (homepage only), the navbar floats over it. */
-body.fluss-on-hero .navbar {
-  background-color: transparent;
-  box-shadow: none;
-  border-bottom-color: transparent;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
-body.fluss-on-hero .navbar__link,
-body.fluss-on-hero .navbar__brand,
-body.fluss-on-hero .navbar__title {
-  color: #FFFFFF;
-  text-shadow: 0 1px 3px rgba(6, 18, 43, 0.35);
-}
-
-body.fluss-on-hero .navbar__link:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #FFFFFF;
-}
-
-body.fluss-on-hero .navbar__toggle,
-body.fluss-on-hero .navbar__toggle svg {
-  color: #FFFFFF;
-  fill: #FFFFFF;
-}
-
-/* Hero is dark, so always show the white logo on it.
-   srcDark logo asset is preferred (white_color_logo.svg). */
-body.fluss-on-hero[data-theme='light'] .navbar__logo img {
-  content: url('/img/logo/svg/white_color_logo.svg');
-}
-
-/* Search button on the hero : translucent glass */
-body.fluss-on-hero .DocSearch-Button {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-body.fluss-on-hero .DocSearch-Button:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.35);
-}
-
-body.fluss-on-hero .DocSearch-Button-Placeholder,
-body.fluss-on-hero .DocSearch-Search-Icon {
-  color: rgba(255, 255, 255, 0.85);
-}
-
-body.fluss-on-hero .DocSearch-Button-Keys {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.85);
-}
-
-/* GitHub icon white on hero */
-body.fluss-on-hero .header-github-link::before {
-  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='white' d='M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12'/%3E%3C/svg%3E") no-repeat !important;
-}
-
-/* When NOT on hero, on homepage, allow a frosted look so the navbar
-   feels less heavy as it appears. Outside the homepage, the default
-   solid navbar stays. */
-body.fluss-home:not(.fluss-on-hero) .navbar {
-  background-color: rgba(255, 255, 255, 0.85);
-  -webkit-backdrop-filter: blur(12px) saturate(1.4);
-  backdrop-filter: blur(12px) saturate(1.4);
-}
-
-[data-theme='dark'] body.fluss-home:not(.fluss-on-hero) .navbar,
-body.fluss-home:not(.fluss-on-hero)[data-theme='dark'] .navbar {
-  background-color: rgba(11, 30, 71, 0.85);
+/* Hide the mobile hamburger button that sits to the left of the logo. */
+.navbar__toggle {
+  display: none !important;
 }
 
 /* =========================================================================
@@ -2327,37 +2243,9 @@ button.clean-btn[class*='toggle'] svg {
   height: 18px;
 }
 
-/* On hero (homepage), make it glassy and white-iconed */
-body.fluss-on-hero button[class*='colorModeToggle'],
-body.fluss-on-hero button.clean-btn[class*='toggle'] {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #FFFFFF;
-}
-
-body.fluss-on-hero button[class*='colorModeToggle']:hover,
-body.fluss-on-hero button.clean-btn[class*='toggle']:hover {
-  background: rgba(255, 255, 255, 0.22);
-  border-color: rgba(255, 255, 255, 0.4);
-  color: #FFFFFF;
-}
-
-/* Strip every "extra" button from the navbar on the landing page.
-   `fluss-home-page` is added to <body> by useHomeBodyClass in
-   index.tsx. We scope from <body> because Docusaurus's Layout
-   wrapperClassName does NOT wrap the navbar — the navbar is
-   rendered as a sibling of the page content, not a descendant.
-   This is a defence-in-depth fallback: the colour-mode toggle is
-   also removed from the DOM via the swizzled ColorModeToggle in
-   src/theme/ColorModeToggle, but the CSS keeps things hidden in
-   case any cached or non-swizzled bundle lingers. */
-body.fluss-home-page button[class*='colorModeToggle'],
-body.fluss-home-page button[class*='ColorModeToggle'],
-body.fluss-home-page .navbar__toggle,
-body.fluss-home-page button.clean-btn[class*='toggle'],
-body.fluss-home-page .navbar-ask-ai {
-  display: none !important;
-}
+/* The colour-mode toggle button renders identically on every page,
+   including the landing page — it inherits the global toggle styling
+   above and needs no per-route overrides. */
 
 /* =========================================================================
    ========================================================================

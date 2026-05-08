@@ -129,8 +129,6 @@ const config: Config = {
       {
         docs: {
             sidebarPath: './sidebars.ts',
-            editUrl: ({docPath}) =>
-                `https://github.com/apache/fluss/edit/main/website/docs/${docPath}`,
             remarkPlugins: [versionReplace],
             lastVersion: latestVersion,
             versions: versionsMap

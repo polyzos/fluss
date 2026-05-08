@@ -21,41 +21,67 @@ import styles from './styles.module.css';
 
 type ValueProp = {
   title: string;
-  body: string;
+  lead: string;
+  bullets: string[];
   Icon: React.ComponentType<React.ComponentProps<'svg'>>;
 };
 
 const VALUE_PROPS: ValueProp[] = [
   {
     title: 'Sub-second Freshness',
-    body: 'Columnar streaming over Apache Arrow with server-side column pruning and predicate pushdown. Analytics, features, and agents read new rows within sub-second latency of write. Column projection, predicate pushdown, and partition pruning compound into order-of-magnitude reductions in network transfer.',
+    lead: 'Columnar streaming over Apache Arrow with server-side pruning and pushdown.',
+    bullets: [
+      'Sub-second latency from write to read for analytics, features, and agents.',
+      'Column projection, predicate pushdown, and partition pruning.',
+      'Order-of-magnitude cuts in network transfer.',
+    ],
     Icon: require('@site/static/img/feature_real_time.svg').default,
   },
   {
     title: 'One Data Copy Across Hot & Cold Layer',
-    body: 'The hot Fluss tier and the cold open-format tier (Iceberg, Paimon, Lance) share a single logical schema with synchronised metadata. The Tiering Service and Union Read mechanism make both layers queryable as one substrate, eliminating the dual-write fork between streaming and batch.',
+    lead: 'Hot Fluss and cold open formats (Iceberg, Paimon, Lance) share one logical schema.',
+    bullets: [
+      'Synchronised metadata across hot and cold tiers.',
+      'Tiering Service and Union Read query both as one substrate.',
+      'No dual-write fork between streaming and batch.',
+    ],
     Icon: require('@site/static/img/feature_lake.svg').default,
   },
   {
     title: 'Stream/Table Duality In One System',
-    body: 'PK Tables hold both an append-only changelog and a latest state in RocksDB, like database tables. Sub-millisecond key/value lookups are feasible, consolidating roles previously split across a message queue, a key-value store, and an OLAP engine.',
+    lead: 'PK Tables hold an append-only changelog and a latest state in RocksDB.',
+    bullets: [
+      'Sub-millisecond key/value lookups on primary keys.',
+      'Database-style tables with native stream semantics.',
+      'Replaces message queue + KV store + OLAP engine.',
+    ],
     Icon: require('@site/static/img/feature_update.svg').default,
   },
   {
-    title: 'Stateless, elastic compute',
-    body: 'Fluss acts as a shared-state store, allowing compute engines like Apache Flink to be stateless. Recovery collapses from minutes to seconds, RPO is decoupled from RTO, and benchmarked topologies run up to 85% cheaper than comparable Kafka-based equivalents.',
+    title: 'Externalized States, Elastic Compute',
+    lead: 'Fluss is a shared-state store, so engines like Apache Flink stay stateless.',
+    bullets: [
+      'Recovery collapses from minutes to seconds.',
+      'RPO decoupled from RTO.',
+      'Up to 85% cheaper than Kafka-based equivalents.',
+    ],
     Icon: require('@site/static/img/feature_lookup.svg').default,
   },
 ];
 
-function ValuePropCard({title, body, Icon}: ValueProp) {
+function ValuePropCard({title, lead, bullets, Icon}: ValueProp) {
   return (
     <div className={styles.card}>
       <div className={styles.cardIcon} aria-hidden="true">
         <Icon role="img" />
       </div>
       <Heading as="h3" className={styles.cardTitle}>{title}</Heading>
-      <p className={styles.cardBody}>{body}</p>
+      <p className={styles.cardLead}>{lead}</p>
+      <ul className={styles.cardBullets}>
+        {bullets.map((b) => (
+          <li key={b}>{b}</li>
+        ))}
+      </ul>
     </div>
   );
 }
