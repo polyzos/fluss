@@ -45,7 +45,7 @@ const lightTheme: PrismTheme = {
     },
     {
       types: ['keyword', 'atrule', 'selector'],
-      style: {color: '#1A47B8'}, // --fluss-blue-700
+      style: {color: '#194670'}, // --fluss-blue-700
     },
     {
       types: ['function', 'class-name', 'tag'],
@@ -53,7 +53,7 @@ const lightTheme: PrismTheme = {
     },
     {
       types: ['builtin', 'constant', 'variable', 'property'],
-      style: {color: '#11317A'}, // --fluss-blue-800
+      style: {color: '#12325C'}, // --fluss-blue-800
     },
     {
       types: ['operator', 'punctuation'],
@@ -65,7 +65,7 @@ const lightTheme: PrismTheme = {
     },
     {
       types: ['attr-name'],
-      style: {color: '#2563EB'}, // --fluss-blue-600
+      style: {color: '#1C5078'}, // --fluss-blue-600
     },
     {
       types: ['symbol', 'url'],

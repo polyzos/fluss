@@ -85,7 +85,7 @@ const config: Config = {
       tagName: 'meta',
       attributes: {
         name: 'theme-color',
-        content: '#0B1E47',
+        content: '#102856',
       },
     },
   ],
@@ -185,7 +185,7 @@ const config: Config = {
           pwaHead: [
             { tagName: 'link', rel: 'icon', href: '/img/logo/svg/colored_logo.svg' },
             { tagName: 'link', rel: 'manifest', href: '/manifest.json' },
-            { tagName: 'meta', name: 'theme-color', content: '#0B1E47' },
+            { tagName: 'meta', name: 'theme-color', content: '#102856' },
           ],
       },
     ],
@@ -220,7 +220,7 @@ const config: Config = {
     image: 'img/logo/png/colored_logo.png',
     colorMode: {
       defaultMode: 'light',
-      disableSwitch: false,
+      disableSwitch: true,
       respectPrefersColorScheme: false,
     },
     navbar: {

@@ -23,8 +23,8 @@ import type {PrismTheme} from 'prism-react-renderer';
  */
 const darkTheme: PrismTheme = {
   plain: {
-    color: '#DBEAFE',           // --fluss-blue-100
-    backgroundColor: '#06122B', // --fluss-blue-950
+    color: '#D6E4ED',           // --fluss-blue-100
+    backgroundColor: '#0A1745', // --fluss-blue-950
   },
   styles: [
     {
@@ -45,11 +45,11 @@ const darkTheme: PrismTheme = {
     },
     {
       types: ['keyword', 'atrule', 'selector'],
-      style: {color: '#93C5FD'}, // --fluss-blue-300
+      style: {color: '#B1CEDF'}, // --fluss-blue-300
     },
     {
       types: ['function', 'class-name', 'tag'],
-      style: {color: '#22D3EE'}, // --fluss-cyan
+      style: {color: '#7AAFCB'}, // --fluss-cyan
     },
     {
       types: ['builtin', 'constant', 'variable', 'property'],
@@ -65,7 +65,7 @@ const darkTheme: PrismTheme = {
     },
     {
       types: ['attr-name'],
-      style: {color: '#60A5FA'},
+      style: {color: '#7AAFCB'},
     },
     {
       types: ['symbol', 'url'],

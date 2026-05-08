@@ -32,19 +32,25 @@
    Fluss Design Tokens (2026 redesign)
    ========================================================================= */
 :root {
-  /* --- Brand: Blue scale --- */
-  --fluss-blue-950: #06122B;
-  --fluss-blue-900: #0B1E47;
-  --fluss-blue-800: #11317A;
-  --fluss-blue-700: #1A47B8;
-  --fluss-blue-600: #2563EB;
-  --fluss-blue-500: #3B82F6;
-  --fluss-blue-300: #93C5FD;
-  --fluss-blue-100: #DBEAFE;
-  --fluss-blue-50:  #EFF6FF;
+  /* --- Brand: Navy scale (2026 palette refresh) ---
+     Anchored on six user-provided palette stops:
+       #0A1745 · #102856 · #12325C · #194670 · #1C5078 · #266D95
+     The 300/100/50 stops are derived lighter tints in the same hue family
+     so we keep enough light surfaces / light-text accents on dark grounds. */
+  --fluss-blue-950: #0A1745;
+  --fluss-blue-900: #102856;
+  --fluss-blue-800: #12325C;
+  --fluss-blue-700: #194670;
+  --fluss-blue-600: #1C5078;
+  --fluss-blue-500: #266D95;
+  --fluss-blue-300: #7AAFCB;
+  --fluss-blue-100: #D6E4ED;
+  --fluss-blue-50:  #ECF3F7;
 
-  /* --- Accents (use sparingly) --- */
-  --fluss-cyan:    #22D3EE;
+  /* --- Accents (use sparingly) ---
+     The previous bright cyan is replaced with the palette's brightest stop
+     so accents stay within the new navy/teal family. */
+  --fluss-cyan:    #266D95;
   --fluss-violet:  #7C3AED;
   --fluss-lime:    #A3E635;
 
@@ -55,8 +61,8 @@
   --fluss-ink-300: #CBD5E1;
   --fluss-ink-100: #E6ECF5;
   --fluss-paper:   #FFFFFF;
-  --fluss-canvas:  #F1F5FC;
-  --fluss-canvas-soft: #E9EFFA;
+  --fluss-canvas:  #FFFFFF;
+  --fluss-canvas-soft: #ECF3F7;
 
   /* --- Semantic --- */
   --fluss-success: #10B981;
@@ -86,11 +92,11 @@
   --fluss-radius-2xl: 28px;
   --fluss-radius-pill: 999px;
 
-  /* --- Shadows (cool blue-tinted) --- */
-  --fluss-shadow-sm:   0 1px 2px rgba(11, 30, 71, 0.06), 0 2px 6px rgba(11, 30, 71, 0.04);
-  --fluss-shadow-md:   0 6px 20px rgba(11, 30, 71, 0.10), 0 2px 6px rgba(11, 30, 71, 0.05);
-  --fluss-shadow-lg:   0 24px 60px rgba(11, 30, 71, 0.14), 0 6px 16px rgba(11, 30, 71, 0.06);
-  --fluss-shadow-glow: 0 0 0 1px rgba(37, 99, 235, 0.25), 0 16px 48px rgba(37, 99, 235, 0.22);
+  /* --- Shadows (cool navy-tinted, palette-driven) --- */
+  --fluss-shadow-sm:   0 1px 2px rgba(10, 23, 69, 0.06), 0 2px 6px rgba(10, 23, 69, 0.04);
+  --fluss-shadow-md:   0 6px 20px rgba(10, 23, 69, 0.10), 0 2px 6px rgba(10, 23, 69, 0.05);
+  --fluss-shadow-lg:   0 24px 60px rgba(10, 23, 69, 0.14), 0 6px 16px rgba(10, 23, 69, 0.06);
+  --fluss-shadow-glow: 0 0 0 1px rgba(28, 80, 120, 0.30), 0 16px 48px rgba(38, 109, 149, 0.28);
 
   /* --- Motion --- */
   --fluss-motion-fast: 120ms;
@@ -119,24 +125,26 @@
   --ifm-heading-color: var(--fluss-ink-950);
   --ifm-font-color-base: var(--fluss-ink-700);
 
-  --ifm-color-primary:          #2563EB;
-  --ifm-color-primary-dark:     #1A47B8;
-  --ifm-color-primary-darker:   #11317A;
-  --ifm-color-primary-darkest:  #0B1E47;
-  --ifm-color-primary-light:    #3B82F6;
-  --ifm-color-primary-lighter:  #60A5FA;
-  --ifm-color-primary-lightest: #93C5FD;
+  --ifm-color-primary:          #1C5078;
+  --ifm-color-primary-dark:     #194670;
+  --ifm-color-primary-darker:   #12325C;
+  --ifm-color-primary-darkest:  #102856;
+  --ifm-color-primary-light:    #266D95;
+  --ifm-color-primary-lighter:  #7AAFCB;
+  --ifm-color-primary-lightest: #D6E4ED;
 
   --ifm-code-font-size: 90%;
-  --docusaurus-highlighted-code-line-bg: #E2E9F3;
+  --docusaurus-highlighted-code-line-bg: #DDE6EE;
 
-  --ifm-menu-color-background-active: #EFF6FF;
-  --ifm-menu-color-background-hover:  #EFF6FF;
+  --ifm-menu-color-background-active: #ECF3F7;
+  --ifm-menu-color-background-hover:  #ECF3F7;
 
   /* Navbar: a single dark Fluss palette across the WHOLE site (homepage,
      docs, blog, community) so the navbar reads identically on every
-     page — no per-route transparent / frosted variants. */
-  --ifm-navbar-background-color: rgba(11, 30, 71, 0.92);
+     page — no per-route transparent / frosted variants.
+     Background uses the deepest palette stop (#0A1745) for a quiet,
+     premium feel. */
+  --ifm-navbar-background-color: rgba(10, 23, 69, 0.92);
   --ifm-navbar-link-color: #CBD5E1;
   --ifm-navbar-link-hover-color: #FFFFFF;
   --ifm-navbar-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -198,7 +206,7 @@ body {
 body.fluss-home {
   background-color: var(--fluss-canvas);
   background-image:
-    radial-gradient(circle at 1px 1px, rgba(37, 99, 235, 0.10) 1px, transparent 0);
+    radial-gradient(circle at 1px 1px, rgba(28, 80, 120, 0.10) 1px, transparent 0);
   background-size: 28px 28px;
   background-attachment: fixed;
 }
@@ -736,7 +744,7 @@ div[class*='announcementBar'] a {
    ------------------------------------------------------------------------- */
 .theme-doc-sidebar-container {
   border-right: 1px solid var(--fluss-ink-100);
-  background: var(--fluss-canvas);
+  background: var(--fluss-canvas-soft);
 }
 
 .theme-doc-sidebar-menu {
@@ -872,7 +880,7 @@ div[class*='announcementBar'] a {
 
 .theme-doc-markdown a:not(.button):not(.card) {
   color: var(--fluss-blue-700);
-  text-decoration-color: rgba(37, 99, 235, 0.3);
+  text-decoration-color: rgba(28, 80, 120, 0.3);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   transition: text-decoration-color var(--fluss-motion-fast) var(--fluss-ease-out);
@@ -1034,7 +1042,7 @@ code {
   font-family: var(--fluss-font-mono);
   font-size: 0.875em;
   background: var(--fluss-blue-50);
-  border: 1px solid rgba(37, 99, 235, 0.12);
+  border: 1px solid rgba(28, 80, 120, 0.12);
   color: var(--fluss-blue-800);
   padding: 1px 6px;
   border-radius: var(--fluss-radius-sm);
@@ -1043,7 +1051,7 @@ code {
 a code,
 .theme-doc-markdown a code {
   color: inherit;
-  background: rgba(37, 99, 235, 0.12);
+  background: rgba(28, 80, 120, 0.12);
   border-color: transparent;
 }
 
@@ -1104,7 +1112,7 @@ button[class*='wordWrapButton'] {
 /* Highlighted lines */
 .theme-code-block-highlighted-line,
 .docusaurus-highlight-code-line {
-  background: rgba(37, 99, 235, 0.08);
+  background: rgba(28, 80, 120, 0.08);
   border-left: 3px solid var(--fluss-blue-600);
   padding-left: calc(var(--fluss-space-5) - 3px);
   display: block;
@@ -1418,7 +1426,7 @@ nav[class*='sidebar'] h3 {
 
 .theme-doc-markdown tbody tr:nth-child(even),
 .markdown tbody tr:nth-child(even) {
-  background: var(--fluss-canvas);
+  background: var(--fluss-blue-50);
 }
 
 /* -------------------------------------------------------------------------
@@ -1483,7 +1491,7 @@ main.container .row .col h1.hero__title {
    Selection
    ------------------------------------------------------------------------- */
 ::selection {
-  background: rgba(37, 99, 235, 0.18);
+  background: rgba(28, 80, 120, 0.18);
   color: var(--fluss-ink-950);
 }
 
@@ -1538,7 +1546,7 @@ main[class*='docItemContainer'],
 .blog-wrapper {
   position: relative;
   background:
-    radial-gradient(circle at 1px 1px, rgba(11, 30, 71, 0.04) 1px, transparent 0) 0 0 / 32px 32px,
+    radial-gradient(circle at 1px 1px, rgba(16, 40, 86, 0.04) 1px, transparent 0) 0 0 / 32px 32px,
     var(--fluss-canvas);
 }
 
@@ -1769,8 +1777,8 @@ kbd {
    ------------------------------------------------------------------------- */
 .theme-doc-sidebar-container {
   background:
-    linear-gradient(180deg, transparent 0, transparent 64px, var(--fluss-canvas) 64px),
-    var(--fluss-canvas);
+    linear-gradient(180deg, transparent 0, transparent 64px, var(--fluss-canvas-soft) 64px),
+    var(--fluss-canvas-soft);
 }
 
 .menu__list {
@@ -1795,7 +1803,7 @@ kbd {
   width: 3px;
   border-radius: 0 var(--fluss-radius-sm) var(--fluss-radius-sm) 0;
   background: linear-gradient(180deg, var(--fluss-blue-600), var(--fluss-cyan));
-  box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 0 12px rgba(28, 80, 120, 0.4);
 }
 
 /* Top-level category labels : Linear-ish eyebrow style */
@@ -1954,8 +1962,8 @@ main[class*='blogListPage'] article:first-of-type,
 .blog-list-page > article:first-of-type {
   padding: var(--fluss-space-10);
   background:
-    radial-gradient(800px 300px at 100% 0%, rgba(34, 211, 238, 0.06), transparent 60%),
-    radial-gradient(600px 300px at 0% 100%, rgba(37, 99, 235, 0.06), transparent 60%),
+    radial-gradient(800px 300px at 100% 0%, rgba(38, 109, 149, 0.06), transparent 60%),
+    radial-gradient(600px 300px at 0% 100%, rgba(28, 80, 120, 0.06), transparent 60%),
     var(--fluss-paper);
   border-color: var(--fluss-blue-100);
 }
@@ -2154,7 +2162,7 @@ main[class*='blogListPage'] article {
   font-size: 0.85em;
   padding: 1px 6px;
   background: var(--fluss-blue-50);
-  border: 1px solid rgba(37, 99, 235, 0.15);
+  border: 1px solid rgba(28, 80, 120, 0.15);
   color: var(--fluss-blue-800);
   border-radius: var(--fluss-radius-sm);
 }
@@ -2255,9 +2263,9 @@ button.clean-btn[class*='toggle'] svg {
    ========================================================================= */
 
 [data-theme='dark'] {
-  /* Surfaces */
-  --fluss-canvas: #06122B;
-  --fluss-paper:  #0B1E47;
+  /* Surfaces : deepest two palette stops give a quiet, premium dark canvas. */
+  --fluss-canvas: #0A1745;
+  --fluss-paper:  #102856;
 
   /* Inks (inverted) */
   --fluss-ink-950: #F8FAFC;
@@ -2266,36 +2274,37 @@ button.clean-btn[class*='toggle'] svg {
   --fluss-ink-300: rgba(203, 213, 225, 0.22);
   --fluss-ink-100: rgba(203, 213, 225, 0.10);
 
-  /* Blue tints recalibrated for legibility on dark */
-  --fluss-blue-50:  rgba(37, 99, 235, 0.12);
-  --fluss-blue-100: rgba(37, 99, 235, 0.18);
-  --fluss-blue-300: #60A5FA;
-  --fluss-blue-500: #60A5FA;
-  --fluss-blue-600: #3B82F6;
-  --fluss-blue-700: #93C5FD;
-  --fluss-blue-800: #DBEAFE;
+  /* Blue tints recalibrated for legibility on dark, anchored on the new
+     navy/teal palette. */
+  --fluss-blue-50:  rgba(38, 109, 149, 0.14);
+  --fluss-blue-100: rgba(38, 109, 149, 0.22);
+  --fluss-blue-300: #7AAFCB;
+  --fluss-blue-500: #266D95;
+  --fluss-blue-600: #1C5078;
+  --fluss-blue-700: #7AAFCB;
+  --fluss-blue-800: #D6E4ED;
 
   /* Shadows on dark : softer, warmer */
   --fluss-shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.4);
   --fluss-shadow-md:   0 4px 16px rgba(0, 0, 0, 0.4);
   --fluss-shadow-lg:   0 16px 48px rgba(0, 0, 0, 0.5);
-  --fluss-shadow-glow: 0 0 0 1px rgba(96, 165, 250, 0.35), 0 12px 40px rgba(37, 99, 235, 0.35);
+  --fluss-shadow-glow: 0 0 0 1px rgba(122, 175, 203, 0.35), 0 12px 40px rgba(38, 109, 149, 0.35);
 
   /* Wire into Infima dark vars */
-  --ifm-background-color: #06122B;
-  --ifm-background-surface-color: #0B1E47;
-  --ifm-color-primary:          #60A5FA;
-  --ifm-color-primary-dark:     #3B82F6;
-  --ifm-color-primary-darker:   #2563EB;
-  --ifm-color-primary-darkest:  #1A47B8;
-  --ifm-color-primary-light:    #93C5FD;
-  --ifm-color-primary-lighter:  #BFDBFE;
-  --ifm-color-primary-lightest: #DBEAFE;
+  --ifm-background-color: #0A1745;
+  --ifm-background-surface-color: #102856;
+  --ifm-color-primary:          #7AAFCB;
+  --ifm-color-primary-dark:     #266D95;
+  --ifm-color-primary-darker:   #1C5078;
+  --ifm-color-primary-darkest:  #194670;
+  --ifm-color-primary-light:    #7AAFCB;
+  --ifm-color-primary-lighter:  #B1CEDF;
+  --ifm-color-primary-lightest: #D6E4ED;
 
   --ifm-heading-color: #F8FAFC;
   --ifm-font-color-base: #CBD5E1;
 
-  --ifm-navbar-background-color: rgba(11, 30, 71, 0.92);
+  --ifm-navbar-background-color: rgba(10, 23, 69, 0.92);
   --ifm-navbar-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
   --ifm-navbar-link-color: #CBD5E1;
 
@@ -2306,10 +2315,10 @@ button.clean-btn[class*='toggle'] svg {
   --ifm-color-emphasis-700: #CBD5E1;
   --ifm-color-emphasis-800: #F8FAFC;
 
-  --ifm-menu-color-background-active: rgba(37, 99, 235, 0.14);
-  --ifm-menu-color-background-hover:  rgba(37, 99, 235, 0.1);
+  --ifm-menu-color-background-active: rgba(28, 80, 120, 0.14);
+  --ifm-menu-color-background-hover:  rgba(28, 80, 120, 0.1);
 
-  --docusaurus-highlighted-code-line-bg: rgba(37, 99, 235, 0.18);
+  --docusaurus-highlighted-code-line-bg: rgba(28, 80, 120, 0.18);
 }
 
 /* ----- Backgrounds & body ----- */
@@ -2338,12 +2347,12 @@ button.clean-btn[class*='toggle'] svg {
 }
 
 [data-theme='dark'] .navbar__link:hover {
-  background: rgba(96, 165, 250, 0.12);
-  color: #BFDBFE;
+  background: rgba(122, 175, 203, 0.12);
+  color: #D6E4ED;
 }
 
 [data-theme='dark'] .navbar__link--active {
-  color: #93C5FD;
+  color: #B1CEDF;
 }
 
 [data-theme='dark'] .navbar__title {
@@ -2358,7 +2367,7 @@ button.clean-btn[class*='toggle'] svg {
 
 [data-theme='dark'] .DocSearch-Button:hover {
   background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(96, 165, 250, 0.4);
+  border-color: rgba(122, 175, 203, 0.4);
 }
 
 [data-theme='dark'] .DocSearch-Button-Placeholder,
@@ -2388,13 +2397,13 @@ button.clean-btn[class*='toggle'] svg {
 }
 
 [data-theme='dark'] .menu__link:hover {
-  background: rgba(96, 165, 250, 0.12);
-  color: #BFDBFE;
+  background: rgba(122, 175, 203, 0.12);
+  color: #D6E4ED;
 }
 
 [data-theme='dark'] .menu__link--active {
-  background: linear-gradient(90deg, rgba(96, 165, 250, 0.18) 0%, transparent 100%);
-  color: #BFDBFE;
+  background: linear-gradient(90deg, rgba(122, 175, 203, 0.18) 0%, transparent 100%);
+  color: #D6E4ED;
 }
 
 [data-theme='dark'] .menu__list .menu__list {
@@ -2411,8 +2420,8 @@ button.clean-btn[class*='toggle'] svg {
 }
 
 [data-theme='dark'] .breadcrumbs__link:hover {
-  color: #BFDBFE;
-  background: rgba(96, 165, 250, 0.12);
+  color: #D6E4ED;
+  background: rgba(122, 175, 203, 0.12);
 }
 
 [data-theme='dark'] .breadcrumbs__item--active .breadcrumbs__link {
@@ -2432,12 +2441,12 @@ button.clean-btn[class*='toggle'] svg {
 }
 
 [data-theme='dark'] .table-of-contents__link:hover {
-  color: #BFDBFE;
+  color: #D6E4ED;
 }
 
 [data-theme='dark'] .table-of-contents__link--active {
-  color: #BFDBFE;
-  background: rgba(96, 165, 250, 0.12);
+  color: #D6E4ED;
+  background: rgba(122, 175, 203, 0.12);
 }
 
 /* ----- Doc body (dark) ----- */
@@ -2465,8 +2474,8 @@ button.clean-btn[class*='toggle'] svg {
 
 [data-theme='dark'] .theme-doc-markdown a:not(.button):not(.card):not(.hash-link),
 [data-theme='dark'] .markdown a:not(.button):not(.card):not(.hash-link) {
-  color: #93C5FD;
-  background-image: linear-gradient(0deg, #93C5FD 0, #93C5FD 100%);
+  color: #B1CEDF;
+  background-image: linear-gradient(0deg, #B1CEDF 0, #B1CEDF 100%);
 }
 
 [data-theme='dark'] .markdown a.hash-link {
@@ -2474,7 +2483,7 @@ button.clean-btn[class*='toggle'] svg {
 }
 
 [data-theme='dark'] .markdown a.hash-link:hover {
-  color: #93C5FD;
+  color: #B1CEDF;
 }
 
 /* ----- Tables (dark) ----- */
@@ -2486,7 +2495,7 @@ button.clean-btn[class*='toggle'] svg {
 
 [data-theme='dark'] .markdown thead,
 [data-theme='dark'] .theme-doc-markdown thead {
-  background: rgba(96, 165, 250, 0.1);
+  background: rgba(122, 175, 203, 0.1);
 }
 
 [data-theme='dark'] .markdown thead th,
@@ -2518,22 +2527,22 @@ button.clean-btn[class*='toggle'] svg {
 [data-theme='dark'] .theme-doc-markdown li code,
 [data-theme='dark'] .theme-doc-markdown td code,
 [data-theme='dark'] code {
-  background: rgba(96, 165, 250, 0.14);
-  border-color: rgba(96, 165, 250, 0.25);
-  color: #BFDBFE;
+  background: rgba(122, 175, 203, 0.14);
+  border-color: rgba(122, 175, 203, 0.25);
+  color: #D6E4ED;
 }
 
 /* ----- Blockquotes (dark) ----- */
 [data-theme='dark'] .markdown blockquote,
 [data-theme='dark'] .theme-doc-markdown blockquote {
-  background: rgba(96, 165, 250, 0.08);
-  border-left-color: #60A5FA;
+  background: rgba(122, 175, 203, 0.08);
+  border-left-color: #7AAFCB;
   color: #CBD5E1;
 }
 
 [data-theme='dark'] .markdown blockquote::before,
 [data-theme='dark'] .theme-doc-markdown blockquote::before {
-  color: rgba(96, 165, 250, 0.4);
+  color: rgba(122, 175, 203, 0.4);
 }
 
 /* ----- Admonitions (dark) ----- */
@@ -2553,8 +2562,8 @@ button.clean-btn[class*='toggle'] svg {
 
 [data-theme='dark'] .alert--info,
 [data-theme='dark'] .theme-admonition-info {
-  background: rgba(37, 99, 235, 0.12);
-  border-left-color: #60A5FA;
+  background: rgba(28, 80, 120, 0.12);
+  border-left-color: #7AAFCB;
 }
 
 [data-theme='dark'] .alert--success,
@@ -2582,7 +2591,7 @@ button.clean-btn[class*='toggle'] svg {
 }
 
 [data-theme='dark'] div[class*='codeBlockContent'] pre {
-  background: #06122B;
+  background: #0A1745;
 }
 
 [data-theme='dark'] div[class*='codeBlockTitle'] {
@@ -2598,15 +2607,15 @@ button.clean-btn[class*='toggle'] svg {
 }
 
 [data-theme='dark'] button[class*='copyButton']:hover {
-  background: rgba(96, 165, 250, 0.18);
-  border-color: rgba(96, 165, 250, 0.45);
-  color: #DBEAFE;
+  background: rgba(122, 175, 203, 0.18);
+  border-color: rgba(122, 175, 203, 0.45);
+  color: #D6E4ED;
 }
 
 [data-theme='dark'] .theme-code-block-highlighted-line,
 [data-theme='dark'] .docusaurus-highlight-code-line {
-  background: rgba(96, 165, 250, 0.14);
-  border-left-color: #60A5FA;
+  background: rgba(122, 175, 203, 0.14);
+  border-left-color: #7AAFCB;
 }
 
 /* ----- Tabs (dark) ----- */
@@ -2619,13 +2628,13 @@ button.clean-btn[class*='toggle'] svg {
 }
 
 [data-theme='dark'] .tabs__item:hover {
-  background: rgba(96, 165, 250, 0.12);
-  color: #BFDBFE;
+  background: rgba(122, 175, 203, 0.12);
+  color: #D6E4ED;
 }
 
 [data-theme='dark'] .tabs__item--active {
-  color: #BFDBFE;
-  border-bottom-color: #60A5FA;
+  color: #D6E4ED;
+  border-bottom-color: #7AAFCB;
 }
 
 /* ----- Pagination (dark) ----- */
@@ -2635,7 +2644,7 @@ button.clean-btn[class*='toggle'] svg {
 }
 
 [data-theme='dark'] .pagination-nav__link:hover {
-  border-color: rgba(96, 165, 250, 0.45);
+  border-color: rgba(122, 175, 203, 0.45);
 }
 
 [data-theme='dark'] .pagination-nav__sublabel {
@@ -2653,13 +2662,13 @@ button.clean-btn[class*='toggle'] svg {
 }
 
 [data-theme='dark'] .theme-edit-this-page {
-  background: rgba(96, 165, 250, 0.12);
-  color: #93C5FD !important;
+  background: rgba(122, 175, 203, 0.12);
+  color: #B1CEDF !important;
 }
 
 [data-theme='dark'] .theme-edit-this-page:hover {
-  background: rgba(96, 165, 250, 0.2);
-  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(122, 175, 203, 0.2);
+  border-color: rgba(122, 175, 203, 0.4);
 }
 
 [data-theme='dark'] .theme-last-updated {
@@ -2680,30 +2689,30 @@ button.clean-btn[class*='toggle'] svg {
 
 [data-theme='dark'] article[itemtype='https://schema.org/BlogPosting'] header h2 a:hover,
 [data-theme='dark'] .blog-list-page article header h2 a:hover {
-  color: #93C5FD;
+  color: #B1CEDF;
 }
 
 [data-theme='dark'] main[class*='blogListPage'] article:first-of-type,
 [data-theme='dark'] .blog-list-page > article:first-of-type {
   background:
-    radial-gradient(800px 300px at 100% 0%, rgba(34, 211, 238, 0.1), transparent 60%),
-    radial-gradient(600px 300px at 0% 100%, rgba(37, 99, 235, 0.12), transparent 60%),
+    radial-gradient(800px 300px at 100% 0%, rgba(38, 109, 149, 0.1), transparent 60%),
+    radial-gradient(600px 300px at 0% 100%, rgba(28, 80, 120, 0.12), transparent 60%),
     var(--fluss-paper);
-  border-color: rgba(96, 165, 250, 0.3);
+  border-color: rgba(122, 175, 203, 0.3);
 }
 
 [data-theme='dark'] a.tag,
 [data-theme='dark'] a[class*='tag_'] {
-  background: rgba(96, 165, 250, 0.14);
-  color: #BFDBFE;
+  background: rgba(122, 175, 203, 0.14);
+  color: #D6E4ED;
   border-color: transparent;
 }
 
 [data-theme='dark'] a.tag:hover,
 [data-theme='dark'] a[class*='tag_']:hover {
-  background: rgba(96, 165, 250, 0.22);
-  border-color: rgba(96, 165, 250, 0.4);
-  color: #DBEAFE;
+  background: rgba(122, 175, 203, 0.22);
+  border-color: rgba(122, 175, 203, 0.4);
+  color: #D6E4ED;
 }
 
 /* ----- Doc cards (dark) ----- */
@@ -2715,19 +2724,19 @@ button.clean-btn[class*='toggle'] svg {
 
 [data-theme='dark'] article.card:hover,
 [data-theme='dark'] .theme-doc-card:hover {
-  border-color: rgba(96, 165, 250, 0.45);
+  border-color: rgba(122, 175, 203, 0.45);
 }
 
 /* ----- Version banner (dark) ----- */
 [data-theme='dark'] div[class*='docVersionBanner'] {
-  background: rgba(96, 165, 250, 0.12);
-  border-color: rgba(96, 165, 250, 0.4);
-  color: #DBEAFE;
+  background: rgba(122, 175, 203, 0.12);
+  border-color: rgba(122, 175, 203, 0.4);
+  color: #D6E4ED;
 }
 
 [data-theme='dark'] div[class*='docVersionBanner'] b,
 [data-theme='dark'] div[class*='docVersionBanner'] a {
-  color: #BFDBFE;
+  color: #D6E4ED;
 }
 
 /* ----- Dropdown menus (dark) ----- */
@@ -2742,29 +2751,29 @@ button.clean-btn[class*='toggle'] svg {
 
 [data-theme='dark'] .dropdown__link:hover,
 [data-theme='dark'] .dropdown__link--active {
-  background: rgba(96, 165, 250, 0.14);
-  color: #BFDBFE;
+  background: rgba(122, 175, 203, 0.14);
+  color: #D6E4ED;
 }
 
 /* ----- KBD (dark) ----- */
 [data-theme='dark'] kbd {
   background: var(--fluss-paper);
   border-color: rgba(255, 255, 255, 0.16);
-  color: #DBEAFE;
+  color: #D6E4ED;
 }
 
 /* ----- Color toggle (dark) ----- */
 [data-theme='dark'] button[class*='colorModeToggle'],
 [data-theme='dark'] button.clean-btn[class*='toggle'] {
   background: rgba(255, 255, 255, 0.08);
-  color: #DBEAFE;
+  color: #D6E4ED;
 }
 
 [data-theme='dark'] button[class*='colorModeToggle']:hover,
 [data-theme='dark'] button.clean-btn[class*='toggle']:hover {
-  background: rgba(96, 165, 250, 0.18);
-  border-color: rgba(96, 165, 250, 0.4);
-  color: #DBEAFE;
+  background: rgba(122, 175, 203, 0.18);
+  border-color: rgba(122, 175, 203, 0.4);
+  color: #D6E4ED;
 }
 
 /* ----- Mobile drawer (dark) ----- */
@@ -2796,7 +2805,7 @@ button.clean-btn[class*='toggle'] svg {
 
 /* ----- Selection (dark) ----- */
 [data-theme='dark'] ::selection {
-  background: rgba(96, 165, 250, 0.32);
+  background: rgba(122, 175, 203, 0.32);
   color: #F8FAFC;
 }
 
@@ -2906,24 +2915,9 @@ button.clean-btn[class*='toggle'] svg {
    intentionally use that color blend in. Lift them slightly so they read
    as distinct surfaces. CSS module class names are matched by suffix. */
 [data-theme='dark'] section[class*='sectionDark'] {
-  background: linear-gradient(180deg, #0B1E47 0%, #06122B 100%);
+  background: linear-gradient(180deg, #102856 0%, #0A1745 100%);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-[data-theme='dark'] section[class*='ctaBand'] {
-  background:
-    radial-gradient(800px 400px at 100% 0%, rgba(34, 211, 238, 0.18), transparent 60%),
-    radial-gradient(600px 400px at 0% 100%, rgba(124, 58, 237, 0.18), transparent 60%),
-    linear-gradient(180deg, #0B1E47 0%, #06122B 100%);
-}
-
-/* Wash sections in dark mode : replace the very faint blue tint with a
-   slightly more visible blue glow so the band is legible. */
-[data-theme='dark'] section[class*='sectionWash'] {
-  background:
-    radial-gradient(900px 500px at 50% 0%, rgba(37, 99, 235, 0.12), transparent 60%),
-    var(--fluss-canvas);
 }
 
 /* Comparison table on dark mode: paper bg, refined column highlight */
@@ -2953,37 +2947,19 @@ button.clean-btn[class*='toggle'] svg {
 }
 
 [data-theme='dark'] table[class*='compareTable'] tbody td[class*='colHighlight'] {
-  background: rgba(96, 165, 250, 0.1);
-  color: #DBEAFE;
-}
-
-/* Freshness tiles in dark mode */
-[data-theme='dark'] div[class*='freshTile']:not([class*='freshTileHighlight']) {
-  background: var(--fluss-paper);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-[data-theme='dark'] div[class*='freshTile']:not([class*='freshTileHighlight']):hover {
-  border-color: rgba(96, 165, 250, 0.45);
-}
-
-[data-theme='dark'] div[class*='freshLatency'] {
-  color: #F8FAFC;
-}
-
-[data-theme='dark'] div[class*='freshTile']:not([class*='freshTileHighlight']) [class*='freshSub'] {
-  color: #CBD5E1;
+  background: rgba(122, 175, 203, 0.1);
+  color: #D6E4ED;
 }
 
 /* Code card in dark mode : slightly lifted so it stands above canvas */
 [data-theme='dark'] div[class*='codeCard'] {
-  background: linear-gradient(180deg, #0B1E47 0%, #06122B 100%);
+  background: linear-gradient(180deg, #102856 0%, #0A1745 100%);
   border-color: rgba(255, 255, 255, 0.08);
 }
 
 /* Section eyebrows / titles / leads in dark mode */
 [data-theme='dark'] span[class*='eyebrow'] {
-  color: #93C5FD;
+  color: #B1CEDF;
 }
 
 [data-theme='dark'] h2[class*='sectionTitle'] {
@@ -2997,25 +2973,25 @@ button.clean-btn[class*='toggle'] svg {
 /* Dark-mode hover/border on hover-lift cards */
 [data-theme='dark'] div[class*='card']:hover,
 [data-theme='dark'] article[class*='card']:hover {
-  border-color: rgba(96, 165, 250, 0.45);
+  border-color: rgba(122, 175, 203, 0.45);
 }
 
 [data-theme='dark'] div[class*='cardIcon'],
 [data-theme='dark'] div[class*='iconWrap'] {
-  background: rgba(96, 165, 250, 0.14);
-  color: #BFDBFE;
+  background: rgba(122, 175, 203, 0.14);
+  color: #D6E4ED;
 }
 
 /* Version-badge chips on Flink section */
 [data-theme='dark'] span[class*='badge'] {
-  background: rgba(96, 165, 250, 0.18);
-  color: #DBEAFE;
+  background: rgba(122, 175, 203, 0.18);
+  color: #D6E4ED;
 }
 
 /* Multiple Systems Tax section in dark mode */
 [data-theme='dark'] section[class*='taxSection'] {
   background:
-    radial-gradient(900px 500px at 50% 0%, rgba(96, 165, 250, 0.14), transparent 60%),
+    radial-gradient(900px 500px at 50% 0%, rgba(122, 175, 203, 0.14), transparent 60%),
     var(--fluss-canvas);
   border-color: rgba(255, 255, 255, 0.06);
 }
@@ -3054,8 +3030,7 @@ button.clean-btn[class*='toggle'] svg {
 /* The card resting white-tint gradient is meant for light mode. In dark
    mode it would lighten the card top awkwardly — strip it. */
 [data-theme='dark'] section[class*='introduce'] div[class*='card'],
-[data-theme='dark'] section[class*='features'] article[class*='card'],
-[data-theme='dark'] div[class*='freshTile']:not([class*='freshTileHighlight']) {
+[data-theme='dark'] section[class*='features'] article[class*='card'] {
   background: var(--fluss-paper);
 }
 
@@ -3065,8 +3040,8 @@ button.clean-btn[class*='toggle'] svg {
 [data-theme='dark'] section[class*='introduce'],
 [data-theme='dark'] section[class*='features'] {
   background:
-    radial-gradient(1100px 480px at 100% 0%, rgba(96, 165, 250, 0.1), transparent 60%),
-    radial-gradient(900px 460px at 0% 100%, rgba(96, 165, 250, 0.08), transparent 60%),
+    radial-gradient(1100px 480px at 100% 0%, rgba(122, 175, 203, 0.1), transparent 60%),
+    radial-gradient(900px 460px at 0% 100%, rgba(122, 175, 203, 0.08), transparent 60%),
     var(--fluss-canvas);
   border-top-color: rgba(255, 255, 255, 0.06);
 }
@@ -3075,23 +3050,23 @@ button.clean-btn[class*='toggle'] svg {
 [data-theme='dark'] section[class*='section'][class*='index_section'],
 [data-theme='dark'] section[class*='index_section'] {
   background:
-    radial-gradient(1100px 480px at 80% 0%, rgba(96, 165, 250, 0.08), transparent 60%),
-    radial-gradient(900px 460px at 0% 100%, rgba(96, 165, 250, 0.08), transparent 60%),
+    radial-gradient(1100px 480px at 80% 0%, rgba(122, 175, 203, 0.08), transparent 60%),
+    radial-gradient(900px 460px at 0% 100%, rgba(122, 175, 203, 0.08), transparent 60%),
     var(--fluss-canvas);
 }
 
 /* Eyebrow chip override for dark mode — the auto-mapped background is
    already a translucent blue, but the border needs darkening too. */
 [data-theme='dark'] span[class*='eyebrow'] {
-  border-color: rgba(96, 165, 250, 0.28);
+  border-color: rgba(122, 175, 203, 0.28);
 }
 
 /* Card icon gradient is meant for light. Re-tone for dark. */
 [data-theme='dark'] div[class*='cardIcon'],
 [data-theme='dark'] div[class*='iconWrap'] {
-  background: linear-gradient(135deg, rgba(96, 165, 250, 0.18) 0%, rgba(34, 211, 238, 0.18) 100%);
-  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.22);
-  color: #BFDBFE;
+  background: linear-gradient(135deg, rgba(122, 175, 203, 0.18) 0%, rgba(38, 109, 149, 0.18) 100%);
+  box-shadow: inset 0 0 0 1px rgba(122, 175, 203, 0.22);
+  color: #D6E4ED;
 }
 
 /* Comparison-table accent bar visible against dark surface */
@@ -3100,13 +3075,13 @@ button.clean-btn[class*='toggle'] svg {
 }
 
 [data-theme='dark'] table[class*='compareTable'] tbody tr:hover td {
-  background-color: rgba(96, 165, 250, 0.08);
+  background-color: rgba(122, 175, 203, 0.08);
 }
 
 [data-theme='dark'] table[class*='compareTable'] tbody tr:hover td:first-child {
-  background-color: rgba(96, 165, 250, 0.12);
+  background-color: rgba(122, 175, 203, 0.12);
 }
 
 [data-theme='dark'] table[class*='compareTable'] tbody tr:hover td[class*='colHighlight'] {
-  background-color: rgba(96, 165, 250, 0.2);
+  background-color: rgba(122, 175, 203, 0.2);
 }

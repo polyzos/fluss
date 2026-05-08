@@ -19,7 +19,6 @@ import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
-import HomepageIntroduce from '@site/src/components/HomepageIntroduce';
 import {useEffect, useRef, useState} from 'react';
 import {Highlight} from 'prism-react-renderer';
 import flussPrismDark from '@site/src/utils/prismDark';
@@ -146,12 +145,12 @@ function HeroDiagram() {
                 <marker id="hgArrowLive" viewBox="0 0 10 10" refX="9" refY="5"
                         markerWidth="7" markerHeight="7"
                         orient="auto-start-reverse">
-                    <path d="M0 0 L 10 5 L 0 10 Z" fill="#22D3EE" />
+                    <path d="M0 0 L 10 5 L 0 10 Z" fill="#266D95" />
                 </marker>
 <marker id="hgArrowMuted" viewBox="0 0 10 10" refX="9" refY="5"
                         markerWidth="7" markerHeight="7"
                         orient="auto-start-reverse">
-                    <path d="M0 0 L 10 5 L 0 10 Z" fill="#93B8FF" />
+                    <path d="M0 0 L 10 5 L 0 10 Z" fill="#7AAFCB" />
                 </marker>
                 <style
                     dangerouslySetInnerHTML={{
@@ -174,15 +173,15 @@ function HeroDiagram() {
             <g fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace" fontSize="12">
 
                 {/* ===== Column eyebrows ===== */}
-                <text x="-15" y="32" fill="#22D3EE" fontSize="11"
+                <text x="-15" y="32" fill="#266D95" fontSize="11"
                       fontWeight="700" letterSpacing="1.6">
                     01 · SOURCES
                 </text>
-                <text x="310" y="32" fill="#22D3EE" fontSize="11"
+                <text x="310" y="32" fill="#266D95" fontSize="11"
                       fontWeight="700" letterSpacing="1.6">
                     02 · APACHE FLUSS · HOT TIER
                 </text>
-                <text x="940" y="32" fill="#22D3EE" fontSize="11"
+                <text x="940" y="32" fill="#266D95" fontSize="11"
                       fontWeight="700" letterSpacing="1.6">
                     03 · READ PATTERNS
                 </text>
@@ -201,7 +200,7 @@ function HeroDiagram() {
                               fill="#E6ECFA" fontSize="13" fontWeight="700">
                             {s.title}
                         </text>
-                        <text x="-15" fill="#93B8FF" fontSize="11">
+                        <text x="-15" fill="#7AAFCB" fontSize="11">
                             {s.items.map((line, j) => (
                                 <tspan key={j} x="-15" y={s.y + 18 + j * 14}>{line}</tspan>
                             ))}
@@ -211,7 +210,7 @@ function HeroDiagram() {
 
                 {/* Vertical separator between sources column and hot tier */}
                 <line x1="130" y1="60" x2="130" y2="320"
-                      stroke="rgba(147,184,255,0.18)" strokeWidth="1" />
+                      stroke="rgba(122,175,203,0.18)" strokeWidth="1" />
 
                 {/* Sources → Fluss arrow: 4× the original length (40 → 160
                     units). Marker is also enlarged so the arrowhead remains
@@ -219,43 +218,43 @@ function HeroDiagram() {
                 <path
                     className="fluss-hero-live"
                     d="M130 200 L 290 200"
-                    stroke="#22D3EE"
+                    stroke="#266D95"
                     strokeWidth="1.75"
                     strokeDasharray="6 6"
                     fill="none"
                     markerEnd="url(#hgArrowLive)"
                 />
-                <text fill="#A5F3FC" fontSize="10" textAnchor="middle">
+                <text fill="#B1CEDF" fontSize="10" textAnchor="middle">
                     <tspan x="210" y="180">Apache Flink / Spark</tspan>
                     <tspan x="210" y="192">Apache Fluss Clients</tspan>
                 </text>
 
                 {/* ===== 02 · FLUSS · HOT TIER ===== */}
                 <rect x="290" y="60" width="540" height="240" rx="14"
-                      fill="#0A2A6B"
-                      stroke="rgba(34,211,238,0.5)"
+                      fill="#102856"
+                      stroke="rgba(38,109,149,0.5)"
                       strokeWidth="1.25" />
                 <text x="310" y="86"
-                      fill="#A5F3FC" fontSize="11"
+                      fill="#B1CEDF" fontSize="11"
                       fontWeight="700" letterSpacing="1.2">
                     APACHE FLUSS · HOT TIER
                 </text>
                 <text x="310" y="104"
-                      fill="#93B8FF" fontSize="11">
+                      fill="#7AAFCB" fontSize="11">
                     Sub-second freshness · Columnar log · Changelog stream
                 </text>
 
                 {/* Coordinator Server (centred, top) */}
                 <rect x="420" y="124" width="280" height="50" rx="9"
-                      fill="#061B3F"
-                      stroke="rgba(34,211,238,0.55)"
+                      fill="#0A1745"
+                      stroke="rgba(38,109,149,0.55)"
                       strokeWidth="1" />
                 <text x="560" y="146" textAnchor="middle"
-                      fill="#A5F3FC" fontSize="13" fontWeight="700">
+                      fill="#B1CEDF" fontSize="13" fontWeight="700">
                     Coordinator Server
                 </text>
                 <text x="560" y="163" textAnchor="middle"
-                      fill="#93B8FF" fontSize="10">
+                      fill="#7AAFCB" fontSize="10">
                     Metadata · Placement · Failover
                 </text>
 
@@ -263,7 +262,7 @@ function HeroDiagram() {
                 {[365, 495, 625, 755].map((cx, i) => (
                     <path key={i}
                           d={`M560 174 L 560 196 L ${cx} 196 L ${cx} 216`}
-                          stroke="rgba(147,184,255,0.35)"
+                          stroke="rgba(122,175,203,0.35)"
                           strokeWidth="1"
                           strokeDasharray="3 3"
                           fill="none" />
@@ -282,24 +281,24 @@ function HeroDiagram() {
                 ].map((t, i) => (
                     <g key={i}>
                         <rect x={t.x} y="216" width="112" height="70" rx="9"
-                              fill="#061B3F"
+                              fill="#0A1745"
                               stroke={t.dashed
-                                  ? 'rgba(147,184,255,0.55)'
-                                  : 'rgba(34,211,238,0.55)'}
+                                  ? 'rgba(122,175,203,0.55)'
+                                  : 'rgba(38,109,149,0.55)'}
                               strokeWidth="1"
                               strokeDasharray={t.dashed ? '4 4' : 'none'} />
                         <text x={t.x + 56} y="230" textAnchor="middle"
-                              fill="#A5F3FC" fontSize="12" fontWeight="700">
+                              fill="#B1CEDF" fontSize="12" fontWeight="700">
                             Tablet Server
                         </text>
                         <text x={t.x + 56} y="244" textAnchor="middle"
-                              fill="#93B8FF" fontSize="10">
+                              fill="#7AAFCB" fontSize="10">
                             {t.label}
                         </text>
                         {/* Log Table pill (top, full width) */}
                         <rect x={t.x + 6} y="250" width="100" height="14" rx="4"
-                              fill="#0A2A6B"
-                              stroke="rgba(147,184,255,0.4)"
+                              fill="#102856"
+                              stroke="rgba(122,175,203,0.4)"
                               strokeWidth="0.75" />
                         <text x={t.x + 56} y="261" textAnchor="middle"
                               fill="#E6ECFA" fontSize="9" fontWeight="700">
@@ -307,8 +306,8 @@ function HeroDiagram() {
                         </text>
                         {/* PK Table pill (stacked below Log Table) */}
                         <rect x={t.x + 6} y="266" width="100" height="14" rx="4"
-                              fill="#0A2A6B"
-                              stroke="rgba(147,184,255,0.4)"
+                              fill="#102856"
+                              stroke="rgba(122,175,203,0.4)"
                               strokeWidth="0.75" />
                         <text x={t.x + 56} y="277" textAnchor="middle"
                               fill="#E6ECFA" fontSize="9" fontWeight="700">
@@ -321,34 +320,34 @@ function HeroDiagram() {
                 <path
                     className="fluss-hero-live"
                     d="M560 300 L 560 370"
-                    stroke="#22D3EE"
+                    stroke="#266D95"
                     strokeWidth="1.75"
                     strokeDasharray="4 4"
                     fill="none"
                     markerEnd="url(#hgArrowLive)"
                 />
                 <text x="580" y="324"
-                      fill="#A5F3FC" fontSize="12" fontWeight="700">
+                      fill="#B1CEDF" fontSize="12" fontWeight="700">
                     Tiering Service
                 </text>
                 <text x="580" y="342"
-                      fill="#93B8FF" fontSize="10">
+                      fill="#7AAFCB" fontSize="10">
                     Flink Job · Continuous Compaction
                 </text>
 
                 {/* ===== LAKEHOUSE · COLD TIER ===== */}
                 <rect x="290" y="380" width="540" height="120" rx="14"
-                      fill="#0A2A6B"
-                      stroke="rgba(59,130,246,0.55)"
+                      fill="#102856"
+                      stroke="rgba(38,109,149,0.55)"
                       strokeWidth="1.25"
                       strokeDasharray="5 4" />
                 <text x="310" y="406"
-                      fill="#A5F3FC" fontSize="11"
+                      fill="#B1CEDF" fontSize="11"
                       fontWeight="700" letterSpacing="1.2">
                     LAKEHOUSE · COLD TIER
                 </text>
                 <text x="310" y="424"
-                      fill="#93B8FF" fontSize="11">
+                      fill="#7AAFCB" fontSize="11">
                     Open formats · Long retention · Query-engine native
                 </text>
 
@@ -359,10 +358,10 @@ function HeroDiagram() {
                 ].map((l, i) => (
                     <g key={i}>
                         <rect x={l.x} y="438" width="156" height="46" rx="8"
-                              fill={l.highlight ? '#093B6E' : '#061B3F'}
+                              fill={l.highlight ? '#194670' : '#0A1745'}
                               stroke={l.highlight
-                                  ? 'rgba(34,211,238,0.7)'
-                                  : 'rgba(147,184,255,0.4)'}
+                                  ? 'rgba(38,109,149,0.7)'
+                                  : 'rgba(122,175,203,0.4)'}
                               strokeWidth="1" />
                         <text x={l.x + 78} y="466" textAnchor="middle"
                               fill="#E6ECFA" fontSize="12" fontWeight="700">
@@ -387,7 +386,7 @@ function HeroDiagram() {
                         <path
                             className="fluss-hero-live"
                             d={`M830 ${r.y} L 930 ${r.y}`}
-                            stroke="#22D3EE"
+                            stroke="#266D95"
                             strokeWidth="1.75"
                             strokeDasharray="4 4"
                             fill="none"
@@ -398,7 +397,7 @@ function HeroDiagram() {
                             {r.title}
                         </text>
                         <text x="940" y={r.y + 14}
-                              fill="#93B8FF" fontSize="11">
+                              fill="#7AAFCB" fontSize="11">
                             {r.sub}
                         </text>
                     </g>
@@ -414,7 +413,7 @@ function HeroDiagram() {
                 <path
                     className="fluss-hero-live"
                     d="M830 240 L 880 240 L 880 350"
-                    stroke="#22D3EE"
+                    stroke="#266D95"
                     strokeWidth="1.75"
                     strokeDasharray="4 4"
                     fill="none"
@@ -422,7 +421,7 @@ function HeroDiagram() {
                 <path
                     className="fluss-hero-live"
                     d="M830 460 L 880 460 L 880 350 L 930 350"
-                    stroke="#22D3EE"
+                    stroke="#266D95"
                     strokeWidth="1.75"
                     strokeDasharray="4 4"
                     fill="none"
@@ -433,14 +432,14 @@ function HeroDiagram() {
                     Union Read
                 </text>
                 <text x="940" y="364"
-                      fill="#93B8FF" fontSize="11">
+                      fill="#7AAFCB" fontSize="11">
                     Hot &amp; Cold Data · Single query
                 </text>
 
                 {/* ===== Cold tier → Query engines connector ===== */}
                 <path
                     d="M560 500 L 560 558"
-                    stroke="rgba(147,184,255,0.45)"
+                    stroke="rgba(122,175,203,0.45)"
                     strokeWidth="1"
                     strokeDasharray="4 4"
                     fill="none"
@@ -451,7 +450,7 @@ function HeroDiagram() {
                     client" trailing text) is centred on the diagram's
                     horizontal midline (viewBox centre, x=600). */}
                 <text x="600" y="540" textAnchor="middle"
-                      fill="#22D3EE" fontSize="11"
+                      fill="#266D95" fontSize="11"
                       fontWeight="700" letterSpacing="1.6">
                     04 · QUERY ENGINES
                 </text>
@@ -465,8 +464,8 @@ function HeroDiagram() {
                 ].map((e, i) => (
                     <g key={i}>
                         <rect x={e.x} y="558" width={e.w} height="42" rx="8"
-                              fill="#061B3F"
-                              stroke="rgba(147,184,255,0.4)"
+                              fill="#0A1745"
+                              stroke="rgba(122,175,203,0.4)"
                               strokeWidth="1" />
                         <text x={e.x + e.w / 2} y="584" textAnchor="middle"
                               fill="#E6ECFA"
@@ -524,12 +523,6 @@ function HomepageHeader({heroRef}: {heroRef: React.RefObject<HTMLElement>}) {
                                     className={styles.btnIcon}
                                 />
                                 View on GitHub
-                            </Link>
-
-                            <Link
-                                className={styles.btnGhost}
-                                to="/docs/quickstart/flink">
-                                Read the Docs ↗
                             </Link>
                         </div>
                     </div>
@@ -713,7 +706,7 @@ function SystemsTaxSection() {
                             ))}
                         </div>
                         <p className={styles.taxFootnote}>
-                            5 systems · 4 sync boundaries owned by you · continuous engineering tax
+                            5 Systems · 4 Sync Boundaries Owned by You · Continuous Engineering Tax
                         </p>
                     </div>
 
@@ -721,8 +714,8 @@ function SystemsTaxSection() {
                         <svg viewBox="0 0 60 24" xmlns="http://www.w3.org/2000/svg">
                             <defs>
                                 <linearGradient id="taxArrowGrad" x1="0" x2="1">
-                                    <stop offset="0" stopColor="#22D3EE" />
-                                    <stop offset="1" stopColor="#2563EB" />
+                                    <stop offset="0" stopColor="#266D95" />
+                                    <stop offset="1" stopColor="#1C5078" />
                                 </linearGradient>
                             </defs>
                             <path
@@ -762,7 +755,7 @@ function SystemsTaxSection() {
                             </ul>
                         </div>
                         <p className={styles.taxFootnote}>
-                            1 substrate · 0 sync boundaries · single source of truth
+                            1 Substrate · 0 Sync Boundaries · Single Source of Truth
                         </p>
                     </div>
                 </div>
@@ -785,7 +778,7 @@ function CompareSection() {
         },
         {
             dimension: 'Metadata plane · partitioning',
-            kafka: 'KRaft controllers · hash-keyed topic partitions',
+            kafka: 'KRaft controllers · keyed topic partitions',
             fluss: 'CoordinatorServer & TabletServers · buckets & first-class partitioned tables',
         },
         {
@@ -858,103 +851,6 @@ function CompareSection() {
     );
 }
 
-function FreshnessSection() {
-    return (
-        <section className={styles.section}>
-            <div className={clsx('container', styles.container)}>
-                <div className={clsx(styles.sectionHeader, styles.sectionHeaderCenter)}>
-                    <span className={styles.eyebrow}>Lakehouse freshness</span>
-                    <h2 className={styles.sectionTitle}>
-                        Close the lakehouse freshness gap.
-                    </h2>
-                    <p className={styles.sectionLead}>
-                        Traditional lake pipelines trade freshness for scale. Apache Fluss
-                        keeps lake-grade economics while moving end-to-end latency from
-                        hours to milliseconds.
-                    </p>
-                </div>
-
-                <div className={styles.freshness} role="list">
-                    <div className={styles.freshTile} role="listitem">
-                        <div className={styles.freshLatency}>Hours</div>
-                        <div className={styles.freshLabel}>Traditional batch</div>
-                        <div className={styles.freshSub}>
-                            Periodic ETL into the lake. Dashboards lag by hours.
-                        </div>
-                    </div>
-
-                    <div className={styles.freshTile} role="listitem">
-                        <div className={styles.freshLatency}>Minutes</div>
-                        <div className={styles.freshLabel}>Micro-batch / streaming ETL</div>
-                        <div className={styles.freshSub}>
-                            Lower latency, but at the cost of duplicated pipelines and
-                            small-file overhead.
-                        </div>
-                    </div>
-
-                    <div className={clsx(styles.freshTile, styles.freshTileHighlight)} role="listitem">
-                        <div className={styles.freshLatency}>Milliseconds</div>
-                        <div className={styles.freshLabel}>Apache Fluss x Iceberg / Paimon / Lance</div>
-                        <div className={styles.freshSub}>
-                            One storage layer for hot and cold. Live queries on streaming
-                            data, with native lake tiering.
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-    );
-}
-
-function QuickstartSection() {
-    return (
-        <section className={clsx(styles.section, styles.sectionWash)}>
-            <div className={clsx('container', styles.container)}>
-                <div className={clsx(styles.sectionHeader, styles.sectionHeaderCenter)}>
-                    <span className={styles.eyebrow}>Developer quickstart</span>
-                    <h2 className={styles.sectionTitle}>Run Apache Fluss in minutes.</h2>
-                    <p className={styles.sectionLead}>
-                        Stand up a local cluster, register a catalog, and start streaming.
-                        The full quickstart walks you through Flink, Spark, and the Java
-                        client.
-                    </p>
-                </div>
-
-                <div className={styles.codeCard} style={{maxWidth: 880, margin: '0 auto'}}>
-                    <div className={styles.codeChrome} aria-hidden="true">
-                        <span /><span /><span />
-                    </div>
-                    {/* Re-use the hero's Prism-based SQL highlighter so the
-                        Quickstart block gets the same dark theme + token
-                        colours as the hero code card, instead of the
-                        hand-rolled tk-* spans. */}
-                    <HeroSqlBlock
-                        code={`# 1. Start a local cluster
-./bin/local-cluster.sh start
-
-# 2. Open the Flink SQL client and register Fluss
-./bin/sql-client.sh
-
-CREATE CATALOG fluss WITH (
-  'type' = 'fluss',
-  'bootstrap.servers' = 'localhost:9123'
-);
-
-# 3. You're streaming and querying, on the same table.`}
-                    />
-                </div>
-
-                <div style={{textAlign: 'center', marginTop: 'var(--fluss-space-8)'}}>
-                    <Link className={styles.btnPrimary} to="/docs/quickstart/flink">
-                        Open the full quickstart
-                        <span aria-hidden="true">→</span>
-                    </Link>
-                </div>
-            </div>
-        </section>
-    );
-}
-
 function CommunitySection() {
     return (
         <section className={clsx(styles.section, styles.sectionDark)}>
@@ -979,14 +875,6 @@ function CommunitySection() {
                         <div className={styles.statValue}>ASF</div>
                         <div className={styles.statLabel}>Apache Software Foundation governance</div>
                     </div>
-                    <div className={styles.statCard}>
-                        <div className={styles.statValue}>Streams As Tables</div>
-                        <div className={styles.statLabel}>Streaming integration</div>
-                    </div>
-                    <div className={styles.statCard}>
-                        <div className={styles.statValue}>Lakehouse-Native</div>
-                        <div className={styles.statLabel}>Open Table Format Tiering</div>
-                    </div>
                 </div>
 
                 <div className={styles.communityGrid}>
@@ -1006,37 +894,6 @@ function CommunitySection() {
                         <div className={styles.communityTitle}>Contribute</div>
                         <div>Welcome guide, mailing lists, and how to send your first patch.</div>
                         <div className={styles.communityArrow}>Get started →</div>
-                    </Link>
-                </div>
-            </div>
-        </section>
-    );
-}
-
-function FinalCta() {
-    return (
-        <section className={styles.ctaBand}>
-            <div className={clsx('container', styles.container)}>
-                <h2 className={styles.ctaTitle}>
-                    Start streaming. Start querying. Same storage.
-                </h2>
-                <p className={styles.ctaSub}>
-                    Apache Fluss is free, open-source, and Apache 2.0 licensed.
-                    Drop it into your data platform today.
-                </p>
-                <div className={styles.ctaActions}>
-                    <Link className={styles.btnPrimary} to="/docs/quickstart/flink">
-                        Get Started
-                        <span aria-hidden="true">→</span>
-                    </Link>
-                    <Link className={styles.btnSecondary} to="https://github.com/apache/fluss">
-                        <img
-                            src="img/github_icon.svg"
-                            alt=""
-                            aria-hidden="true"
-                            className={styles.btnIcon}
-                        />
-                        Star on GitHub
                     </Link>
                 </div>
             </div>
@@ -1088,20 +945,16 @@ export default function Home(): JSX.Element {
             <HomepageHeader heroRef={heroRef}/>
             <main>
                 {/* Narrative arc:
-                    Hero → What it is (HomepageIntroduce) → How it's built
-                    (Architecture) → Why you need it (SystemsTax) → What you
-                    get (HomepageFeatures) → How it differs (Compare) → What
-                    it delivers (Freshness) → How to try it (Quickstart) →
-                    Who builds it (Community) → Start now (FinalCta). */}
-                <HomepageIntroduce/>
+                    Hero → How it's built (Architecture) → Why you need it
+                    (SystemsTax) → What you get (HomepageFeatures) → How it
+                    differs (Compare) → Who builds it (Community). The
+                    "What is Fluss?" answer and the runnable quickstart
+                    both live on the docs intro / quickstart pages now. */}
                 <ArchitectureSection/>
                 <SystemsTaxSection/>
                 <HomepageFeatures/>
                 <CompareSection/>
-                <FreshnessSection/>
-                <QuickstartSection/>
                 <CommunitySection/>
-                <FinalCta/>
             </main>
         </Layout>
     );
