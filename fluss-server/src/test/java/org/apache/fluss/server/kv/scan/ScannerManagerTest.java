@@ -54,7 +54,6 @@ import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.fluss.compression.ArrowCompressionInfo.DEFAULT_COMPRESSION;
@@ -467,9 +466,9 @@ class ScannerManagerTest {
         }
     }
 
-    /** close() must spin until inUse=false; iterating after close is undefined at the JNI. */
+    /** close() force-clears inUse and completes immediately even if inUse=true. */
     @Test
-    void testClose_waitsForInUse() throws Exception {
+    void testClose_notWaitForInUse() throws Exception {
         putAndFlush(3);
         try (ScannerManager manager = createManager()) {
             ScannerContext ctx = openAndRegister(manager);
@@ -477,24 +476,10 @@ class ScannerManagerTest {
 
             assertThat(ctx.tryAcquireForUse()).isTrue();
 
-            CountDownLatch closeStarted = new CountDownLatch(1);
-            Thread closer =
-                    new Thread(
-                            () -> {
-                                closeStarted.countDown();
-                                ctx.close();
-                            },
-                            "scanner-context-closer");
-            closer.start();
+            // close() should complete immediately despite inUse=true
+            ctx.close();
 
-            assertThat(closeStarted.await(5, TimeUnit.SECONDS)).isTrue();
-            Thread.sleep(50);
-            assertThat(closer.isAlive()).as("close() must spin while inUse=true").isTrue();
-
-            ctx.releaseAfterUse();
-            closer.join(TimeUnit.SECONDS.toMillis(5));
-            assertThat(closer.isAlive()).isFalse();
-
+            // after close, tryAcquireForUse must be rejected
             assertThat(ctx.tryAcquireForUse()).isFalse();
 
             manager.removeScanner(ctx);
