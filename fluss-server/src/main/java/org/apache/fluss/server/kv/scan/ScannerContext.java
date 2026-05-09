@@ -21,6 +21,7 @@ import org.apache.fluss.exception.KvStorageException;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.server.kv.rocksdb.RocksDBKv;
 import org.apache.fluss.server.utils.ResourceGuard;
+import org.apache.fluss.utils.IOUtils;
 
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDBException;
@@ -199,29 +200,13 @@ public class ScannerContext implements Closeable {
     @Override
     public void close() {
         if (closed.compareAndSet(false, true)) {
-            // Fence: closing the iterator while another thread is mid iterator.next() is
-            // undefined at the RocksDB JNI boundary. tryAcquireForUse() re-checks `closed`
-            // after winning its CAS, so any racing waiter releases inUse and lets us through.
-            while (inUse.get()) {
-                Thread.yield();
-            }
-            try {
-                iterator.close();
-            } finally {
-                try {
-                    readOptions.close();
-                } finally {
-                    try {
-                        try {
-                            rocksDBKv.getDb().releaseSnapshot(snapshot);
-                        } finally {
-                            snapshot.close();
-                        }
-                    } finally {
-                        resourceLease.close();
-                    }
-                }
-            }
+            // force close the inUse fence so any racing tryAcquireForUse() calls
+            inUse.set(false);
+            IOUtils.closeQuietly(iterator);
+            IOUtils.closeQuietly(readOptions);
+            IOUtils.closeQuietly(() -> rocksDBKv.getDb().releaseSnapshot(snapshot));
+            IOUtils.closeQuietly(snapshot);
+            IOUtils.closeQuietly(resourceLease);
         }
     }
 }
