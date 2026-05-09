@@ -1308,6 +1308,17 @@ public class ConfigOptions {
                                     + CLIENT_SCANNER_LOG_FETCH_WAIT_MAX_TIME.key()
                                     + " time to return.");
 
+    public static final ConfigOption<MemorySize> CLIENT_SCANNER_KV_FETCH_MAX_BYTES =
+            key("client.scanner.kv.fetch.max-bytes")
+                    .memoryType()
+                    .defaultValue(MemorySize.parse("4mb"))
+                    .withDescription(
+                            "The maximum amount of data the server should return per kv scan request when "
+                                    + "performing a full primary key table scan. Records are streamed in batches; "
+                                    + "the server may cap this value via '"
+                                    + KV_SCANNER_MAX_BATCH_SIZE.key()
+                                    + "'.");
+
     public static final ConfigOption<Integer> CLIENT_LOOKUP_QUEUE_SIZE =
             key("client.lookup.queue-size")
                     .intType()
