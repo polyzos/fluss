@@ -243,6 +243,73 @@ while (true) {
 }
 ```
 
+### Batch Scan — Full Primary Key Table
+
+For Primary Key tables, `BatchScanner` reads every live row in the table once
+and stops. Each bucket is served from a point-in-time RocksDB snapshot on its
+tablet server: rows from a given bucket reflect the KV state at the moment
+that bucket's scan was opened, and writes to that bucket after the open are
+invisible to the running scan.
+
+:::caution Snapshot boundary is per-bucket
+For multi-bucket and partitioned tables, `createBatchScanner()` opens each
+bucket's snapshot independently the first time it is polled. There is **no
+single global table-wide point-in-time view** across all buckets — concurrent
+writes can land in buckets whose scanner has not yet opened. If you need a
+strict table-wide snapshot, use the named-snapshot path:
+`createBatchScanner(TableBucket, long snapshotId)` against a snapshot id
+returned by `Admin#getLatestKvSnapshots(...)`.
+:::
+
+This is the building block for periodic full-state reads such as:
+
+- **Dashboards / materialized views** — refresh a derived view by re-reading
+  the entire current state of a primary key table on a schedule.
+- **Cache or search-index warm-up** — load every row of a PK table into an
+  external system at startup, with a per-bucket consistent snapshot guarantee.
+- **Bulk export to OLAP / data lake** — periodic full-snapshot of the table
+  for downstream analytics, complementing the streaming changelog read via
+  `LogScanner`.
+
+`createBatchScanner()` (no arguments) scans the whole table; for partitioned
+tables it expands across all partitions × buckets automatically. Use
+`createBatchScanner(TableBucket)` to scan a single bucket — useful when
+distributing scan work across workers in a parallel engine.
+
+```java
+try (BatchScanner scanner = table.newScan().createBatchScanner()) {
+    while (true) {
+        CloseableIterator<InternalRow> batch = scanner.pollBatch(Duration.ofSeconds(5));
+        if (batch == null) {
+            break; // end of scan
+        }
+        try {
+            while (batch.hasNext()) {
+                InternalRow row = batch.next();
+                // process row
+            }
+        } finally {
+            batch.close();
+        }
+    }
+}
+```
+
+You can also restrict the columns returned via `project(...)`:
+
+```java
+try (BatchScanner scanner = table.newScan()
+        .project(new int[] {0, 2})        // or .project(Arrays.asList("id", "status"))
+        .createBatchScanner()) {
+    // ...
+}
+```
+
+The per-RPC payload size is controlled by
+`client.scanner.kv.fetch.max-bytes` (default `4mb`); the server caps this
+further via `kv.scanner.max-batch-size`. Note that `BatchScanner` is not
+thread-safe — do not share an instance across threads.
+
 ### Lookup
 You can also use the Fluss API to perform lookups on a table. This is useful for querying specific records based on their primary key or prefix key.
 ```java
