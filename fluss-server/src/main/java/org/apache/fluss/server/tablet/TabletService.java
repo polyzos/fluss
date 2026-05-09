@@ -149,8 +149,6 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
     private final TabletServerMetadataProvider metadataFunctionProvider;
     private final ScannerManager scannerManager;
 
-    private final int kvScanMaxBatchSizeBytes;
-
     public TabletService(
             int serverId,
             FileSystem remoteFileSystem,
@@ -161,8 +159,7 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
             @Nullable Authorizer authorizer,
             DynamicConfigManager dynamicConfigManager,
             ExecutorService ioExecutor,
-            ScannerManager scannerManager,
-            int kvScanMaxBatchSizeBytes) {
+            ScannerManager scannerManager) {
         super(
                 remoteFileSystem,
                 ServerType.TABLET_SERVER,
@@ -177,7 +174,6 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
         this.metadataFunctionProvider =
                 new TabletServerMetadataProvider(zkClient, metadataManager, metadataCache);
         this.scannerManager = scannerManager;
-        this.kvScanMaxBatchSizeBytes = kvScanMaxBatchSizeBytes;
     }
 
     @Override
@@ -486,7 +482,8 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
                     throw new InvalidScanRequestException(
                             "batch_size_bytes must be greater than 0.");
                 }
-                effectiveBatchSize = Math.min(requestedBatchSize, kvScanMaxBatchSizeBytes);
+                effectiveBatchSize =
+                        Math.min(requestedBatchSize, scannerManager.getMaxBatchSizeBytes());
             }
 
             ScannerContext context;

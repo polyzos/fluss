@@ -80,6 +80,7 @@ public class ScannerManager implements AutoCloseableAsync {
     private final long recentlyExpiredRetentionMs;
     private final int maxPerBucket;
     private final int maxPerServer;
+    private final int maxBatchSizeBytes;
 
     @Nullable private ScheduledFuture<?> evictorTask;
 
@@ -94,6 +95,8 @@ public class ScannerManager implements AutoCloseableAsync {
         this.recentlyExpiredRetentionMs = 2 * scannerTtlMs;
         this.maxPerBucket = conf.get(ConfigOptions.KV_SCANNER_MAX_PER_BUCKET);
         this.maxPerServer = conf.get(ConfigOptions.KV_SCANNER_MAX_PER_SERVER);
+        long configuredMaxBatch = conf.get(ConfigOptions.KV_SCANNER_MAX_BATCH_SIZE).getBytes();
+        this.maxBatchSizeBytes = (int) Math.min(Integer.MAX_VALUE, configuredMaxBatch);
 
         long expirationIntervalMs =
                 conf.get(ConfigOptions.KV_SCANNER_EXPIRATION_INTERVAL).toMillis();
@@ -178,6 +181,11 @@ public class ScannerManager implements AutoCloseableAsync {
         if (context != null) {
             removeScanner(context);
         }
+    }
+
+    /** Returns the max batch size in bytes allowed for a kv scan response. */
+    public int getMaxBatchSizeBytes() {
+        return maxBatchSizeBytes;
     }
 
     @VisibleForTesting

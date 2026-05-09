@@ -102,7 +102,7 @@ public class ScannerContext implements Closeable {
         return scannerIdBytes;
     }
 
-    /** Scanner ID as a UTF-8 string; used as the key in {@link ScannerManager#scanners}. */
+    /** Scanner ID as a UTF-8 string; used as the key in {@code ScannerManager#scanners}. */
     String getIdString() {
         return scannerId;
     }
