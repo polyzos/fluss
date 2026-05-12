@@ -500,7 +500,7 @@ function HomepageHeader({heroRef}: {heroRef: React.RefObject<HTMLElement>}) {
                             Apache Fluss (Incubating) is an open-source,
                             lakehouse-native streaming storage. It collapses the
                             message broker, online KV store, stream-processing
-                            state backend, and lakehouse offline store into a
+                            state backend, and lakehouse cold store into a
                             single coherent foundation, making the Lakehouse
                             truly real-time.
                         </p>
@@ -682,7 +682,7 @@ function SystemsTaxSection() {
                     <p className={styles.sectionLead}>
                         A conventional real-time AI stack stitches together a message broker,
                         a stream processor, an online store, an offline store, and a
-                        synchronisation layer. Every boundary is a seam where data silently
+                        synchronization layer. Every boundary is a seam where data silently
                         diverges. Apache Fluss collapses that stack into one substrate.
                     </p>
                 </div>

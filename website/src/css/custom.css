@@ -444,8 +444,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .footer__link-item {
-  color: var(--fluss-ink-300);
-  opacity: 0.85;
+  color: #FFFFFF;
+  opacity: 0.88;
   transition: opacity var(--fluss-motion-fast) var(--fluss-ease-out), color var(--fluss-motion-fast) var(--fluss-ease-out);
 }
 
@@ -456,10 +456,10 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .footer__copyright {
-    color: #dfe5f0;
+    color: #FFFFFF;
     font-size: .75rem;
     line-height: 1.8;
-    opacity: .6;
+    opacity: .78;
     text-align: center;
     width: 98%;
 }
