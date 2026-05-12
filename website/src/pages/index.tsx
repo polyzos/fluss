@@ -192,8 +192,9 @@ function HeroDiagram() {
                     title "IoT · Clickstreams" doesn't bleed under the
                     vertical separator at x=130. */}
                 {[
-                    {y: 148, title: 'CDC Streams',       items: ['Postgres · MySQL', 'Oracle · MongoDB']},
-                    {y: 216, title: 'Event Streams', items: ['Device · Web', 'Mobile']},
+                    {y: 120, title: 'CDC Streams',   items: ['Postgres · MySQL', 'Oracle · MongoDB']},
+                    {y: 188, title: 'Event Streams', items: ['Device · Web', 'Mobile']},
+                    {y: 256, title: 'AI Workloads',  items: ['Features · Embeddings', 'Multimodal · Agents']},
                 ].map((s, i) => (
                     <g key={i}>
                         <text x="-15" y={s.y}
