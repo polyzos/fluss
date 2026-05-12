@@ -54,6 +54,13 @@
   --fluss-violet:  #7C3AED;
   --fluss-lime:    #A3E635;
 
+  /* --- Link (docs body prose) ---
+     A brighter, more saturated blue than the navy text/heading palette so
+     in-prose links visibly stand out from body copy ("QuickStart",
+     "Architecture", etc. on the docs intro page). Hover deepens to navy. */
+  --fluss-link:       #0E76C2;
+  --fluss-link-hover: #094E83;
+
   /* --- Neutrals --- */
   --fluss-ink-950: #0A0F1C;
   --fluss-ink-700: #334155;
@@ -1717,13 +1724,17 @@ article > header:first-of-type + .markdown > p:first-of-type {
   transform: translateX(0);
 }
 
-/* Animated link underline in body prose */
+/* Animated link underline in body prose. Color is explicit (not inherited
+   from --ifm-color-primary) so docs links read clearly as links against
+   the dark-gray body text. */
 .theme-doc-markdown a:not(.button):not(.card):not(.hash-link),
 .markdown a:not(.button):not(.card):not(.hash-link) {
-  background-image: linear-gradient(0deg, var(--fluss-blue-600) 0, var(--fluss-blue-600) 100%);
+  color: var(--fluss-link);
+  font-weight: 500;
+  background-image: linear-gradient(0deg, var(--fluss-link) 0, var(--fluss-link) 100%);
   background-position: 0 100%;
   background-repeat: no-repeat;
-  background-size: 0 1px;
+  background-size: 100% 1px;
   transition: background-size var(--fluss-motion-base) var(--fluss-ease-out),
               color var(--fluss-motion-fast) var(--fluss-ease-out);
   text-decoration: none;
@@ -1731,7 +1742,9 @@ article > header:first-of-type + .markdown > p:first-of-type {
 
 .theme-doc-markdown a:not(.button):not(.card):not(.hash-link):hover,
 .markdown a:not(.button):not(.card):not(.hash-link):hover {
-  background-size: 100% 1px;
+  color: var(--fluss-link-hover);
+  background-image: linear-gradient(0deg, var(--fluss-link-hover) 0, var(--fluss-link-hover) 100%);
+  background-size: 100% 2px;
   text-decoration: none;
 }
 
