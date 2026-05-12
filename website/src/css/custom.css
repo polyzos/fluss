@@ -2251,9 +2251,16 @@ button.clean-btn[class*='toggle'] svg {
   height: 18px;
 }
 
-/* The colour-mode toggle button renders identically on every page,
-   including the landing page — it inherits the global toggle styling
-   above and needs no per-route overrides. */
+/* Hide the colour-mode toggle on the landing page only. The homepage is
+   authored as a single (always-light) design with no dark-mode variant
+   (see useHomeBodyClass in src/pages/index.tsx, which also pins
+   <html data-theme="light"> while mounted), so the toggle would be a
+   no-op there. Docs / blog / community pages keep the toggle. */
+body.fluss-home-page button[class*='colorModeToggle'],
+body.fluss-home-page button.clean-btn[class*='toggle'],
+body.fluss-home-page .theme-toggle {
+  display: none !important;
+}
 
 /* =========================================================================
    ========================================================================

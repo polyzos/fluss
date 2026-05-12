@@ -220,7 +220,7 @@ const config: Config = {
     image: 'img/logo/png/colored_logo.png',
     colorMode: {
       defaultMode: 'light',
-      disableSwitch: true,
+      disableSwitch: false,
       respectPrefersColorScheme: false,
     },
     navbar: {
