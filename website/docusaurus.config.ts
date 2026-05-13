@@ -159,10 +159,9 @@ const config: Config = {
         path: 'community',
         routeBasePath: 'community',
         sidebarPath: './sidebarsCommunity.js',
-        editUrl: ({docPath}) => {
-          return `https://github.com/apache/fluss/edit/main/website/community/${docPath}`;
-        },
-        // ... other options
+        // editUrl intentionally omitted so the "Edit this page" link does
+        // not appear at the bottom of community pages (mirrors the docs and
+        // blog presets, which also leave editUrl unset).
       },
     ],
     [
