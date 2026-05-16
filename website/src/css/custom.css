@@ -502,9 +502,19 @@ h1, h2, h3, h4, h5, h6 {
 /* =========================================================================
    Kapa AI widget hide rules
    ========================================================================= */
+/* Hide every trigger element Kapa injects into its container so the only
+   visible AI entry point is the custom .navbar-ask-ai pill (defined below).
+   Kapa periodically changes its injected DOM, so we use a broad rule and
+   then re-show the actual modal dialog explicitly. */
 #kapa-widget-container > button,
-#kapa-widget-container > div:first-child:not([role="dialog"]) > button {
+#kapa-widget-container > div:not([role="dialog"]),
+#kapa-widget-container > a {
     display: none !important;
+}
+
+/* Belt-and-braces: make sure the modal dialog (when open) is never hidden. */
+#kapa-widget-container > div[role="dialog"] {
+    display: revert !important;
 }
 
 /* =========================================================================
@@ -615,10 +625,15 @@ h1, h2, h3, h4, h5, h6 {
 
 /* -------------------------------------------------------------------------
    Navbar (non-homepage solid state)
-   ------------------------------------------------------------------------- */
+   -------------------------------------------------------------------------
+   Previously had a hard 1px white separator below the navbar which read
+   as a disconnect between the chrome and the page body (Jark feedback,
+   PR #3226). Replaced with a subtle drop shadow so the navbar still has
+   visual separation but flows into the page content. */
 .navbar {
   height: 64px;
-  border-bottom: 1px solid var(--fluss-ink-100);
+  border-bottom: 0;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04), 0 2px 8px rgba(15, 23, 42, 0.03);
 }
 
 .navbar__inner {
@@ -709,16 +724,23 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--fluss-ink-500);
 }
 
+/* Hide the inline ⌘K keyboard hint inside the search button. It rendered
+   as a bordered pill that looked like an "extra box inside the search
+   bar" (Michael feedback, PR #3226). The magnifier icon is enough
+   affordance; the shortcut still works without being advertised. */
 .DocSearch-Button-Keys {
-  background: var(--fluss-paper);
-  border: 1px solid var(--fluss-ink-300);
-  color: var(--fluss-ink-500);
-  font-family: var(--fluss-font-mono);
-  font-size: 0.75rem;
-  padding: 0 6px;
-  border-radius: var(--fluss-radius-sm);
-  height: 22px;
-  box-shadow: none;
+  display: none !important;
+}
+
+/* Unify right-side navbar spacing so theme-toggle, search button, version
+   dropdown and GitHub icon align on a single baseline with consistent gap
+   (Michael feedback, PR #3226). */
+.navbar__items--right {
+  gap: var(--fluss-space-2);
+}
+
+.navbar__items--right > * {
+  margin: 0;
 }
 
 /* Version dropdown badge */
@@ -1257,14 +1279,22 @@ article.card:hover,
 
 /* -------------------------------------------------------------------------
    Version banner (unmaintained / unreleased)
-   ------------------------------------------------------------------------- */
+   -------------------------------------------------------------------------
+   Previously rendered as a centred rounded card, which on docs pages
+   (full-width main column) sat visibly inset from the page edges and
+   read as disconnected (Jark feedback, PR #3226). Now rendered as a
+   full-bleed strip across the doc content column: no rounded corners,
+   no side border, top/bottom borders only — aligns with the page chrome
+   above and below it. */
 div[class*='docVersionBanner'] {
-  border-radius: var(--fluss-radius-lg);
-  border: 1px solid var(--fluss-blue-300);
+  border: 0;
+  border-top: 1px solid var(--fluss-blue-300);
+  border-bottom: 1px solid var(--fluss-blue-300);
+  border-radius: 0;
   background: var(--fluss-blue-50);
   color: var(--fluss-ink-950);
-  padding: var(--fluss-space-4) var(--fluss-space-5);
-  margin-bottom: var(--fluss-space-6);
+  padding: var(--fluss-space-3) var(--fluss-space-5);
+  margin: 0 0 var(--fluss-space-6);
   font-size: 0.9375rem;
 }
 
@@ -1799,15 +1829,18 @@ kbd {
   box-shadow: 0 0 12px rgba(28, 80, 120, 0.4);
 }
 
-/* Top-level category labels : Linear-ish eyebrow style */
+/* Top-level category labels. Previously forced UPPERCASE, which read
+   inconsistently against the Title-Case sub-items and the natural-case
+   TOC entries on the right rail (Jark feedback, PR #3226). Now displayed
+   in the same Title Case as authored in `_category_.json`, with a
+   slightly heavier weight than sub-items to preserve hierarchy. */
 .theme-doc-sidebar-menu > .menu__list-item > .menu__link--sublist,
 .theme-doc-sidebar-menu > .menu__list-item > .menu__list-item-collapsible > .menu__link {
   font-family: var(--fluss-font-display);
   font-weight: 700;
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--fluss-ink-500);
+  font-size: 0.9375rem;
+  letter-spacing: 0;
+  color: var(--fluss-ink-950);
   padding-top: 14px;
   padding-bottom: 6px;
 }
@@ -2195,8 +2228,26 @@ ul[class*='tag'] li {
   color: var(--fluss-blue-300);
 }
 
-/* Hide the mobile hamburger button that sits to the left of the logo. */
+/* Mobile hamburger toggle (visible ≤ 996px only — Docusaurus default).
+   Previously hidden globally, which broke mobile navigation entirely
+   (Jark feedback PR #3226). The toggle is now allowed to render so the
+   mobile drawer with Docs / Blog / Learn / Community / Roadmap /
+   Downloads remains reachable on small screens. */
 .navbar__toggle {
+  color: var(--fluss-ink-700);
+}
+
+[data-theme='dark'] .navbar__toggle {
+  color: #CBD5E1;
+}
+
+/* Docs pages: hide the hamburger entirely. On docs pages users already
+   have the docs sidebar (and its own mobile toggle) for in-doc navigation,
+   so the global-nav hamburger to the left of the logo is redundant and
+   was explicitly requested removed. Docusaurus sets `plugin-docs` on the
+   <body> for any page rendered by the docs plugin, including all
+   versioned routes. */
+body.plugin-docs .navbar__toggle {
   display: none !important;
 }
 
@@ -2337,7 +2388,8 @@ body.fluss-home-page .theme-toggle {
 
 /* ----- Navbar ----- */
 [data-theme='dark'] .navbar {
-  border-bottom-color: rgba(255, 255, 255, 0.06);
+  border-bottom: 0;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 [data-theme='dark'] .navbar__link {
@@ -2496,11 +2548,23 @@ body.fluss-home-page .theme-toggle {
   background: rgba(122, 175, 203, 0.1);
 }
 
+/* The nested .markdown rule (light section) sets `table thead tr` bg to
+   #f6f8fa, which has higher specificity than the dark `thead` rule above
+   and therefore bleeds into dark mode, producing a near-white header row.
+   Override the `tr` explicitly for dark mode. */
+[data-theme='dark'] .markdown table thead tr,
+[data-theme='dark'] .theme-doc-markdown table thead tr {
+  background: rgba(122, 175, 203, 0.1);
+}
+
 [data-theme='dark'] .markdown thead th,
-[data-theme='dark'] .theme-doc-markdown thead th {
+[data-theme='dark'] .theme-doc-markdown thead th,
+[data-theme='dark'] .markdown table thead th,
+[data-theme='dark'] .theme-doc-markdown table thead th {
   color: #F8FAFC;
-  border-color: rgba(255, 255, 255, 0.08);
   background: transparent;
+  border-color: rgba(255, 255, 255, 0.08);
+  font-weight: 600;
 }
 
 [data-theme='dark'] .markdown tbody tr,
@@ -2593,9 +2657,17 @@ body.fluss-home-page .theme-toggle {
 }
 
 [data-theme='dark'] div[class*='codeBlockTitle'] {
-  background: rgba(255, 255, 255, 0.04);
-  border-bottom-color: rgba(255, 255, 255, 0.08);
-  color: #CBD5E1;
+  background: rgba(122, 175, 203, 0.08);
+  border-bottom: 1px solid rgba(122, 175, 203, 0.18);
+  color: #F1F5F9;
+  font-weight: 500;
+}
+
+/* The cyan-dot ::before is defined in the light section and inherits into
+   dark; bump its luminance so it stays visible on the darker title bg. */
+[data-theme='dark'] div[class*='codeBlockTitle']::before {
+  background: var(--fluss-cyan);
+  box-shadow: 0 0 0 2px rgba(122, 175, 203, 0.18);
 }
 
 [data-theme='dark'] button[class*='copyButton'] {

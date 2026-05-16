@@ -181,9 +181,11 @@
   margin-bottom: var(--fluss-space-2);
 }
 
+/* Icon container enlarged from 48px → 64px (and inner SVG 24 → 32) so the
+   six pillars are visually distinct at a glance (Jark feedback, PR #3226). */
 .iconWrap {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -197,8 +199,8 @@
 }
 
 .icon {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
 }
 
 .number {
@@ -211,7 +213,7 @@
 
 .title {
   font-family: var(--fluss-font-display);
-  font-size: 1.25rem;
+  font-size: 1.375rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   text-wrap: balance;
@@ -220,7 +222,7 @@
 }
 
 .summary {
-  font-size: 1rem;
+  font-size: 1.0625rem;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.92);
   font-weight: 500;

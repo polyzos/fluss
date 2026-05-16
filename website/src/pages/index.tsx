@@ -487,9 +487,17 @@ function HomepageHeader({heroRef}: {heroRef: React.RefObject<HTMLElement>}) {
             <div className={clsx('container', styles.container)}>
                 <div className={styles.heroInner}>
                     <div>
+                        {/* Hero badge: previously "Apache Software Foundation ·
+                            Incubating · Apache 2.0" — three paperwork labels that
+                            duplicate footer content (Jark feedback, PR #3226).
+                            Replaced with a single value-oriented pill. The
+                            Incubator attribution is preserved in the subhead
+                            below ("Apache Fluss (Incubating) is...") and in the
+                            footer Apache Incubator logo, satisfying ASF brand
+                            guidance. */}
                         <span className={styles.heroEyebrow}>
                             <span className={styles.dot} />
-                            Apache Software Foundation · Incubating · Apache 2.0
+                            Open Source · Apache 2.0
                         </span>
 
                         <h1 className={styles.heroTitle}>
@@ -678,13 +686,14 @@ function SystemsTaxSection() {
                 <div className={clsx(styles.sectionHeader, styles.sectionHeaderCenter)}>
                     <span className={styles.eyebrow}>The multiple-systems tax</span>
                     <h2 className={styles.sectionTitle}>
-                        Five systems, four seams, continuous engineering tax.
+                        Five systems, four integrations, continuous engineering tax.
                     </h2>
                     <p className={styles.sectionLead}>
                         A conventional real-time AI stack stitches together a message broker,
                         a stream processor, an online store, an offline store, and a
-                        synchronization layer. Every boundary is a seam where data silently
-                        diverges. Apache Fluss collapses that stack into one substrate.
+                        synchronization layer. Every boundary is an integration point where
+                        data silently diverges. Apache Fluss collapses that stack into one
+                        substrate.
                     </p>
                 </div>
 
@@ -766,46 +775,35 @@ function SystemsTaxSection() {
 }
 
 function CompareSection() {
+    /* Five highest-signal rows. The earlier 8-row table was too dense and
+       diluted the hero message (Jark feedback, PR #3226). Cuts: Positioning
+       (redundant with hero), Metadata plane (too internal for homepage),
+       Schema/CDC (secondary). */
     const rows: {dimension: string; kafka: string; fluss: string}[] = [
-        {
-            dimension: 'Positioning',
-            kafka: 'Distributed event streaming platform / durable commit log',
-            fluss: 'Streaming storage for real-time analytics, lakehouse-native',
-        },
         {
             dimension: 'Storage model',
             kafka: 'Append-only row log',
-            fluss: 'Columnar Arrow IPC log & KV index for PK Tables; Tiered into Paimon · Iceberg · Lance as the cold layer ("shared data": one logical table, two physical layouts)',
-        },
-        {
-            dimension: 'Metadata plane · partitioning',
-            kafka: 'KRaft controllers · keyed topic partitions',
-            fluss: 'CoordinatorServer & TabletServers · buckets & first-class partitioned tables',
+            fluss: 'Columnar Arrow log & KV index; tiers to Paimon · Iceberg · Lance',
         },
         {
             dimension: 'Logical unit · writes',
             kafka: 'Topic (log only)',
-            fluss: 'Tables as the core abstraction: Log Tables for append-only streams and Primary Key Tables for native upserts, partial updates, and deletes',
-        },
-        {
-            dimension: 'Schema · CDC · types',
-            kafka: 'External Schema Registry; CDC via Connect · Debezium; nested types out-of-band in payload',
-            fluss: 'First-class schemas with evolution; native $changelog · $binlog virtual tables; native ARRAY · MAP · ROW with deep nesting',
+            fluss: 'Log Tables & Primary Key Tables with native upserts, partial updates, deletes',
         },
         {
             dimension: 'Read path',
-            kafka: 'No server-side pruning or predicate pushdown; no native PK lookup',
-            fluss: 'Server-side zero-copy column · partition · predicate pushdown; built-in PK lookup via LSM',
+            kafka: 'No server-side pruning; no native PK lookup',
+            fluss: 'Zero-copy column · partition · predicate pushdown; PK lookup via LSM',
         },
         {
             dimension: 'State externalization (with Flink)',
-            kafka: 'App holds join state (RocksDB) and aggregation state',
-            fluss: 'Delta Joins externalize join state to Fluss; Aggregation Merge Engine pushes aggregation into storage; merge engines: Default · FirstRow · Versioned · Aggregation',
+            kafka: 'App holds join & aggregation state in RocksDB',
+            fluss: 'Delta Joins & Aggregation Merge Engine externalize state to Fluss',
         },
         {
             dimension: 'Strong fit',
-            kafka: 'Event-driven systems · log aggregation · microservice pub/sub · cross-language transport',
-            fluss: 'Real-time analytics on wide tables · streaming lakehouse · dimension joins · CDC-heavy pipelines · Flink-centric stacks',
+            kafka: 'Event-driven systems · log ingestion · microservice pub/sub',
+            fluss: 'Real-time analytics · streaming lakehouse · CDC-heavy Flink pipelines',
         },
     ];
 

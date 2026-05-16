@@ -29,20 +29,23 @@ type Pillar = {
     Svg: React.ComponentType<React.ComponentProps<'svg'>>;
 };
 
+/* Body copy was previously 35–50 words per card, which made the section
+   hard to scan (Jark feedback, PR #3226). Trimmed to ≤ 22 words each so
+   the six pillars can be grasped in a single visual pass. */
 const PILLARS: Pillar[] = [
     {
         number: '01',
         title: 'Unified Architecture',
         summary: 'One system for messaging, applications, analytics, and AI.',
-        body: 'Consolidates the roles previously played by a message queue, a key-value store, and an OLAP engine into a single coherent platform that serves transports, lookups, and queries from the same data.',
+        body: 'Replaces the message queue, key-value store, and OLAP engine with a single platform serving transport, lookups, and queries from the same data.',
         basis: 'Dual representation of PK Tables (Log Store & KV Store).',
         Svg: require('@site/static/img/feature_update.svg').default,
     },
     {
         number: '02',
         title: 'Streaming & Lakehouse Unification',
-        summary: 'One copy of data across the real-time and batch layers.',
-        body: 'Synchronised metadata across tiers. The hot Fluss tier and the cold open-format tier share the same logical schema and are queryable as a single substrate, so streaming and historical queries hit one source of truth.',
+        summary: 'One copy of data across real-time and batch layers.',
+        body: 'Hot and cold tiers share the same schema and are queryable as one substrate — streaming and historical reads hit one source of truth.',
         basis: 'Tiering Service and Union Read across Iceberg, Paimon, and Lance.',
         Svg: require('@site/static/img/feature_lake.svg').default,
     },
@@ -50,7 +53,7 @@ const PILLARS: Pillar[] = [
         number: '03',
         title: 'Compute–Storage Separation',
         summary: 'Lean, elastic, stateless compute with fast recovery.',
-        body: 'Decoupled storage enables stateless compute that recovers in seconds, not minutes, and runs up to 85% cheaper than comparable Kafka-based topologies. State lives on the Fluss leader, not in Flink task slots, which collapses recovery time and decouples RPO from RTO.',
+        body: 'Stateless compute recovers in seconds and runs up to 85% cheaper than Kafka-based topologies. State lives on the Fluss leader, not Flink slots.',
         basis: 'Stateless compute model with leader-resident state and KV snapshots.',
         Svg: require('@site/static/img/feature_real_time.svg').default,
     },
@@ -58,7 +61,7 @@ const PILLARS: Pillar[] = [
         number: '04',
         title: 'Columnar Streaming Analytics',
         summary: 'Pruning that compounds.',
-        body: 'Efficient streaming queries over compressed columnar data, with server-side projection pushdown in ARROW format. Column projection, predicate pushdown, and partition pruning compound into order-of-magnitude reductions in I/O and network transfer.',
+        body: 'Server-side projection, predicate pushdown, and partition pruning on Arrow-format streams compound into order-of-magnitude I/O and network savings.',
         basis: 'ARROW log format and the compound pruning stack on the TabletServer.',
         Svg: require('@site/static/img/feature_column.svg').default,
     },
@@ -66,7 +69,7 @@ const PILLARS: Pillar[] = [
         number: '05',
         title: 'Feature & Context Stores',
         summary: 'Multi-modal data on one substrate, ready for ML and AI.',
-        body: 'Row, columnar, and vector formats on the same store. Online feature serving and RAG-ready semantic context live alongside structured analytics. The feature store, context store, and real-time entity profile collapse into one PK Table accessed through different views.',
+        body: 'Row, columnar, and vector data on one store. Online features, RAG context, and analytics collapse into one PK Table accessed through different views.',
         basis: 'Unified substrate spanning structured features and vector context.',
         Svg: require('@site/static/img/feature_query.svg').default,
     },
@@ -74,7 +77,7 @@ const PILLARS: Pillar[] = [
         number: '06',
         title: 'Ecosystem Openness',
         summary: 'Open formats. No vendor lock-in.',
-        body: 'Shared open storage readable by Apache Flink, Apache Spark, Trino, StarRocks, and DuckDB. Open formats end to end: native connectors for the hot Fluss tier, with Iceberg, Paimon, and Lance for the cold tier.',
+        body: 'Readable by Flink, Spark, Trino, StarRocks, and DuckDB. Native hot tier plus Iceberg, Paimon, and Lance for the cold tier — open formats end to end.',
         basis: 'Open lake formats throughout, governed at the Apache Software Foundation.',
         Svg: require('@site/static/img/feature_changelog.svg').default,
     },

@@ -1042,21 +1042,21 @@
     margin-bottom: 0;
 }
 
-/* Full-width canvas for the SVG diagram. Aspect-ratio matches the SVG
- * viewBox so the box reserves the correct height before paint. The
- * diagram is a four-column architectural map (sources / hot tier /
- * read patterns / engines), so we use a 1200×640 (15:8) viewBox to give
- * each column breathing room without crowding labels.
+/* Canvas for the SVG diagram. Aspect-ratio matches the SVG viewBox so the
+ * box reserves the correct height before paint. The diagram is a
+ * four-column architectural map (sources / hot tier / read patterns /
+ * engines), so we use a 1200×640 (15:8) viewBox to give each column
+ * breathing room without crowding labels.
  *
- * The diagram breaks out of its parent .container to reclaim the page's
- * full viewport width (capped at 1480px), since the four-column layout
- * needs more horizontal room than a typical reading column. */
+ * Previously the diagram broke out of its parent .container to reclaim
+ * page width up to 1480px. On ≥ 1440px displays that gave the architecture
+ * section visibly narrower side margins than the other homepage sections,
+ * which all respect the 1240px container (Michael feedback, PR #3226).
+ * Diagram now stays within the standard container for visual rhythm. */
 .archDiagram {
     position: relative;
-    width: min(100vw - 32px, 1480px);
+    width: 100%;
     aspect-ratio: 1200 / 640;
-    margin-left: 50%;
-    transform: translateX(-50%);
 }
 
 .archDiagram svg {
@@ -1064,12 +1064,4 @@
     height: 100%;
     overflow: visible;
     filter: drop-shadow(0 24px 60px rgba(38, 109, 149, 0.25));
-}
-
-@media (max-width: 996px) {
-    .archDiagram {
-        width: 100%;
-        margin-left: 0;
-        transform: none;
-    }
 }
