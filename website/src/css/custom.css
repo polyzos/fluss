@@ -1613,15 +1613,6 @@ main[class*='blogPostPage'] article > header:first-of-type h1,
   margin: var(--fluss-space-3) 0 0;
 }
 
-/* Lead paragraph: the first <p> after the doc title gets a larger, calmer treatment */
-.theme-doc-markdown > p:first-of-type,
-article > header:first-of-type + .markdown > p:first-of-type {
-  font-size: 1.1875rem;
-  line-height: 1.65;
-  color: var(--fluss-ink-700);
-  margin-bottom: var(--fluss-space-8);
-}
-
 /* Inline ifm h1 inside the first markdown block also gets the display treatment */
 .markdown > h1:first-child {
   font-family: var(--fluss-font-display);
@@ -2359,7 +2350,10 @@ body.fluss-home-page .theme-toggle {
   --ifm-color-primary-lightest: #D6E4ED;
 
   --ifm-heading-color: #F8FAFC;
-  --ifm-font-color-base: #CBD5E1;
+  /* Body text bumped from #CBD5E1 (slate-300) to #F1F5F9 (slate-100) for
+     stronger readability in dark mode without going to pure white, which
+     causes halation on dark backgrounds in long-form reading. */
+  --ifm-font-color-base: #F1F5F9;
 
   --ifm-navbar-background-color: rgba(10, 23, 69, 0.92);
   --ifm-navbar-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -2509,7 +2503,7 @@ body.fluss-home-page .theme-toggle {
 /* ----- Doc body (dark) ----- */
 [data-theme='dark'] .theme-doc-markdown,
 [data-theme='dark'] .markdown {
-  color: #CBD5E1;
+  color: #F1F5F9;
 }
 
 [data-theme='dark'] .markdown h1,
