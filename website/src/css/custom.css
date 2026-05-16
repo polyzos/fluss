@@ -1851,6 +1851,23 @@ kbd {
   padding-bottom: 6px;
 }
 
+/* Nested category labels (e.g. Table Types / Merge Engines / Data Distribution
+   under Table Design). Infima's default makes `.menu__link--sublist` bold,
+   which created an inconsistent hierarchy where every nested subcategory
+   looked as heavy as the top-level Quickstart / Concepts / Table Design
+   headers. Match leaf-item weight instead so the only visually distinct
+   tier is the top-level row. */
+.theme-doc-sidebar-menu .menu__list-item .menu__list-item .menu__link--sublist,
+.theme-doc-sidebar-menu .menu__list-item .menu__list-item .menu__list-item-collapsible > .menu__link {
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 0.95rem;
+  letter-spacing: 0;
+  color: var(--fluss-ink-700);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 .theme-doc-sidebar-menu > .menu__list-item:not(:first-child) {
   margin-top: 4px;
   border-top: 1px dashed var(--fluss-ink-100);

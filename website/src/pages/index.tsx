@@ -780,38 +780,11 @@ function SystemsTaxSection() {
 }
 
 function CompareSection() {
-    /* Five highest-signal rows. The earlier 8-row table was too dense and
-       diluted the hero message (Jark feedback, PR #3226). Cuts: Positioning
-       (redundant with hero), Metadata plane (too internal for homepage),
-       Schema/CDC (secondary). */
-    const rows: {dimension: string; kafka: string; fluss: string}[] = [
-        {
-            dimension: 'Storage model',
-            kafka: 'Append-only row log',
-            fluss: 'Columnar Arrow log & KV index; tiers to Paimon · Iceberg · Lance',
-        },
-        {
-            dimension: 'Logical unit · writes',
-            kafka: 'Topic (log only)',
-            fluss: 'Log Tables & Primary Key Tables with native upserts, partial updates, deletes',
-        },
-        {
-            dimension: 'Read path',
-            kafka: 'No server-side pruning; no native PK lookup',
-            fluss: 'Zero-copy column · partition · predicate pushdown; PK lookup via LSM',
-        },
-        {
-            dimension: 'State externalization (with Flink)',
-            kafka: 'App holds join & aggregation state in RocksDB',
-            fluss: 'Delta Joins & Aggregation Merge Engine externalize state to Fluss',
-        },
-        {
-            dimension: 'Strong fit',
-            kafka: 'Event-driven systems · log ingestion · microservice pub/sub',
-            fluss: 'Real-time analytics · streaming lakehouse · CDC-heavy Flink pipelines',
-        },
-    ];
-
+    /* Homepage teaser. The full comparison — when each is the right tool,
+       common production patterns, per-scenario walkthroughs, and the full
+       feature matrix — lives at /compare/kafka so this section stays
+       short and the dedicated page can grow without diluting the
+       homepage (Jark feedback, PR #3226). */
     return (
         <section className={styles.section}>
             <div className={clsx('container', styles.container)}>
@@ -820,35 +793,22 @@ function CompareSection() {
                     <h2 className={styles.sectionTitle}>
                         Where Streams Meet The Lakehouse
                     </h2>
-                    {/* Override .sectionLead's default 720px max-width so the
-                        lead spans the same width as the comparison table below
-                        and fills each line edge-to-edge before wrapping. */}
-                    <p className={styles.sectionLead} style={{maxWidth: 'none'}}>
-                        Kafka is great for transport. The lakehouse is great for analytics.
-                        Apache Fluss closes the gap between them with columnar streaming
-                        storage that is queryable in seconds and tiers natively to your lake.
+                    <p className={styles.sectionLead}>
+                        Kafka is the streaming transport. Fluss is the streaming
+                        storage. If your need is large-scale stream processing with
+                        Flink, real-time analytics, AI/ML, or a sub-second
+                        lakehouse, Fluss is the shared streaming storage substrate
+                        behind all of them. Read the full breakdown to see which
+                        fits your stack.
                     </p>
-                </div>
-
-                <div className={styles.compareWrap}>
-                    <table className={styles.compareTable}>
-                        <thead>
-                            <tr>
-                                <th scope="col">Dimension</th>
-                                <th scope="col">Apache Kafka</th>
-                                <th scope="col" className={styles.colHighlight}>Apache Fluss</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows.map((r) => (
-                                <tr key={r.dimension}>
-                                    <td>{r.dimension}</td>
-                                    <td>{r.kafka}</td>
-                                    <td className={styles.colHighlight}>{r.fluss}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    <div className={styles.heroCtas} style={{marginTop: 0}}>
+                        <Link
+                            className={styles.btnPrimary}
+                            to="/compare/kafka">
+                            See the full comparison
+                            <span aria-hidden="true">→</span>
+                        </Link>
+                    </div>
                 </div>
             </div>
         </section>

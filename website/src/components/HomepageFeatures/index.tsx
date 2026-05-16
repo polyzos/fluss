@@ -29,8 +29,8 @@ type Pillar = {
     Svg: React.ComponentType<React.ComponentProps<'svg'>>;
 };
 
-/* Body copy was previously 35–50 words per card, which made the section
-   hard to scan (Jark feedback, PR #3226). Trimmed to ≤ 22 words each so
+/* Body copy was previously 35 to 50 words per card, which made the section
+   hard to scan (Jark feedback, PR #3226). Trimmed to ~22 words each so
    the six pillars can be grasped in a single visual pass. */
 const PILLARS: Pillar[] = [
     {
@@ -45,13 +45,13 @@ const PILLARS: Pillar[] = [
         number: '02',
         title: 'Streaming & Lakehouse Unification',
         summary: 'One copy of data across real-time and batch layers.',
-        body: 'Hot and cold tiers share the same schema and are queryable as one substrate — streaming and historical reads hit one source of truth.',
+        body: 'Hot and cold tiers share the same schema and are queryable as one substrate, so streaming and historical reads hit one source of truth.',
         basis: 'Tiering Service and Union Read across Iceberg, Paimon, and Lance.',
         Svg: require('@site/static/img/feature_lake.svg').default,
     },
     {
         number: '03',
-        title: 'Compute–Storage Separation',
+        title: 'Compute / Storage Separation',
         summary: 'Lean, elastic, stateless compute with fast recovery.',
         body: 'Stateless compute recovers in seconds and runs up to 85% cheaper than Kafka-based topologies. State lives on the Fluss leader, not Flink slots.',
         basis: 'Stateless compute model with leader-resident state and KV snapshots.',
@@ -77,7 +77,7 @@ const PILLARS: Pillar[] = [
         number: '06',
         title: 'Ecosystem Openness',
         summary: 'Open formats. No vendor lock-in.',
-        body: 'Readable by Flink, Spark, Trino, StarRocks, and DuckDB. Native hot tier plus Iceberg, Paimon, and Lance for the cold tier — open formats end to end.',
+        body: 'Readable by Flink, Spark, Trino, StarRocks, and DuckDB. Native hot tier plus Iceberg, Paimon, and Lance for the cold tier, open formats end to end.',
         basis: 'Open lake formats throughout, governed at the Apache Software Foundation.',
         Svg: require('@site/static/img/feature_changelog.svg').default,
     },
