@@ -647,28 +647,28 @@ function SystemsTaxSection() {
 
     const afterRequirements: {label: string; sub: string}[] = [
         {
-            label: 'Event log',
-            sub: 'durable, replayable, offset-ordered streams',
+            label: 'Streaming Log',
+            sub: 'Durable, replayable, offset-ordered streams',
         },
         {
-            label: 'PK lookup',
-            sub: 'sub-millisecond key/value lookups',
+            label: 'PK Lookup',
+            sub: 'Sub-millisecond key/value serving',
         },
         {
-            label: 'State externalization for Flink',
-            sub: 'Delta Joins, Partial Updates, Deduplication and Aggregation Merge Engine use Fluss as a state store',
+            label: 'Streamhouse',
+            sub: 'Real-time data layer for Lakehouse architecture',
         },
         {
-            label: 'Open-format cold tier',
-            sub: 'automatic tiering to Iceberg · Paimon · Lance',
+            label: 'State Store',
+            sub: 'Externalized state for joins and aggregations',
         },
         {
-            label: 'Multi-modal ready',
+            label: 'Multi-Modal',
             sub: 'Lance integration for vectors and ML context',
         },
         {
-            label: 'Deterministic audit trail',
-            sub: '$changelog & $binlog virtual tables, replayable by design',
+            label: 'Audit Trail',
+            sub: 'Change data feed, replayable by design',
         },
     ];
 

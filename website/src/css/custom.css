@@ -481,6 +481,13 @@ h1, h2, h3, h4, h5, h6 {
     max-width: calc(3 / 12 * 100%);
 }
 
+/* Blog list page: widen the main column from col--7 to col--9
+   so that cards (next to the col--3 sidebar) get more room. */
+.blog-list-page main.col.col--7 {
+    flex-basis: calc(9 / 12 * 100%);
+    max-width: calc(9 / 12 * 100%);
+}
+
 .hidden {
     display: none !important;
 }
@@ -627,13 +634,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .navbar__link:hover {
-  color: var(--fluss-blue-700);
-  background: var(--fluss-blue-50);
+  color: var(--fluss-blue-500);
   text-decoration: none;
 }
 
 .navbar__link--active {
-  color: var(--fluss-blue-700);
+  color: var(--fluss-blue-500);
   font-weight: 600;
 }
 
@@ -1393,20 +1399,6 @@ nav[class*='sidebar'] h3 {
   color: var(--fluss-ink-950);
 }
 
-.blog-post-page-no-sidebar aside.col.col--3 {
-    display: none;
-}
-
-.blog-post-page-no-sidebar main.col.col--7 {
-    flex-basis: calc(9 / 12 * 100%);
-    max-width: calc(9 / 12 * 100%);
-}
-
-.blog-post-page-no-sidebar .col.col--2 {
-    flex-basis: calc(3 / 12 * 100%);
-    max-width: calc(3 / 12 * 100%);
-}
-
 /* -------------------------------------------------------------------------
    Markdown tables in docs / blog (override Infima default for dark headers)
    ------------------------------------------------------------------------- */
@@ -1562,29 +1554,7 @@ main[class*='docItemContainer'],
    Scoped to single doc/post pages, NOT to the blog list (where each card
    also has its own <header> and we don't want this treatment on cards).
    ------------------------------------------------------------------------- */
-main[class*='docMainContainer'] article > header:first-of-type,
-main[class*='docItemContainer'] article > header:first-of-type,
-main[class*='blogPostPage'] article > header:first-of-type,
-.blog-post-page-no-sidebar article > header:first-of-type {
-  position: relative;
-  margin: 0 0 var(--fluss-space-10);
-  padding-bottom: var(--fluss-space-6);
-  border-bottom: 1px solid var(--fluss-ink-100);
-}
 
-main[class*='docMainContainer'] article > header:first-of-type::before,
-main[class*='docItemContainer'] article > header:first-of-type::before,
-main[class*='blogPostPage'] article > header:first-of-type::before,
-.blog-post-page-no-sidebar article > header:first-of-type::before {
-  content: '';
-  position: absolute;
-  top: -1px;
-  left: 0;
-  width: 56px;
-  height: 3px;
-  border-radius: var(--fluss-radius-pill);
-  background: linear-gradient(90deg, var(--fluss-blue-600), var(--fluss-cyan));
-}
 
 main[class*='docMainContainer'] article > header:first-of-type h1,
 main[class*='docItemContainer'] article > header:first-of-type h1,
@@ -2037,14 +2007,6 @@ a[class*='readMore']:hover::after {
 /* -------------------------------------------------------------------------
    Blog post page : editorial header
    ------------------------------------------------------------------------- */
-.blog-post-page-no-sidebar article > header,
-main[class*='blogPostPage'] article > header {
-  position: relative;
-  margin-bottom: var(--fluss-space-10);
-  padding-bottom: var(--fluss-space-6);
-  border-bottom: 1px solid var(--fluss-ink-100);
-}
-
 .blog-post-page-no-sidebar article > header h1,
 main[class*='blogPostPage'] article > header h1 {
   font-family: var(--fluss-font-display);
@@ -2216,8 +2178,11 @@ ul[class*='tag'] li {
 }
 
 .navbar__link:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #FFFFFF;
+  color: var(--fluss-blue-300);
+}
+
+.navbar__link--active {
+  color: var(--fluss-blue-300);
 }
 
 /* Hide the mobile hamburger button that sits to the left of the logo. */
@@ -2367,12 +2332,11 @@ body.fluss-home-page .theme-toggle {
 }
 
 [data-theme='dark'] .navbar__link:hover {
-  background: rgba(122, 175, 203, 0.12);
-  color: #D6E4ED;
+  color: var(--fluss-blue-300);
 }
 
 [data-theme='dark'] .navbar__link--active {
-  color: #B1CEDF;
+  color: var(--fluss-blue-300);
 }
 
 [data-theme='dark'] .navbar__title {

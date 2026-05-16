@@ -23,6 +23,19 @@
     background: transparent;
 }
 
+/* Selected text on the homepage's dark sections needs a light foreground
+   so it stays readable. The global ::selection in custom.css uses a near-black
+   text color which disappears against the dark hero / community cards. */
+.homepageWrapper ::selection {
+    background: rgba(122, 175, 203, 0.45);
+    color: #FFFFFF;
+}
+
+.homepageWrapper ::-moz-selection {
+    background: rgba(122, 175, 203, 0.45);
+    color: #FFFFFF;
+}
+
 /* =========================================================================
    Hero
    ========================================================================= */
@@ -946,7 +959,7 @@
     margin: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--fluss-space-2);
+    gap: var(--fluss-space-4);
 }
 
 .taxAfterList li {
