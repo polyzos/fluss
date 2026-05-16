@@ -683,7 +683,12 @@ function SystemsTaxSection() {
     return (
         <section className={styles.taxSection}>
             <div className={clsx('container', styles.container)}>
-                <div className={clsx(styles.sectionHeader, styles.sectionHeaderCenter)}>
+                {/* Left-aligned header (matches CompareSection). Previously used
+                    sectionHeaderCenter, which forced the 3-sentence lead into
+                    centred body copy — readable for a tagline, but awkward for
+                    a paragraph this long. Left alignment also anchors the lead's
+                    left edge to the taxGrid below it. */}
+                <div className={styles.sectionHeader}>
                     <span className={styles.eyebrow}>The multiple-systems tax</span>
                     <h2 className={styles.sectionTitle}>
                         Five systems, four integrations, continuous engineering tax.

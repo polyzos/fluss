@@ -636,9 +636,15 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04), 0 2px 8px rgba(15, 23, 42, 0.03);
 }
 
+/* Navbar inner now spans the full viewport width on every page, with the
+   same side padding as page content. Previously capped at 1240px, which
+   left the navbar items visibly inset on docs and other full-width pages
+   (Jark feedback, PR #3226). Same treatment on the homepage so the
+   navbar is visually consistent across the whole site. */
 .navbar__inner {
-  max-width: var(--fluss-container-max);
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
+  padding: 0 var(--fluss-container-pad);
 }
 
 .navbar__items {
@@ -2228,26 +2234,11 @@ ul[class*='tag'] li {
   color: var(--fluss-blue-300);
 }
 
-/* Mobile hamburger toggle (visible ≤ 996px only — Docusaurus default).
-   Previously hidden globally, which broke mobile navigation entirely
-   (Jark feedback PR #3226). The toggle is now allowed to render so the
-   mobile drawer with Docs / Blog / Learn / Community / Roadmap /
-   Downloads remains reachable on small screens. */
+/* Hide the navbar hamburger / toggle button site-wide. Explicit product
+   decision: the icon to the left of the Fluss logo is not desired on any
+   page (homepage, docs, blog, community, learn). On docs pages the
+   in-doc sidebar toggle is a separate element and remains available. */
 .navbar__toggle {
-  color: var(--fluss-ink-700);
-}
-
-[data-theme='dark'] .navbar__toggle {
-  color: #CBD5E1;
-}
-
-/* Docs pages: hide the hamburger entirely. On docs pages users already
-   have the docs sidebar (and its own mobile toggle) for in-doc navigation,
-   so the global-nav hamburger to the left of the logo is redundant and
-   was explicitly requested removed. Docusaurus sets `plugin-docs` on the
-   <body> for any page rendered by the docs plugin, including all
-   versioned routes. */
-body.plugin-docs .navbar__toggle {
   display: none !important;
 }
 

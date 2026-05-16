@@ -725,14 +725,6 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* Widen the lead to fill the centered header column edge-to-edge and use
-   `text-wrap: balance` so each of the three short sentences wraps onto
-   evenly-lengthed lines — without this the centered rag looked uneven. */
-.taxSection .sectionHeaderCenter .sectionLead {
-    max-width: 760px;
-    text-wrap: balance;
-}
-
 .taxGrid {
     /* The grid declares THREE shared rows (auto / 1fr / auto) for
        label / main-box / footnote. Each .taxColumn below uses
