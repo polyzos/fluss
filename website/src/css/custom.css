@@ -488,6 +488,13 @@ h1, h2, h3, h4, h5, h6 {
     max-width: calc(9 / 12 * 100%);
 }
 
+/* MDX pages (e.g. /downloads, /learn/talks, /learn/videos): widen the
+   right-side TOC column from col--2 to col--3 for better readability. */
+.mdx-page .col.col--2 {
+    flex-basis: calc(3 / 12 * 100%);
+    max-width: calc(3 / 12 * 100%);
+}
+
 .hidden {
     display: none !important;
 }
@@ -1698,7 +1705,8 @@ article > header:first-of-type + .markdown > p:first-of-type {
    from --ifm-color-primary) so docs links read clearly as links against
    the dark-gray body text. */
 .theme-doc-markdown a:not(.button):not(.card):not(.hash-link),
-.markdown a:not(.button):not(.card):not(.hash-link) {
+.markdown a:not(.button):not(.card):not(.hash-link),
+.mdx-page article a:not(.button):not(.card):not(.hash-link) {
   color: var(--fluss-link);
   font-weight: 500;
   background-image: linear-gradient(0deg, var(--fluss-link) 0, var(--fluss-link) 100%);
@@ -1711,7 +1719,8 @@ article > header:first-of-type + .markdown > p:first-of-type {
 }
 
 .theme-doc-markdown a:not(.button):not(.card):not(.hash-link):hover,
-.markdown a:not(.button):not(.card):not(.hash-link):hover {
+.markdown a:not(.button):not(.card):not(.hash-link):hover,
+.mdx-page article a:not(.button):not(.card):not(.hash-link):hover {
   color: var(--fluss-link-hover);
   background-image: linear-gradient(0deg, var(--fluss-link-hover) 0, var(--fluss-link-hover) 100%);
   background-size: 100% 2px;
@@ -1720,7 +1729,8 @@ article > header:first-of-type + .markdown > p:first-of-type {
 
 /* External-link indicator (auto, before the link) */
 .theme-doc-markdown a[href^='http']:not([href*='fluss.apache.org'])::after,
-.markdown a[href^='http']:not([href*='fluss.apache.org'])::after {
+.markdown a[href^='http']:not([href*='fluss.apache.org'])::after,
+.mdx-page article a[href^='http']:not([href*='fluss.apache.org'])::after {
   content: '';
   display: inline-block;
   width: 0.7em;
@@ -2269,6 +2279,9 @@ body.fluss-home-page .theme-toggle {
   --fluss-blue-700: #7AAFCB;
   --fluss-blue-800: #D6E4ED;
 
+  --fluss-link: #7AAFCB;
+  --fluss-link-hover: #D6E4ED;
+
   /* Shadows on dark : softer, warmer */
   --fluss-shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.4);
   --fluss-shadow-md:   0 4px 16px rgba(0, 0, 0, 0.4);
@@ -2457,7 +2470,8 @@ body.fluss-home-page .theme-toggle {
 }
 
 [data-theme='dark'] .theme-doc-markdown a:not(.button):not(.card):not(.hash-link),
-[data-theme='dark'] .markdown a:not(.button):not(.card):not(.hash-link) {
+[data-theme='dark'] .markdown a:not(.button):not(.card):not(.hash-link),
+[data-theme='dark'] .mdx-page article a:not(.button):not(.card):not(.hash-link) {
   color: #B1CEDF;
   background-image: linear-gradient(0deg, #B1CEDF 0, #B1CEDF 100%);
 }
