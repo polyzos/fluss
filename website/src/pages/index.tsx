@@ -18,6 +18,7 @@
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
+import {useColorMode} from '@docusaurus/theme-common';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 import {useEffect, useRef, useState} from 'react';
 import {Highlight} from 'prism-react-renderer';
@@ -871,29 +872,77 @@ function CommunitySection() {
  * can scope homepage-only rules — e.g. hiding the Ask-AI / colour-mode
  * toggle on the landing page only.
  *
- * Also pins <html data-theme="light"> while mounted: the landing page is
- * authored as a single (always-light) design with no dark-mode variant,
- * so we override Docusaurus' theme attribute here and restore the user's
- * previous preference on unmount (so docs/blog still honour dark mode).
+ * Body-class only — colour-mode pinning lives in <HomeColorModeLock>
+ * below, which must be rendered inside <Layout> (where Docusaurus'
+ * ColorModeProvider is in scope).
  */
 function useHomeBodyClass() {
     useEffect(() => {
         if (typeof document === 'undefined') return;
         document.body.classList.add('fluss-home-page');
-
-        const html = document.documentElement;
-        const previousTheme = html.getAttribute('data-theme');
-        html.setAttribute('data-theme', 'light');
-
         return () => {
             document.body.classList.remove('fluss-home-page');
-            if (previousTheme !== null) {
-                html.setAttribute('data-theme', previousTheme);
-            } else {
-                html.removeAttribute('data-theme');
-            }
         };
     }, []);
+}
+
+/**
+ * Pins the colour mode to light while the homepage is mounted: the
+ * landing page is authored as a single (always-light) design with no
+ * dark-mode variant. The user's saved preference is captured at mount
+ * and restored on unmount, so docs/blog still honour their choice.
+ *
+ * IMPORTANT: we must go through Docusaurus' setColorMode (not raw
+ * setAttribute on <html data-theme>). The navbar Logo is rendered via
+ * ThemedComponent, which client-side renders ONLY the variant matching
+ * the React `useColorMode()` state — not whatever's on the DOM. If we
+ * force `data-theme=light` while React state is still `dark`, the Logo
+ * renders only the `themedImage--dark` <img>, which `[data-theme=light]`
+ * CSS doesn't match, so it stays `display: none` and the logo vanishes.
+ * setColorMode keeps React state and the DOM attribute in sync.
+ *
+ * `{persist: false}` is a runtime-supported option on Docusaurus'
+ * setColorMode (see @docusaurus/theme-common colorMode.js) — it skips
+ * the localStorage write so we don't overwrite the user's preference.
+ * The public TS signature omits the options arg, hence the cast.
+ *
+ * This component must be rendered as a child of <Layout> so that
+ * ColorModeProvider (which Layout mounts) is in scope when
+ * useColorMode is called.
+ */
+type SetColorModeWithPersist = (
+    colorMode: 'light' | 'dark' | null,
+    options?: {persist?: boolean},
+) => void;
+
+function HomeColorModeLock(): null {
+    const {colorMode, setColorMode} = useColorMode();
+    // Snapshot the user's preference at mount time. A ref keeps the
+    // effect's deps array stable — otherwise the very setColorMode call
+    // below would retrigger the effect and overwrite the snapshot.
+    const previousColorModeRef = useRef(colorMode);
+
+    useEffect(() => {
+        previousColorModeRef.current = colorMode;
+
+        const setMode = setColorMode as unknown as SetColorModeWithPersist;
+        if (colorMode !== 'light') {
+            setMode('light', {persist: false});
+        }
+
+        return () => {
+            const previous = previousColorModeRef.current;
+            if (previous !== 'light') {
+                setMode(previous, {persist: false});
+            }
+        };
+        // Run once per mount. colorMode is read via the closure at mount
+        // time and stored in a ref so the cleanup restores the user's
+        // *original* preference, not the 'light' we just forced.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    return null;
 }
 
 export default function Home(): JSX.Element {
@@ -906,6 +955,8 @@ export default function Home(): JSX.Element {
             title=""
             description="Apache Fluss is an open-source columnar streaming storage system. Sub-second freshness, primary-key tables, first-class Apache Flink integration, and native tiering to Apache Iceberg and Apache Paimon."
             wrapperClassName={clsx(styles.homepageWrapper, 'fluss-home')}>
+            {/* Must be inside <Layout> so ColorModeProvider is in scope. */}
+            <HomeColorModeLock />
             <HomepageHeader heroRef={heroRef}/>
             <main>
                 {/* Narrative arc:
