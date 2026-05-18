@@ -1825,12 +1825,11 @@ kbd {
   box-shadow: 0 0 12px rgba(28, 80, 120, 0.4);
 }
 
-/* Top-level category labels. Previously forced UPPERCASE, which read
-   inconsistently against the Title-Case sub-items and the natural-case
-   TOC entries on the right rail (Jark feedback, PR #3226). Now displayed
-   in the same Title Case as authored in `_category_.json`, with a
-   slightly heavier weight than sub-items to preserve hierarchy. */
-.theme-doc-sidebar-menu > .menu__list-item > .menu__link--sublist,
+/* Top-level items: always bold regardless of whether they are collapsible
+   categories or plain leaf links. Title-Case retained from `_category_.json`
+   (Jark feedback, PR #3226). This is the only visually heavier tier in the
+   sidebar; everything below it is normalized to a single uniform style. */
+.theme-doc-sidebar-menu > .menu__list-item > .menu__link,
 .theme-doc-sidebar-menu > .menu__list-item > .menu__list-item-collapsible > .menu__link {
   font-family: var(--fluss-font-display);
   font-weight: 700;
@@ -1841,21 +1840,29 @@ kbd {
   padding-bottom: 6px;
 }
 
-/* Nested category labels (e.g. Table Types / Merge Engines / Data Distribution
-   under Table Design). Infima's default makes `.menu__link--sublist` bold,
-   which created an inconsistent hierarchy where every nested subcategory
-   looked as heavy as the top-level Quickstart / Concepts / Table Design
-   headers. Match leaf-item weight instead so the only visually distinct
-   tier is the top-level row. */
-.theme-doc-sidebar-menu .menu__list-item .menu__list-item .menu__link--sublist,
-.theme-doc-sidebar-menu .menu__list-item .menu__list-item .menu__list-item-collapsible > .menu__link {
+/* Nested items at any depth: uniform non-bold styling, regardless of whether
+   the item is a collapsible sub-category or a leaf link. Infima's default
+   makes `.menu__link--sublist` bold, which created an inconsistent hierarchy
+   where nested sub-categories looked as heavy as top-level entries. Match a
+   single weight/size/padding so the only visually distinct tier is the
+   top-level row. */
+.theme-doc-sidebar-menu .menu__list .menu__link,
+.theme-doc-sidebar-menu .menu__list .menu__list-item-collapsible > .menu__link {
   font-family: inherit;
   font-weight: 500;
-  font-size: 0.95rem;
+  font-size: 0.9375rem;
   letter-spacing: 0;
   color: var(--fluss-ink-700);
-  padding-top: 0;
-  padding-bottom: 0;
+  padding: 6px 10px;
+}
+
+/* Preserve the active-state highlight for nested items (declared after the
+   uniform nested rule so it wins on equal specificity). */
+.theme-doc-sidebar-menu .menu__list .menu__link--active,
+.theme-doc-sidebar-menu .menu__list .menu__list-item-collapsible > .menu__link--active {
+  color: var(--fluss-blue-700);
+  background: var(--fluss-blue-50);
+  font-weight: 600;
 }
 
 .theme-doc-sidebar-menu > .menu__list-item:not(:first-child) {
