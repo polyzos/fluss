@@ -15,8 +15,25 @@
  * limitations under the License.
  */
 
-// Pass-through re-export of the default Docusaurus colour-mode toggle so it
-// renders identically on every page (including the landing page). This file
-// is kept (rather than fully un-swizzled) so the existing webpack alias for
-// `@theme/ColorModeToggle` continues to resolve cleanly.
-export {default} from '@theme-original/ColorModeToggle';
+import React from 'react';
+import {useLocation} from '@docusaurus/router';
+import ColorModeToggle from '@theme-original/ColorModeToggle';
+
+/**
+ * Swizzled wrapper around the default Docusaurus colour-mode toggle.
+ *
+ * The landing page (`/`) is authored as a single (always-light) design with
+ * no dark-mode variant (see `useHomeBodyClass` in `src/pages/index.tsx`,
+ * which also pins `<html data-theme="light">` while mounted), so the toggle
+ * would be a no-op there. Instead of hiding it via CSS, we skip rendering
+ * the button entirely on the homepage so it never appears in the DOM.
+ *
+ * Docs / blog / community pages keep the toggle.
+ */
+export default function ColorModeToggleWrapper(props) {
+  const {pathname} = useLocation();
+  if (pathname === '/') {
+    return null;
+  }
+  return <ColorModeToggle {...props} />;
+}

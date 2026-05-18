@@ -732,13 +732,26 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Unify right-side navbar spacing so theme-toggle, search button, version
    dropdown and GitHub icon align on a single baseline with consistent gap
-   (Michael feedback, PR #3226). */
+   (Michael feedback, PR #3226).
+
+   `!important` is required on the margin reset to defeat the
+   `button[class*='colorModeToggle']` selector below, which would
+   otherwise re-introduce a stray horizontal margin on the toggle and
+   throw off the gap. */
 .navbar__items--right {
   gap: var(--fluss-space-2);
+  align-items: center;
 }
 
 .navbar__items--right > * {
-  margin: 0;
+  margin: 0 !important;
+}
+
+/* Tighten the version dropdown link's horizontal padding when it lives in
+   the right-side cluster, so the visible gap between "Next ▾" and the
+   GitHub icon matches the gap between every other pair of items. */
+.navbar__items--right .navbar__link {
+  padding: 0 4px;
 }
 
 /* Version dropdown badge */
@@ -2240,12 +2253,22 @@ ul[class*='tag'] li {
   color: var(--fluss-blue-300);
 }
 
-/* Hide the navbar hamburger / toggle button site-wide. Explicit product
+/* Hide the navbar hamburger / toggle button on desktop. Explicit product
    decision: the icon to the left of the Fluss logo is not desired on any
    page (homepage, docs, blog, community, learn). On docs pages the
    in-doc sidebar toggle is a separate element and remains available. */
-.navbar__toggle {
-  display: none !important;
+@media (min-width: 997px) {
+    .navbar__toggle {
+        display: none !important;
+    }
+}
+
+/* On mobile, move the navbar toggle to the far right (after search button). */
+@media (max-width: 996px) {
+    .navbar__toggle {
+        position: absolute;
+        right: 4rem;
+    }
 }
 
 /* =========================================================================
@@ -2257,8 +2280,6 @@ ul[class*='tag'] li {
 .theme-toggle,
 button[class*='colorModeToggle'],
 button.clean-btn[class*='toggle'] {
-  width: 36px;
-  height: 36px;
   border-radius: var(--fluss-radius-pill);
   background: var(--fluss-ink-100);
   border: 1px solid transparent;
@@ -2287,16 +2308,10 @@ button.clean-btn[class*='toggle'] svg {
   height: 18px;
 }
 
-/* Hide the colour-mode toggle on the landing page only. The homepage is
-   authored as a single (always-light) design with no dark-mode variant
-   (see useHomeBodyClass in src/pages/index.tsx, which also pins
-   <html data-theme="light"> while mounted), so the toggle would be a
-   no-op there. Docs / blog / community pages keep the toggle. */
-body.fluss-home-page button[class*='colorModeToggle'],
-body.fluss-home-page button.clean-btn[class*='toggle'],
-body.fluss-home-page .theme-toggle {
-  display: none !important;
-}
+/* The colour-mode toggle is omitted from the DOM on the landing page via
+   the swizzled `src/theme/ColorModeToggle/index.js` wrapper, so no CSS
+   hiding rule is needed here. Docs / blog / community pages keep the
+   toggle. */
 
 /* =========================================================================
    ========================================================================
