@@ -730,14 +730,6 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--fluss-ink-500);
 }
 
-/* Hide the inline ⌘K keyboard hint inside the search button. It rendered
-   as a bordered pill that looked like an "extra box inside the search
-   bar" (Michael feedback, PR #3226). The magnifier icon is enough
-   affordance; the shortcut still works without being advertised. */
-.DocSearch-Button-Keys {
-  display: none !important;
-}
-
 /* Unify right-side navbar spacing so theme-toggle, search button, version
    dropdown and GitHub icon align on a single baseline with consistent gap
    (Michael feedback, PR #3226). */
