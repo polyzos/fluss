@@ -37,7 +37,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Compare',
-      collapsed: false,
+      collapsed: true,
       items: [
         {
           type: 'link',

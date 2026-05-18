@@ -893,7 +893,6 @@ div[class*='announcementBar'] a {
   font-family: var(--fluss-font-display);
   font-weight: 600;
   font-size: 0.75rem;
-  text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--fluss-ink-500);
   margin-bottom: var(--fluss-space-3);
@@ -2591,7 +2590,6 @@ body.fluss-home-page .theme-toggle {
 [data-theme='dark'] .theme-doc-markdown li code,
 [data-theme='dark'] .theme-doc-markdown td code,
 [data-theme='dark'] code {
-  background: rgba(122, 175, 203, 0.14);
   border-color: rgba(122, 175, 203, 0.25);
   color: #D6E4ED;
 }
@@ -2655,7 +2653,7 @@ body.fluss-home-page .theme-toggle {
 }
 
 [data-theme='dark'] div[class*='codeBlockContent'] pre {
-  background: #0A1745;
+  background: #102856;
 }
 
 [data-theme='dark'] div[class*='codeBlockTitle'] {

@@ -696,7 +696,7 @@
 .communityArrow {
     margin-top: auto;
     padding-top: var(--fluss-space-4);
-    color: var(--fluss-cyan);
+    color: var(--fluss-blue-300);
     font-weight: 600;
     font-size: 0.875rem;
 }

@@ -24,7 +24,7 @@ import type {PrismTheme} from 'prism-react-renderer';
 const darkTheme: PrismTheme = {
   plain: {
     color: '#D6E4ED',           // --fluss-blue-100
-    backgroundColor: '#0A1745', // --fluss-blue-950
+    backgroundColor: '#102856', // --fluss-blue-900
   },
   styles: [
     {

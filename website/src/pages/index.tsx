@@ -721,7 +721,7 @@ function SystemsTaxSection() {
                             ))}
                         </div>
                         <p className={styles.taxFootnote}>
-                            5 Systems · 4 Sync Boundaries Owned by You · Continuous Engineering Tax
+                            5 Systems · 4 Sync Boundaries · Continuous Engineering Tax
                         </p>
                     </div>
 

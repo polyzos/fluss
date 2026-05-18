@@ -43,7 +43,7 @@ const PILLARS: Pillar[] = [
     },
     {
         number: '02',
-        title: 'Streaming & Lakehouse Unification',
+        title: 'Stream & Lakehouse Unification',
         summary: 'One copy of data across real-time and batch layers.',
         body: 'Hot and cold tiers share the same schema and are queryable as one substrate, so streaming and historical reads hit one source of truth.',
         basis: 'Tiering Service and Union Read across Iceberg, Paimon, and Lance.',
