@@ -62,9 +62,9 @@ Pick Kafka when these are your dominant needs:
 Pick Fluss when these are your dominant needs:
 
 - **Large-scale stream processing with Apache Flink.** Stateless compute,
-  with join and aggregation state externalised onto the Fluss leader via
-  Delta Joins and the Aggregation Merge Engine. Recovery drops from minutes
-  to seconds and compute scales independently of state size.
+  with join and aggregation state externalised onto Fluss via Delta Joins
+  and the Aggregation Merge Engine. Recovery drops from minutes to seconds
+  and compute scales independently of state size.
 - **Real-time analytics on wide tables.** Server-side column projection,
   predicate pushdown, and partition pruning compound into order-of-magnitude
   I/O and network savings. A query reading 10 columns out of 200 transfers
@@ -74,17 +74,20 @@ Pick Fluss when these are your dominant needs:
   structured analytics collapse into one PK Table accessed through different
   views. No separate feature store, no separate context store.
 - **Dimension joins and stream enrichment.** PK lookups are native and
-  sub-millisecond. Flink Lookup Joins against Fluss PK Tables remove the need
-  for a separate online KV store (Redis, HBase, Cassandra) in front of the
-  pipeline.
+  sub-millisecond. Flink Lookup Joins against Fluss PK Tables consolidate
+  the online KV store (Redis, HBase, Cassandra) into the same substrate that
+  holds the streaming log, so there is one source of truth for both the
+  serving lookup and the changelog instead of a separate cache in front of
+  the pipeline.
 - **CDC-heavy pipelines.** Primary Key Tables handle upserts, partial updates,
   and deletes natively, and emit a `$changelog` virtual table that is
   replayable by design. No external Schema Registry and no Connect/Debezium
   layer needed for CDC patterns within Fluss.
-- **Real-time lakehouse.** Fluss is the hot tier; Iceberg, Paimon, or Lance is
-  the cold tier. They share a schema and are queryable as one logical table
-  through Union Read. Streaming jobs and historical queries hit the same
-  source of truth with sub-second freshness.
+- **Real-time lakehouse.** Fluss is the hot tier; Iceberg or Paimon is the
+  cold tier. They share a schema and are queryable as one logical table
+  through Union Read, so streaming jobs and historical queries hit the same
+  source of truth with sub-second freshness. Lance is supported as a tiering
+  target for AI / vector workloads (Union Read on Lance is on the roadmap).
 
 ## Side-by-side
 
@@ -97,8 +100,8 @@ Pick Fluss when these are your dominant needs:
 | **Schema · CDC** | External Schema Registry; CDC via Connect / Debezium | First-class schemas with evolution; native `$changelog` · `$binlog` virtual tables |
 | **Read path** | No server-side pruning; no native PK lookup | Zero-copy column · partition · predicate pushdown; PK lookup via LSM |
 | **State externalisation** (with Flink) | App holds join & aggregation state in RocksDB | Delta Joins & Aggregation Merge Engine externalise state to Fluss |
-| **Lakehouse integration** | External (via Connect sinks) | Native (shared schema and Union Read across Iceberg, Paimon, Lance) |
-| **Engines that read** (the storage layer) | Kafka clients only | Flink · Spark · Trino · StarRocks · DuckDB |
+| **Lakehouse integration** | External (via Connect sinks) | Native (shared schema and Union Read across Iceberg & Paimon; Lance for AI / vector tiering) |
+| **Engines that read** (the storage layer) | Kafka clients only | Flink · Spark · DuckDB· **_planned:** Trino · StarRocks |
 | **Strong fit** | Event-driven systems · log ingestion · microservice pub/sub · cross-language transport | Large-scale Flink stream processing · real-time analytics · AI/ML · streaming lakehouse · dimension joins · CDC |
 
 Ready to try Fluss? [Get started with the Flink quickstart](/docs/quickstart/flink),

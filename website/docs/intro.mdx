@@ -45,7 +45,7 @@ An agent reads all four concurrently to assemble a grounded prompt, with no cros
 
 ### 5. Real-time operational analytics and OLAP hot-store replacement
 
-The columnar Arrow log plus server-side compound pruning (partition pruning, predicate pushdown, column projection) lets analytical engines such as Flink batch, Spark, Trino, StarRocks, Doris, and DuckDB query the hot tier directly. The result is order-of-magnitude reductions in I/O, network, and deserialization cost. Replaces the typical "OLAP hot store" sitting alongside Kafka.
+The columnar Arrow log plus server-side compound pruning (partition pruning, predicate pushdown, column projection) lets analytical engines such as Flink batch, Spark, Trino, StarRocks, and DuckDB query the hot tier directly. The result is order-of-magnitude reductions in I/O, network, and deserialization cost. Replaces the typical "OLAP hot store" sitting alongside Kafka.
 
 ### 6. Streaming ETL with externalized state
 

@@ -764,17 +764,71 @@ h1, h2, h3, h4, h5, h6 {
 
 /* -------------------------------------------------------------------------
    Mobile navbar drawer
-   ------------------------------------------------------------------------- */
+   -------------------------------------------------------------------------
+   The drawer is a light surface (var(--fluss-paper)), so inherited styles
+   from the dark navbar — the white Fluss wordmark, the light-tinted GitHub
+   icon, and the #E2E8F0 navbar link colour — would all be invisible inside
+   it. Re-tint everything for the light drawer below (borzoni feedback,
+   PR #3226). */
 .navbar-sidebar {
   background: var(--fluss-paper);
 }
 
 .navbar-sidebar__brand {
   border-bottom: 1px solid var(--fluss-ink-100);
+  background: var(--fluss-paper);
 }
 
 .navbar-sidebar__items .menu__link {
   font-size: 0.9375rem;
+}
+
+/* Drawer brand: re-tint the white wordmark to brand navy (≈ --fluss-blue-600)
+   so it reads on the light paper background. The leading `brightness(0)`
+   collapses the source to black, the rest of the chain shifts it to the
+   target hue. */
+.navbar-sidebar__brand .navbar__logo img {
+  filter: brightness(0) saturate(100%) invert(13%) sepia(53%) saturate(2243%) hue-rotate(193deg) brightness(96%) contrast(95%);
+}
+
+.navbar-sidebar__brand .navbar__title,
+.navbar-sidebar__brand .navbar__brand {
+  color: var(--fluss-ink-950);
+}
+
+/* Drawer navbar links (e.g. items dropped into the drawer on mobile)
+   inherit color: #E2E8F0 from the dark navbar. Re-tint for the light
+   drawer so the labels are readable. */
+.navbar-sidebar .navbar__link,
+.navbar-sidebar .menu__link {
+  color: var(--fluss-ink-700);
+}
+
+.navbar-sidebar .navbar__link:hover,
+.navbar-sidebar .menu__link:hover {
+  color: var(--fluss-blue-700);
+}
+
+.navbar-sidebar .navbar__link--active,
+.navbar-sidebar .menu__link--active {
+  color: var(--fluss-blue-700);
+}
+
+/* GitHub icon in the drawer: the navbar variant uses fill='#E2E8F0',
+   which vanishes on the light drawer. Swap to a brand-blue fill. The
+   `.navbar-sidebar` ancestor selector already wins on specificity, no
+   `!important` needed. */
+.navbar-sidebar .header-github-link::before {
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%231C5078' d='M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12'/%3E%3C/svg%3E") no-repeat;
+}
+
+/* Drawer close button (the X) — keep it readable on the light surface. */
+.navbar-sidebar__close {
+  color: var(--fluss-ink-700);
+}
+
+.navbar-sidebar__close:hover {
+  color: var(--fluss-blue-700);
 }
 
 /* -------------------------------------------------------------------------
@@ -869,9 +923,19 @@ div[class*='announcementBar'] a {
               background-color var(--fluss-motion-fast) var(--fluss-ease-out);
 }
 
-.breadcrumbs__link:hover {
+/* Anchor-only hover styles. Category breadcrumb segments without a target
+   page render as a plain element (no <a>); those should not look clickable
+   (borzoni feedback, PR #3226). */
+a.breadcrumbs__link:hover {
   color: var(--fluss-blue-700);
   background: var(--fluss-blue-50);
+}
+
+/* Non-link breadcrumb segment (parent category without an index page):
+   render as static text so users don't try to click it. */
+.breadcrumbs__link:not(a) {
+  color: var(--fluss-ink-700);
+  cursor: default;
 }
 
 .breadcrumbs__item--active .breadcrumbs__link {
@@ -2263,11 +2327,32 @@ ul[class*='tag'] li {
     }
 }
 
-/* On mobile, move the navbar toggle to the far right (after search button). */
+/* On mobile, keep the navbar toggle in its natural flex position at the
+   start of the navbar so it stays reachable at every viewport width.
+   Previously it was `position: absolute; right: 4rem` which made it
+   disappear on intermediate widths where the right-side cluster pushed
+   past 4rem (borzoni feedback, PR #3226). */
 @media (max-width: 996px) {
     .navbar__toggle {
-        position: absolute;
-        right: 4rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        margin-right: var(--fluss-space-2);
+        padding: 0;
+        border-radius: var(--fluss-radius-md);
+        background: transparent;
+        border: 1px solid transparent;
+        color: #E2E8F0;
+        transition: background-color var(--fluss-motion-fast) var(--fluss-ease-out),
+                    border-color var(--fluss-motion-fast) var(--fluss-ease-out);
+    }
+
+    .navbar__toggle:hover,
+    .navbar__toggle:focus-visible {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.16);
     }
 }
 
@@ -2483,9 +2568,13 @@ button.clean-btn[class*='toggle'] svg {
   color: #94A3B8;
 }
 
-[data-theme='dark'] .breadcrumbs__link:hover {
+[data-theme='dark'] a.breadcrumbs__link:hover {
   color: #D6E4ED;
   background: rgba(122, 175, 203, 0.12);
+}
+
+[data-theme='dark'] .breadcrumbs__link:not(a) {
+  color: #CBD5E1;
 }
 
 [data-theme='dark'] .breadcrumbs__item--active .breadcrumbs__link {
@@ -2867,6 +2956,32 @@ button.clean-btn[class*='toggle'] svg {
 
 [data-theme='dark'] .navbar-sidebar__brand {
   border-bottom-color: rgba(255, 255, 255, 0.06);
+  background: var(--fluss-canvas);
+}
+
+/* In dark mode the drawer is dark again, so undo the light-mode inversion
+   on the brand wordmark and restore the light-on-dark GitHub icon. */
+[data-theme='dark'] .navbar-sidebar__brand .navbar__logo img {
+  filter: none;
+}
+
+[data-theme='dark'] .navbar-sidebar__brand .navbar__title,
+[data-theme='dark'] .navbar-sidebar__brand .navbar__brand {
+  color: #F8FAFC;
+}
+
+[data-theme='dark'] .navbar-sidebar .navbar__link,
+[data-theme='dark'] .navbar-sidebar .menu__link {
+  color: #CBD5E1;
+}
+
+[data-theme='dark'] .navbar-sidebar .navbar__link:hover,
+[data-theme='dark'] .navbar-sidebar .menu__link:hover {
+  color: var(--fluss-blue-300);
+}
+
+[data-theme='dark'] .navbar-sidebar .header-github-link::before {
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23F8FAFC' d='M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12'/%3E%3C/svg%3E") no-repeat;
 }
 
 /* ----- Footer logo invert if needed (dark) ----- */
@@ -2931,6 +3046,19 @@ button.clean-btn[class*='toggle'] svg {
   .pagination-nav {
     grid-template-columns: 1fr;
     gap: var(--fluss-space-3);
+  }
+
+  /* Let long labels wrap & shrink instead of overflowing the card on
+     narrow viewports (borzoni feedback, PR #3226). */
+  .pagination-nav__link {
+    min-width: 0;
+    padding: var(--fluss-space-3) var(--fluss-space-4);
+  }
+
+  .pagination-nav__label {
+    font-size: 0.9375rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
   }
 
   /* Footer columns: tighter gap */
