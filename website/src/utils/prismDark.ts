@@ -18,13 +18,13 @@
 import type {PrismTheme} from 'prism-react-renderer';
 
 /**
- * Light Prism theme tuned to the Apache Fluss blue palette.
- * Pairs with --fluss-* tokens defined in src/css/custom.css.
+ * Dark Prism theme matching the Apache Fluss deep-blue palette.
+ * Used for code blocks rendered in dark contexts (e.g. dark code cards).
  */
-const lightTheme: PrismTheme = {
+const darkTheme: PrismTheme = {
   plain: {
-    color: '#0A0F1C',           // --fluss-ink-950
-    backgroundColor: '#F8FAFC',
+    color: '#D6E4ED',           // --fluss-blue-100
+    backgroundColor: '#102856', // --fluss-blue-900
   },
   styles: [
     {
@@ -37,41 +37,41 @@ const lightTheme: PrismTheme = {
     },
     {
       types: ['string', 'attr-value', 'char', 'inserted'],
-      style: {color: '#0E7C66'},
+      style: {color: '#A3E635'}, // --fluss-lime
     },
     {
       types: ['number', 'boolean'],
-      style: {color: '#B45309'},
+      style: {color: '#FBBF24'},
     },
     {
       types: ['keyword', 'atrule', 'selector'],
-      style: {color: '#194670'}, // --fluss-blue-700
+      style: {color: '#B1CEDF'}, // --fluss-blue-300
     },
     {
       types: ['function', 'class-name', 'tag'],
-      style: {color: '#7C3AED'}, // --fluss-violet
+      style: {color: '#7AAFCB'}, // --fluss-cyan
     },
     {
       types: ['builtin', 'constant', 'variable', 'property'],
-      style: {color: '#12325C'}, // --fluss-blue-800
+      style: {color: '#C4B5FD'},
     },
     {
       types: ['operator', 'punctuation'],
-      style: {color: '#475569'},
+      style: {color: '#94A3B8'},
     },
     {
       types: ['regex', 'important', 'deleted'],
-      style: {color: '#BE123C'},
+      style: {color: '#FB7185'},
     },
     {
       types: ['attr-name'],
-      style: {color: '#1C5078'}, // --fluss-blue-600
+      style: {color: '#7AAFCB'},
     },
     {
       types: ['symbol', 'url'],
-      style: {color: '#0E7490'},
+      style: {color: '#67E8F9'},
     },
   ],
 };
 
-export default lightTheme;
+export default darkTheme;
