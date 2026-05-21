@@ -179,31 +179,28 @@ body {
 }
 
 /* Page scrollbar — keep the thumb bright in dark mode so it stays
- * visible against the deep-blue canvas instead of fading to grey
- * via the browser's auto-dark heuristic.
- *   `scrollbar-color`        — Firefox / future-spec
- *   `::-webkit-scrollbar-*`  — Chromium / Safari
- * Thumb / track in BOTH modes get an explicit treatment so the page
- * scrollbar reads consistently. */
+ * visible against the deep-blue canvas. We use only the standard
+ * `scrollbar-color` property (no `::-webkit-scrollbar-*` width rules),
+ * because defining a width on `::-webkit-scrollbar` forces Chrome out
+ * of macOS overlay-scrollbar mode and into a 12px space-taking
+ * scrollbar — which would only apply in dark mode and cause the page
+ * (and the navbar's right-aligned items) to shift 12px on every theme
+ * toggle. */
 [data-theme='dark'] html {
   scrollbar-color: rgba(255, 255, 255, 0.42) rgba(255, 255, 255, 0.06);
 }
-[data-theme='dark'] body::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-}
 [data-theme='dark'] body::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.04);
 }
 [data-theme='dark'] body::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.32);
-  border-radius: 8px;
-  border: 3px solid transparent;
-  background-clip: padding-box;
+    background: rgba(255, 255, 255, 0.32);
+    border-radius: 8px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
 }
 [data-theme='dark'] body::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.55);
-  background-clip: padding-box;
+    background: rgba(255, 255, 255, 0.55);
+    background-clip: padding-box;
 }
 
 /* Subtle dot-grid texture on the homepage canvas in light mode.
@@ -2272,6 +2269,18 @@ main[class*='blogListPage'] article {
   border: 1px solid rgba(28, 80, 120, 0.15);
   color: var(--fluss-blue-800);
   border-radius: var(--fluss-radius-sm);
+}
+
+/* Code blocks (pre > code) should never inherit inline-code box styling
+   even when nested inside list/paragraph/table elements. */
+.markdown pre code,
+.theme-doc-markdown pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+  border-radius: 0;
 }
 
 /* -------------------------------------------------------------------------

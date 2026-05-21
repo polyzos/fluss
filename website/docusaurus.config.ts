@@ -182,7 +182,7 @@ const config: Config = {
             'queryString',
           ],
           pwaHead: [
-            { tagName: 'link', rel: 'icon', href: '/img/logo/svg/colored_logo.svg' },
+            { tagName: 'link', rel: 'icon', href: '/img/logo/fluss_favicon.svg' },
             { tagName: 'link', rel: 'manifest', href: '/manifest.json' },
             { tagName: 'meta', name: 'theme-color', content: '#102856' },
           ],

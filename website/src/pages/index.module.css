@@ -69,34 +69,34 @@
     pointer-events: none;
 }
 
-/* Hero gets a wider container with much tighter side padding than the rest
-   of the homepage, so the side-by-side text + diagram can use almost the
-   full viewport. Other sections keep the standard 1240 / 24px container.
+/* Hero gets a wider container with tighter side padding than the rest
+   of the homepage, so the side-by-side text + diagram can use most of the
+   viewport. Other sections keep the standard 1240 / 24px container.
 
    The side padding ramps up at smaller viewports so the hero content does
-   not run flush to the screen edge on typical laptop sizes:
-     ≥ 1500px : 0  (max diagram space, container is centred with margin)
-     ≤ 1500px : 12px
-     ≤ 1280px : 20px
+   not run flush to the screen edge:
+     ≥ 1500px : 48px (breathing room on large monitors)
+     ≤ 1500px : 32px
+     ≤ 1280px : 24px
      ≤ 996px  : 24px (matches the standard container padding under the
                        existing mobile stack media query) */
 .heroBanner .container {
     max-width: 1560px;
-    padding-left: 0;
-    padding-right: 0;
+    padding-left: var(--fluss-space-12);
+    padding-right: var(--fluss-space-12);
 }
 
 @media (max-width: 1500px) {
     .heroBanner .container {
-        padding-left: var(--fluss-space-3);
-        padding-right: var(--fluss-space-3);
+        padding-left: var(--fluss-space-8);
+        padding-right: var(--fluss-space-8);
     }
 }
 
 @media (max-width: 1280px) {
     .heroBanner .container {
-        padding-left: var(--fluss-space-5);
-        padding-right: var(--fluss-space-5);
+        padding-left: var(--fluss-space-6);
+        padding-right: var(--fluss-space-6);
     }
 }
 
@@ -118,7 +118,7 @@
     border-radius: var(--fluss-radius-pill);
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.16);
-    color: var(--fluss-blue-100);
+    color: var(--ifm-color-primary-lightest);
     font-size: 0.8125rem;
     font-weight: 500;
     letter-spacing: 0.04em;
@@ -912,7 +912,7 @@
     border-radius: var(--fluss-radius-lg);
     background:
         radial-gradient(600px 300px at 100% 0%, rgba(38, 109, 149, 0.12), transparent 60%),
-        linear-gradient(180deg, var(--fluss-blue-700) 0%, var(--fluss-blue-800) 100%);
+        linear-gradient(180deg, var(--ifm-color-primary-darkest) 0%, var(--ifm-color-primary-darker) 100%);
     color: #FFFFFF;
     box-shadow: var(--fluss-shadow-glow);
     border: 1px solid rgba(255, 255, 255, 0.1);
