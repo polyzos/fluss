@@ -20,6 +20,7 @@ package org.apache.fluss.row.encode;
 import org.apache.fluss.config.TableConfig;
 import org.apache.fluss.metadata.DataLakeFormat;
 import org.apache.fluss.row.InternalRow;
+import org.apache.fluss.row.encode.hudi.HudiKeyEncoder;
 import org.apache.fluss.row.encode.iceberg.IcebergKeyEncoder;
 import org.apache.fluss.row.encode.paimon.PaimonKeyEncoder;
 import org.apache.fluss.types.RowType;
@@ -76,6 +77,14 @@ public interface KeyEncoder {
         Optional<Integer> optKvFormatVersion = tableConfig.getKvFormatVersion();
         DataLakeFormat dataLakeFormat = tableConfig.getDataLakeFormat().orElse(null);
         int kvFormatVersion = optKvFormatVersion.orElse(1);
+
+        // Hudi's HudiKeyEncoder is lossy (4-byte hash); it must NOT be used for
+        // primary key encoding because different keys with the same List#hashCode
+        // would collide. Use CompactedKeyEncoder instead.
+        if (dataLakeFormat == DataLakeFormat.HUDI) {
+            return CompactedKeyEncoder.createKeyEncoder(rowType, keyFields);
+        }
+
         if (kvFormatVersion == 1) {
             return of(rowType, keyFields, dataLakeFormat);
         }
@@ -129,6 +138,8 @@ public interface KeyEncoder {
             return CompactedKeyEncoder.createKeyEncoder(rowType, keyFields);
         } else if (lakeFormat == DataLakeFormat.ICEBERG) {
             return new IcebergKeyEncoder(rowType, keyFields);
+        } else if (lakeFormat == DataLakeFormat.HUDI) {
+            return new HudiKeyEncoder(rowType, keyFields);
         } else {
             throw new UnsupportedOperationException("Unsupported datalake format: " + lakeFormat);
         }
