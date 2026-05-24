@@ -551,22 +551,28 @@ public final class TabletService extends RpcServiceBase implements TabletServerG
             }
             acquiredContext = context;
 
-            if (!request.hasBucketScanReq() && request.hasCallSeqId()) {
-                long expectedSeqId = (long) context.getCallSeqId() + 1L;
+            // Honour close even on a non-leader: the local session is still ours to release.
+            // Close requests are exempt from callSeqId validation.
+            if (isCloseRequest) {
+                response.setScannerId(context.getScannerId());
+                response.setHasMoreResults(false);
+                return CompletableFuture.completedFuture(response);
+            }
+
+            // Validate callSeqId for all data-fetching requests (open + continuation).
+            if (request.hasCallSeqId()) {
+                int expectedSeqId = context.getCallSeqId() + 1;
                 int requestSeqId = request.getCallSeqId();
-                if ((long) requestSeqId != expectedSeqId) {
+                if (requestSeqId != expectedSeqId) {
                     throw new InvalidScanRequestException(
                             String.format(
                                     "Out-of-order scan request: expected callSeqId=%d but got %d.",
                                     expectedSeqId, requestSeqId));
                 }
-            }
-
-            // Honour close even on a non-leader: the local session is still ours to release.
-            if (isCloseRequest) {
-                response.setScannerId(context.getScannerId());
-                response.setHasMoreResults(false);
-                return CompletableFuture.completedFuture(response);
+            } else {
+                throw new InvalidScanRequestException(
+                        "call_seq_id is required for ScanKV requests to ensure "
+                                + "in-order processing and at-least-once semantics.");
             }
 
             // Catch a leadership flip ahead of the eventual closeScannersForBucket callback so

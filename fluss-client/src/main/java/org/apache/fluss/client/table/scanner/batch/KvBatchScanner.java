@@ -45,7 +45,6 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -134,6 +133,10 @@ public final class KvBatchScanner implements BatchScanner {
         } catch (TimeoutException e) {
             return CloseableIterator.emptyIterator();
         } catch (Exception e) {
+            // TODO: we should retry continuation requests on transient networks errors, but
+            //  for simplicity we currently fail the whole scan. Retrying here would require robust
+            //  handling of duplicate continuations (e.g. call_seq_id rollback) to avoid skipping or
+            //  repeating rows.
             terminate();
             throw new IOException(e);
         }
@@ -183,18 +186,20 @@ public final class KvBatchScanner implements BatchScanner {
         }
 
         ScanKvRequest request =
-                new ScanKvRequest().setBucketScanReq(bucketReq).setBatchSizeBytes(batchSizeBytes);
+                new ScanKvRequest()
+                        .setBucketScanReq(bucketReq)
+                        .setBatchSizeBytes(batchSizeBytes)
+                        .setCallSeqId(callSeqId);
         inFlight = gateway.scanKv(request);
     }
 
     private void sendContinuation() {
-        // Pre-increment so the first continuation sends call_seq_id=1; the server initializes its
-        // counter to 0 and expects requestSeqId == contextSeqId + 1.
+        callSeqId++;
         ScanKvRequest request =
                 new ScanKvRequest()
                         .setScannerId(scannerId)
                         .setBatchSizeBytes(batchSizeBytes)
-                        .setCallSeqId(++callSeqId);
+                        .setCallSeqId(callSeqId);
         inFlight = gateway.scanKv(request);
     }
 
@@ -300,9 +305,8 @@ public final class KvBatchScanner implements BatchScanner {
     }
 
     private List<InternalRow> parseRecords(ScanKvResponse response) {
-        ByteBuffer recordsBuffer = ByteBuffer.wrap(response.getRecords());
         DefaultValueRecordBatch valueRecords =
-                DefaultValueRecordBatch.pointToByteBuffer(recordsBuffer);
+                DefaultValueRecordBatch.pointToBytes(response.getRecords());
         int recordCount = valueRecords.getRecordCount();
         if (recordCount == 0) {
             return Collections.emptyList();

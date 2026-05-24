@@ -66,7 +66,7 @@ class KvBatchScannerTest {
             new TestingSchemaGetter((short) 1, DATA1_SCHEMA_PK);
 
     @Test
-    void firstPollOpensScannerAndDoesNotIncludeCallSeqId() throws Exception {
+    void firstPollOpensScannerWithCallSeqIdZero() throws Exception {
         RecordingGateway gateway = new RecordingGateway();
         gateway.enqueue(emptyTerminalResponse(SCANNER_ID));
 
@@ -76,7 +76,8 @@ class KvBatchScannerTest {
             ScanKvRequest open = gateway.requests.get(0);
             assertThat(open.hasBucketScanReq()).isTrue();
             assertThat(open.hasScannerId()).isFalse();
-            assertThat(open.hasCallSeqId()).isFalse();
+            assertThat(open.hasCallSeqId()).isTrue(); // open request also carries callSeqId
+            assertThat(open.getCallSeqId()).isEqualTo(0); // open request with 0 seq_id
             assertThat(open.getBucketScanReq().getTableId()).isEqualTo(DATA1_TABLE_ID_PK);
             assertThat(open.getBucketScanReq().getBucketId()).isEqualTo(0);
         }
@@ -97,7 +98,7 @@ class KvBatchScannerTest {
         }
 
         assertThat(gateway.requests).hasSize(4);
-        assertThat(gateway.requests.get(0).hasCallSeqId()).isFalse();
+        assertThat(gateway.requests.get(0).getCallSeqId()).isEqualTo(0);
         assertThat(gateway.requests.get(1).getCallSeqId()).isEqualTo(1);
         assertThat(gateway.requests.get(2).getCallSeqId()).isEqualTo(2);
         assertThat(gateway.requests.get(3).getCallSeqId()).isEqualTo(3);
