@@ -17,10 +17,14 @@
 
 package org.apache.fluss.client.table;
 
+import org.apache.fluss.client.Connection;
+import org.apache.fluss.client.ConnectionFactory;
 import org.apache.fluss.client.admin.ClientToServerITCaseBase;
 import org.apache.fluss.client.table.scanner.batch.BatchScanUtils;
 import org.apache.fluss.client.table.scanner.batch.BatchScanner;
 import org.apache.fluss.client.table.writer.UpsertWriter;
+import org.apache.fluss.config.ConfigOptions;
+import org.apache.fluss.config.Configuration;
 import org.apache.fluss.metadata.PartitionInfo;
 import org.apache.fluss.metadata.Schema;
 import org.apache.fluss.metadata.TableBucket;
@@ -126,21 +130,32 @@ class TableKvScanITCase extends ClientToServerITCaseBase {
         long tableId = createTable(tablePath, singleBucket, true);
         waitAllReplicasReady(tableId, 1);
 
-        try (Table table = conn.getTable(tablePath)) {
+        // Use a very small fetch max bytes to ensure the first poll returns only partial rows,
+        // so subsequent collectRows will issue new scanKv RPCs to truly verify snapshot isolation.
+        Configuration smallFetchConf = new Configuration(clientConf);
+        smallFetchConf.setString(ConfigOptions.CLIENT_SCANNER_KV_FETCH_MAX_BYTES.key(), "128b");
+
+        try (Connection smallFetchConn = ConnectionFactory.createConnection(smallFetchConf);
+                Table table = smallFetchConn.getTable(tablePath)) {
             int initialRows = 20;
             upsertRows(table, initialRows);
 
             try (BatchScanner scanner = table.newScan().createBatchScanner()) {
+                // Pull the first batch (snapshot is pinned; small fetch bytes returns partial rows)
                 List<InternalRow> firstBatch = drainOnePoll(scanner);
+                assertThat(firstBatch.size()).isLessThan(initialRows);
 
+                // Write a new row after the snapshot (id=20, name="post-snapshot")
                 upsertRow(table, initialRows, "post-snapshot");
 
+                // Continue pulling remaining data (triggers new scanKv RPCs)
                 List<InternalRow> remaining = BatchScanUtils.collectRows(scanner);
                 List<InternalRow> all = new ArrayList<>(firstBatch);
                 all.addAll(remaining);
 
+                // Total rows should be 20 (excluding the row written after the snapshot)
                 assertThat(all).hasSize(initialRows);
-                assertThat(idsOf(all)).doesNotContain(initialRows);
+                assertThat(idsOf(all)).doesNotContain(initialRows); // id=20 not visible
             }
         }
     }
