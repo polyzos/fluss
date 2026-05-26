@@ -50,11 +50,10 @@ import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.predicate.Predicate;
-import org.apache.fluss.row.BinaryString;
-import org.apache.fluss.row.GenericRow;
-import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.shaded.guava32.com.google.common.collect.Lists;
+import org.apache.fluss.types.RowType;
 import org.apache.fluss.utils.ExceptionUtils;
+import org.apache.fluss.utils.PartitionUtils;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
@@ -561,9 +560,17 @@ public class FlinkSourceEnumerator
             return partitionInfos;
         } else {
             int originalSize = partitionInfos.size();
+            RowType partitionRowType = PartitionUtils.partitionRowType(tableInfo);
             List<PartitionInfo> filteredPartitionInfos =
                     partitionInfos.stream()
-                            .filter(partition -> partitionFilters.test(toInternalRow(partition)))
+                            .filter(
+                                    partition ->
+                                            partitionFilters.test(
+                                                    PartitionUtils.toPartitionRow(
+                                                            partition
+                                                                    .getResolvedPartitionSpec()
+                                                                    .getPartitionValues(),
+                                                            partitionRowType)))
                             .collect(Collectors.toList());
 
             int filteredSize = filteredPartitionInfos.size();
@@ -584,16 +591,6 @@ public class FlinkSourceEnumerator
             }
             return filteredPartitionInfos;
         }
-    }
-
-    private static InternalRow toInternalRow(PartitionInfo partitionInfo) {
-        List<String> partitionValues =
-                partitionInfo.getResolvedPartitionSpec().getPartitionValues();
-        GenericRow genericRow = new GenericRow(partitionValues.size());
-        for (int i = 0; i < partitionValues.size(); i++) {
-            genericRow.setField(i, BinaryString.fromString(partitionValues.get(i)));
-        }
-        return genericRow;
     }
 
     /** Init the splits for Fluss. */
