@@ -42,6 +42,7 @@ import org.apache.fluss.rpc.messages.PbHeartbeatReqForTable;
 import org.apache.fluss.rpc.messages.PbLakeTieringStats;
 import org.apache.fluss.rpc.messages.PbLakeTieringTableInfo;
 import org.apache.fluss.rpc.metrics.ClientMetricGroup;
+import org.apache.fluss.utils.ExceptionUtils;
 
 import org.apache.flink.api.connector.source.ReaderInfo;
 import org.apache.flink.api.connector.source.SourceEvent;
@@ -352,10 +353,11 @@ public class TieringSourceEnumerator
         }
     }
 
-    private void generateAndAssignSplits(
+    @VisibleForTesting
+    void generateAndAssignSplits(
             @Nullable Tuple3<Long, Long, TablePath> tieringTable, Throwable throwable) {
         if (throwable != null) {
-            LOG.warn("Failed to request tiering table, will retry later.", throwable);
+            ExceptionUtils.rethrow(throwable);
         }
         if (tieringTable != null) {
             generateTieringSplits(tieringTable);
