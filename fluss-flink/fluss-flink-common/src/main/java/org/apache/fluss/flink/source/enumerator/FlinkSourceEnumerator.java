@@ -133,6 +133,20 @@ public class FlinkSourceEnumerator
     /** Buckets that have been assigned to readers. */
     private final Set<TableBucket> assignedTableBuckets;
 
+    /**
+     * Remaining lake snapshot and hybrid lake/Fluss splits to assign.
+     *
+     * <p>The field has three states:
+     *
+     * <ul>
+     *   <li>{@code null}: lake split initialization has not run yet, or the source has no lake
+     *       (non-lake table) so initialization will never run.
+     *   <li>empty list: lake split initialization has run, or this enumerator was started in
+     *       Fluss-only (non-lake) mode and must not initialize lake splits after restore.
+     *   <li>non-empty list: lake split initialization has run and these splits still need to be
+     *       assigned.
+     * </ul>
+     */
     @Nullable private List<SourceSplitBase> pendingHybridLakeFlussSplits;
 
     private final long scanPartitionDiscoveryIntervalMs;
@@ -513,18 +527,15 @@ public class FlinkSourceEnumerator
 
     private void startInStreamModeForNonPartitionedTable() {
         if (lakeSource != null) {
-            context.callAsync(
-                    () -> {
-                        // firstly, try to generate hybrid lake splits,
-                        List<SourceSplitBase> splits = generateHybridLakeFlussSplits();
-                        // splits is null,
-                        // we'll fall back to normal fluss splits generation logic
-                        if (splits == null) {
-                            splits = this.initNonPartitionedSplits();
-                        }
-                        return splits;
-                    },
-                    this::handleSplitsAdd);
+            // Generate lake splits synchronously so that they are available before the
+            // first checkpoint. This is consistent with the partitioned-table path in
+            // start().
+            List<SourceSplitBase> splits = generateHybridLakeFlussSplits();
+            if (splits == null) {
+                // no lake snapshot, fall back to normal Fluss splits
+                splits = this.initNonPartitionedSplits();
+            }
+            handleSplitsAdd(splits, null);
         } else {
             // init bucket splits and assign
             context.callAsync(this::initNonPartitionedSplits, this::handleSplitsAdd);
@@ -872,9 +883,8 @@ public class FlinkSourceEnumerator
     /** Return the hybrid lake and fluss splits. Return null if no lake snapshot. */
     @Nullable
     private List<SourceSplitBase> generateHybridLakeFlussSplits() {
-        // still have pending lake fluss splits,
-        // should be restored from checkpoint, shouldn't
-        // list splits again
+        // Restored from checkpoint with pending lake splits — return them directly
+        // without re-generating.
         if (pendingHybridLakeFlussSplits != null) {
             LOG.info("Still have pending lake fluss splits, shouldn't list splits again.");
             return pendingHybridLakeFlussSplits;
