@@ -899,10 +899,14 @@ public final class Replica {
                             snapshotContext.getZooKeeperClient(),
                             snapshotContext.maxFetchLogSizeInRecoverKv());
 
-            // Always create RemoteLogFetcher; the temp directory is lazily created only
-            // when fetch() is actually called, so this is lightweight.
+            // Temp directory is created lazily on first fetch().
             RemoteLogFetcher remoteLogFetcher =
-                    new RemoteLogFetcher(remoteLogManager, tableBucket, logTablet.getLogDir());
+                    new RemoteLogFetcher(
+                            remoteLogManager,
+                            tableBucket,
+                            logTablet.getLogDir(),
+                            snapshotContext.remoteLogPrefetchNumInRecoverKv(),
+                            snapshotContext.remoteLogDownloadThreadsInRecoverKv());
 
             try {
                 KvRecoverHelper kvRecoverHelper =
