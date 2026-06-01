@@ -50,20 +50,20 @@ trait FlussSupportsPushDownPartitionFilters
   def tableInfo: TableInfo
 
   protected var partitionPredicate: Option[FlussPredicate] = None
-
-  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-    partitionPredicate = SparkPartitionPredicate.extract(tableInfo, predicates.toSeq)
-    predicates
-  }
-
-  override def pushedPredicates(): Array[Predicate] = Array.empty
-}
-
-/** Adds ARROW server-side log filtering on top of partition pushdown. */
-trait FlussSupportsPushDownV2Filters extends FlussSupportsPushDownPartitionFilters {
-
   protected var pushedPredicate: Option[FlussPredicate] = None
   protected var acceptedPredicates: Array[Predicate] = Array.empty[Predicate]
+
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    val (nonPartitionPred, partitionPred) =
+      SparkPartitionPredicate.extract(tableInfo, predicates.toSeq)
+    partitionPredicate = partitionPred
+    nonPartitionPred.toArray
+  }
+
+  override def pushedPredicates(): Array[Predicate] = acceptedPredicates
+}
+
+trait FlussSupportsPushDownV2Filters extends FlussSupportsPushDownPartitionFilters {
 
   protected def convertAndStorePredicates(predicates: Array[Predicate]): Unit = {
     val (predicate, accepted) =
@@ -73,15 +73,13 @@ trait FlussSupportsPushDownV2Filters extends FlussSupportsPushDownPartitionFilte
   }
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-    super.pushPredicates(predicates)
-    // Server-side batch filter only supports ARROW; other log formats reject it.
-    if (tableInfo.getTableConfig.getLogFormat == LogFormat.ARROW) {
-      convertAndStorePredicates(predicates)
+    val nonPartitionPredicates = super.pushPredicates(predicates)
+    if (!tableInfo.hasPrimaryKey && tableInfo.getTableConfig.getLogFormat == LogFormat.ARROW) {
+      // Server-side batch filter for log table only supports ARROW; other log formats reject it.
+      convertAndStorePredicates(nonPartitionPredicates)
     }
-    predicates
+    nonPartitionPredicates
   }
-
-  override def pushedPredicates(): Array[Predicate] = acceptedPredicates
 }
 
 /**
@@ -89,13 +87,16 @@ trait FlussSupportsPushDownV2Filters extends FlussSupportsPushDownPartitionFilte
  * offered to the lake source individually; only the lake-accepted subset is reported back to Spark
  * and combined into the predicate handed to the scan.
  */
-trait FlussLakeSupportsPushDownV2Filters extends FlussSupportsPushDownV2Filters {
+trait FlussLakeSupportsPushDownV2Filters extends FlussSupportsPushDownPartitionFilters {
 
   def tablePath: TablePath
 
   def flussConfig: FlussConfiguration
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    val nonPartitionPredicates = super.pushPredicates(predicates)
+
+    // Pass ALL predicates to Lake Source (including partition predicates) for lake-side filtering
     val pairs =
       SparkPredicateConverter.convertPerPredicate(tableInfo.getRowType, predicates.toSeq)
     val (acceptedSpark, acceptedFluss) = if (pairs.isEmpty) {
@@ -112,7 +113,7 @@ trait FlussLakeSupportsPushDownV2Filters extends FlussSupportsPushDownV2Filters 
     }
     pushedPredicate = SparkPredicateConverter.combineAnd(acceptedFluss)
     acceptedPredicates = acceptedSpark.toArray
-    predicates
+    nonPartitionPredicates
   }
 }
 
@@ -151,6 +152,7 @@ class FlussLakeAppendScanBuilder(
       tableInfo,
       requiredSchema,
       pushedPredicate,
+      partitionPredicate,
       acceptedPredicates.toSeq,
       options,
       flussConfig)
@@ -163,7 +165,7 @@ class FlussUpsertScanBuilder(
     val tableInfo: TableInfo,
     options: CaseInsensitiveStringMap,
     val flussConfig: FlussConfiguration)
-  extends FlussSupportsPushDownPartitionFilters {
+  extends FlussSupportsPushDownV2Filters {
 
   override def build(): Scan = {
     FlussUpsertScan(tablePath, tableInfo, requiredSchema, partitionPredicate, options, flussConfig)
@@ -184,6 +186,7 @@ class FlussLakeUpsertScanBuilder(
       tableInfo,
       requiredSchema,
       pushedPredicate,
+      partitionPredicate,
       acceptedPredicates.toSeq,
       options,
       flussConfig)
