@@ -21,10 +21,14 @@ import org.apache.fluss.client.Connection;
 import org.apache.fluss.client.ConnectionFactory;
 import org.apache.fluss.client.admin.Admin;
 import org.apache.fluss.client.initializer.OffsetsInitializer;
+import org.apache.fluss.client.initializer.SnapshotOffsetsInitializer;
 import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.config.Configuration;
 import org.apache.fluss.flink.FlinkConnectorOptions;
 import org.apache.fluss.flink.source.deserializer.FlussDeserializationSchema;
+import org.apache.fluss.flink.utils.LakeSourceUtils;
+import org.apache.fluss.lake.source.LakeSource;
+import org.apache.fluss.lake.source.LakeSplit;
 import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.predicate.Predicate;
@@ -59,6 +63,11 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  *     .setDeserializationSchema(new OrderDeserializationSchema())
  *     .build();
  * }</pre>
+ *
+ * <p>When the target table has datalake enabled and the source starts in full mode (the default,
+ * {@link OffsetsInitializer#full()}), the built source performs a union read: it reads the
+ * historical data tiered to the lake (e.g. Iceberg, Paimon) together with the real-time data still
+ * in Fluss. Other startup modes (earliest/latest/timestamp) read data from Fluss only.
  *
  * @param <OUT> The type of records produced by the source being built
  */
@@ -324,6 +333,24 @@ public class FlussSourceBuilder<OUT> {
                         ? tableInfo.getRowType().project(projectedFields)
                         : tableInfo.getRowType();
 
+        // When the table has datalake enabled and the source reads in full mode, union the
+        // historical data tiered to the lake (e.g. Iceberg, Paimon) with the real-time data in
+        // Fluss. This mirrors the behavior of the Flink SQL/Table connector. Other startup modes
+        // (earliest/latest/timestamp) read Fluss data only.
+        LakeSource<LakeSplit> lakeSource = null;
+        if (tableInfo.getTableConfig().isDataLakeEnabled()
+                && offsetsInitializer instanceof SnapshotOffsetsInitializer) {
+            lakeSource =
+                    LakeSourceUtils.createLakeSource(tablePath, tableInfo.getProperties().toMap());
+            if (lakeSource != null && projectedFields != null) {
+                int[][] nestedProjectedFields = new int[projectedFields.length][];
+                for (int i = 0; i < projectedFields.length; i++) {
+                    nestedProjectedFields[i] = new int[] {projectedFields[i]};
+                }
+                lakeSource.withProject(nestedProjectedFields);
+            }
+        }
+
         LOG.info("Creating Fluss Source with Configuration: {}", flussConf);
 
         return new FlussSource<>(
@@ -338,6 +365,7 @@ public class FlussSourceBuilder<OUT> {
                 scanPartitionDiscoveryIntervalMs,
                 splitPerAssignmentBatchSize,
                 deserializationSchema,
-                true);
+                true,
+                lakeSource);
     }
 }
