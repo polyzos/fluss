@@ -19,12 +19,10 @@ package org.apache.fluss.client.table.scanner.log;
 
 import org.apache.fluss.annotation.Internal;
 import org.apache.fluss.client.metadata.MetadataUpdater;
-import org.apache.fluss.client.table.scanner.ScanRecord;
 import org.apache.fluss.config.Configuration;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TablePath;
-import org.apache.fluss.record.LogRecord;
-import org.apache.fluss.record.LogRecordBatch;
+import org.apache.fluss.record.ArrowBatchData;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,21 +32,14 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 import java.util.Map;
 
-/* This file is based on source code of Apache Kafka Project (https://kafka.apache.org/), licensed by the Apache
- * Software Foundation (ASF) under the Apache License, Version 2.0. See the NOTICE file distributed with this work for
- * additional information regarding copyright ownership. */
-
-/**
- * {@link LogFetchCollector} operates at the {@link LogRecordBatch} level, as that is what is stored
- * in the {@link LogFetchBuffer}. Each {@link LogRecord} in the {@link LogRecordBatch} is converted
- * to a {@link ScanRecord} and added to the returned {@link LogFetcher}.
- */
+/** Collects Arrow batches from completed fetches. */
 @ThreadSafe
 @Internal
-public class LogFetchCollector extends AbstractLogFetchCollector<ScanRecord, ScanRecords> {
-    private static final Logger LOG = LoggerFactory.getLogger(LogFetchCollector.class);
+public class ArrowLogFetchCollector
+        extends AbstractLogFetchCollector<ArrowBatchData, ArrowScanRecords> {
+    private static final Logger LOG = LoggerFactory.getLogger(ArrowLogFetchCollector.class);
 
-    public LogFetchCollector(
+    public ArrowLogFetchCollector(
             TablePath tablePath,
             LogScannerStatus logScannerStatus,
             Configuration conf,
@@ -57,17 +48,37 @@ public class LogFetchCollector extends AbstractLogFetchCollector<ScanRecord, Sca
     }
 
     @Override
-    protected List<ScanRecord> doFetchRecords(CompletedFetch nextInLineFetch, int maxRecords) {
-        return nextInLineFetch.fetchRecords(maxRecords);
+    protected List<ArrowBatchData> doFetchRecords(CompletedFetch nextInLineFetch, int maxRecords) {
+        return nextInLineFetch.fetchArrowBatches(maxRecords);
     }
 
     @Override
-    protected int recordCount(List<ScanRecord> fetchedRecords) {
-        return fetchedRecords.size();
+    protected int recordCount(List<ArrowBatchData> fetchedRecords) {
+        int count = 0;
+        for (ArrowBatchData fetchedRecord : fetchedRecords) {
+            count += fetchedRecord.getRecordCount();
+        }
+        return count;
     }
 
     @Override
-    protected ScanRecords toResult(Map<TableBucket, List<ScanRecord>> fetchedRecords) {
-        return new ScanRecords(fetchedRecords);
+    protected ArrowScanRecords toResult(Map<TableBucket, List<ArrowBatchData>> fetchedRecords) {
+        return new ArrowScanRecords(fetchedRecords);
+    }
+
+    @Override
+    protected void closeFetchedRecords(Map<TableBucket, List<ArrowBatchData>> fetched) {
+        for (List<ArrowBatchData> batches : fetched.values()) {
+            for (ArrowBatchData batch : batches) {
+                try {
+                    batch.close();
+                } catch (Exception e) {
+                    LOG.warn(
+                            "Failed to close Arrow batch during cleanup for table {}",
+                            tablePath,
+                            e);
+                }
+            }
+        }
     }
 }
