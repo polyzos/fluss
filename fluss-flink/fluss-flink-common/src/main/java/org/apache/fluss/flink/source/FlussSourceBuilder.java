@@ -82,6 +82,7 @@ public class FlussSourceBuilder<OUT> {
     private Long scanPartitionDiscoveryIntervalMs;
     private Integer splitPerAssignmentBatchSize;
     private OffsetsInitializer offsetsInitializer;
+    private boolean bounded;
     private FlussDeserializationSchema<OUT> deserializationSchema;
 
     private String bootstrapServers;
@@ -167,6 +168,19 @@ public class FlussSourceBuilder<OUT> {
      */
     public FlussSourceBuilder<OUT> setStartingOffsets(OffsetsInitializer offsetsInitializer) {
         this.offsetsInitializer = offsetsInitializer;
+        return this;
+    }
+
+    /**
+     * Builds a bounded source for batch execution. The source reads up to the latest offsets at job
+     * startup and then finishes; combined with the default {@link OffsetsInitializer#full()} on a
+     * datalake-enabled table this performs a bounded union read of the lake snapshot and the Fluss
+     * log. If not called, the source is unbounded (streaming).
+     *
+     * @return this builder
+     */
+    public FlussSourceBuilder<OUT> setBounded() {
+        this.bounded = true;
         return this;
     }
 
@@ -333,10 +347,8 @@ public class FlussSourceBuilder<OUT> {
                         ? tableInfo.getRowType().project(projectedFields)
                         : tableInfo.getRowType();
 
-        // When the table has datalake enabled and the source reads in full mode, union the
-        // historical data tiered to the lake (e.g. Iceberg, Paimon) with the real-time data in
-        // Fluss. This mirrors the behavior of the Flink SQL/Table connector. Other startup modes
-        // (earliest/latest/timestamp) read Fluss data only.
+        // union read (lake historical + Fluss) only applies to full startup mode, like the SQL
+        // connector; other startup modes read Fluss only.
         LakeSource<LakeSplit> lakeSource = null;
         if (tableInfo.getTableConfig().isDataLakeEnabled()
                 && offsetsInitializer instanceof SnapshotOffsetsInitializer) {
@@ -365,7 +377,7 @@ public class FlussSourceBuilder<OUT> {
                 scanPartitionDiscoveryIntervalMs,
                 splitPerAssignmentBatchSize,
                 deserializationSchema,
-                true,
+                !bounded,
                 lakeSource);
     }
 }

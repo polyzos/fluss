@@ -30,17 +30,21 @@ import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.types.DataTypes;
 
+import org.apache.flink.api.common.RuntimeExecutionMode;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.types.Row;
 import org.apache.flink.types.RowKind;
+import org.apache.flink.util.CloseableIterator;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.data.IcebergGenerics;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.io.CloseableIterable;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -63,14 +67,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>These tests mirror the Flink SQL union-read coverage ({@code FlinkUnionReadLogTableITCase} and
  * {@code FlinkUnionReadPrimaryKeyTableITCase}) but exercise the programmatic DataStream source.
  * Each test asserts the three properties that make a union read meaningful:
- *
- * <ol>
- *   <li>the first batch is physically tiered to Iceberg (verified by reading Iceberg directly);
- *   <li>a second batch written after the tiering job stops lives only in Fluss (verified by
- *       asserting Iceberg still holds exactly the first batch);
- *   <li>a {@code full()} DataStream source returns the union of the Iceberg historical data and the
- *       real-time Fluss data.
- * </ol>
  */
 public class FlinkUnionReadDataStreamITCase extends FlinkUnionReadTestBase {
 
@@ -93,27 +89,21 @@ public class FlinkUnionReadDataStreamITCase extends FlinkUnionReadTestBase {
         long tableId = createLogTable(tablePath, isPartitioned);
         List<String> partitions = partitionsOf(tablePath, isPartitioned);
 
-        // first batch: written to Fluss and tiered to Iceberg
         List<Row> firstBatch = new ArrayList<>();
         for (String partition : partitions) {
             firstBatch.addAll(appendLogRows(tablePath, 0, 5, partition));
         }
         waitUntilBucketSynced(tablePath, tableId, DEFAULT_BUCKET_NUM, isPartitioned);
-
-        // (1) verify the first batch is actually in Iceberg
         assertIcebergContainsExactly(tablePath, isPartitioned, firstBatch);
 
-        // second batch: written to Fluss only, after tiering has stopped
+        // written after tiering stops, so this batch lives only in Fluss
         tieringJob.cancel().get();
         List<Row> secondBatch = new ArrayList<>();
         for (String partition : partitions) {
             secondBatch.addAll(appendLogRows(tablePath, 100, 3, partition));
         }
-
-        // (2) verify the second batch is NOT in Iceberg (still only the first batch is tiered)
         assertIcebergContainsExactly(tablePath, isPartitioned, firstBatch);
 
-        // (3) union read must return the Iceberg historical data + the Fluss-only data
         List<Row> expected = new ArrayList<>(firstBatch);
         expected.addAll(secondBatch);
         FlussSource<RowData> source = buildSource(tableName);
@@ -133,28 +123,22 @@ public class FlinkUnionReadDataStreamITCase extends FlinkUnionReadTestBase {
         long tableId = createPkTable(tablePath, isPartitioned);
         List<String> partitions = partitionsOf(tablePath, isPartitioned);
 
-        // first batch: three distinct keys per partition, tiered to Iceberg as the snapshot
         List<Row> snapshotRows = new ArrayList<>();
         for (String partition : partitions) {
             snapshotRows.addAll(upsertRows(tablePath, 1, 3, partition));
         }
         waitUntilBucketSynced(tablePath, tableId, DEFAULT_BUCKET_NUM, isPartitioned);
-
-        // (1) verify the snapshot (latest value per key) is actually in Iceberg
         assertIcebergContainsExactly(tablePath, isPartitioned, snapshotRows);
 
-        // after tiering stops, update one existing key per partition. The update lives only in the
-        // Fluss changelog and is read as -U/+U on top of the Iceberg snapshot read as +I.
+        // update after tiering stops: lives only in the Fluss changelog, read as -U/+U on top of
+        // the Iceberg snapshot read as +I
         tieringJob.cancel().get();
         List<Row> changelog = new ArrayList<>();
         for (String partition : partitions) {
             changelog.addAll(updateRow(tablePath, 1, partition));
         }
-
-        // (2) verify the update is NOT in Iceberg: it must still hold the original snapshot values
         assertIcebergContainsExactly(tablePath, isPartitioned, snapshotRows);
 
-        // (3) union read must return the Iceberg snapshot (+I) and the Fluss-only changelog (-U/+U)
         List<Row> expected = new ArrayList<>(snapshotRows);
         expected.addAll(changelog);
         FlussSource<RowData> source = buildSource(tableName);
@@ -164,36 +148,24 @@ public class FlinkUnionReadDataStreamITCase extends FlinkUnionReadTestBase {
         assertRowsIgnoreOrder(actual, expected);
     }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    void testUnionReadWithProjectionPushdown(boolean isPartitioned) throws Exception {
+    // projection and boundedness are independent of partitioning, which the log/PK tests above
+    // already cover, so these run on a single non-partitioned table
+    @Test
+    void testUnionReadWithProjectionPushdown() throws Exception {
         JobClient tieringJob = buildTieringJob(execEnv);
 
-        String tableName =
-                "ds_union_projection_" + (isPartitioned ? "partitioned" : "non_partitioned");
+        String tableName = "ds_union_projection";
         TablePath tablePath = TablePath.of(DEFAULT_DB, tableName);
-        long tableId = createLogTable(tablePath, isPartitioned);
-        List<String> partitions = partitionsOf(tablePath, isPartitioned);
+        long tableId = createLogTable(tablePath, false);
 
-        List<Row> firstBatch = new ArrayList<>();
-        for (String partition : partitions) {
-            firstBatch.addAll(appendLogRows(tablePath, 0, 5, partition));
-        }
-        waitUntilBucketSynced(tablePath, tableId, DEFAULT_BUCKET_NUM, isPartitioned);
-
-        // (1) verify the first batch is actually in Iceberg
-        assertIcebergContainsExactly(tablePath, isPartitioned, firstBatch);
+        List<Row> firstBatch = appendLogRows(tablePath, 0, 5, null);
+        waitUntilBucketSynced(tablePath, tableId, DEFAULT_BUCKET_NUM, false);
+        assertIcebergContainsExactly(tablePath, false, firstBatch);
 
         tieringJob.cancel().get();
-        List<Row> secondBatch = new ArrayList<>();
-        for (String partition : partitions) {
-            secondBatch.addAll(appendLogRows(tablePath, 100, 3, partition));
-        }
+        List<Row> secondBatch = appendLogRows(tablePath, 100, 3, null);
+        assertIcebergContainsExactly(tablePath, false, firstBatch);
 
-        // (2) verify the second batch is NOT in Iceberg (Fluss-only)
-        assertIcebergContainsExactly(tablePath, isPartitioned, firstBatch);
-
-        // (3) union read with projection must return only (id, amount) for both sources
         List<Row> written = new ArrayList<>(firstBatch);
         written.addAll(secondBatch);
         FlussSource<RowData> source = buildSource(tableName, "id", "amount");
@@ -203,6 +175,42 @@ public class FlinkUnionReadDataStreamITCase extends FlinkUnionReadTestBase {
                 written.stream()
                         .map(r -> Row.ofKind(RowKind.INSERT, r.getField(0), r.getField(2)))
                         .collect(Collectors.toList());
+
+        assertRowsIgnoreOrder(actual, expected);
+    }
+
+    @Test
+    void testBatchUnionReadLogTable() throws Exception {
+        JobClient tieringJob = buildTieringJob(execEnv);
+
+        String tableName = "ds_batch_union_log";
+        TablePath tablePath = TablePath.of(DEFAULT_DB, tableName);
+        long tableId = createLogTable(tablePath, false);
+
+        List<Row> firstBatch = appendLogRows(tablePath, 0, 5, null);
+        waitUntilBucketSynced(tablePath, tableId, DEFAULT_BUCKET_NUM, false);
+        assertIcebergContainsExactly(tablePath, false, firstBatch);
+
+        tieringJob.cancel().get();
+        List<Row> secondBatch = appendLogRows(tablePath, 100, 3, null);
+        assertIcebergContainsExactly(tablePath, false, firstBatch);
+
+        List<Row> expected = new ArrayList<>(firstBatch);
+        expected.addAll(secondBatch);
+
+        StreamExecutionEnvironment batchEnv = StreamExecutionEnvironment.getExecutionEnvironment();
+        batchEnv.setRuntimeMode(RuntimeExecutionMode.BATCH);
+        batchEnv.setParallelism(2);
+        FlussSource<RowData> source =
+                FlussSource.<RowData>builder()
+                        .setBootstrapServers(bootstrapServers())
+                        .setDatabase(DEFAULT_DB)
+                        .setTable(tableName)
+                        .setStartingOffsets(OffsetsInitializer.full())
+                        .setBounded()
+                        .setDeserializationSchema(new RowDataDeserializationSchema())
+                        .build();
+        List<Row> actual = collectBounded(batchEnv, source, FULL_COLS);
 
         assertRowsIgnoreOrder(actual, expected);
     }
@@ -233,6 +241,21 @@ public class FlinkUnionReadDataStreamITCase extends FlinkUnionReadTestBase {
         return stream.executeAndCollect(expectedCount).stream()
                 .map(rowData -> toRow(rowData, cols))
                 .collect(Collectors.toList());
+    }
+
+    private List<Row> collectBounded(
+            StreamExecutionEnvironment env, FlussSource<RowData> source, int[] cols)
+            throws Exception {
+        DataStreamSource<RowData> stream =
+                env.fromSource(
+                        source, WatermarkStrategy.noWatermarks(), "Fluss Union Source (batch)");
+        List<Row> rows = new ArrayList<>();
+        try (CloseableIterator<RowData> iterator = stream.executeAndCollect()) {
+            while (iterator.hasNext()) {
+                rows.add(toRow(iterator.next(), cols));
+            }
+        }
+        return rows;
     }
 
     private List<String> partitionsOf(TablePath tablePath, boolean isPartitioned) {
@@ -332,23 +355,16 @@ public class FlinkUnionReadDataStreamITCase extends FlinkUnionReadTestBase {
                         expected.stream().map(Row::toString).collect(Collectors.toList()));
     }
 
-    /**
-     * Asserts that the data physically present in Iceberg is exactly {@code expectedValues}
-     * (ignoring order). Because tiering is asynchronous, it first waits until the expected number
-     * of rows is visible. Comparing for exact equality both proves that the tiered batch is in
-     * Iceberg and that no later (Fluss-only) data has leaked into Iceberg.
-     */
     private void assertIcebergContainsExactly(
             TablePath tablePath, boolean isPartitioned, List<Row> expectedValues) throws Exception {
+        // tiering is asynchronous; poll once per second (a tight loop would exhaust file
+        // descriptors) until the expected rows are visible, then assert exact contents
         waitUntil(
                 () -> readIcebergUserRows(tablePath, isPartitioned).size() == expectedValues.size(),
                 Duration.ofMinutes(2),
-                // poll once per second: each probe opens Iceberg/Parquet readers, so a tight loop
-                // would exhaust file descriptors
                 Duration.ofSeconds(1),
                 "Iceberg did not contain the expected number of rows for " + tablePath);
         List<Row> icebergValues = readIcebergUserRows(tablePath, isPartitioned);
-        // expected rows carry an INSERT kind; compare on values only by normalizing both sides
         assertThat(icebergValues.stream().map(Row::toString).collect(Collectors.toList()))
                 .containsExactlyInAnyOrderElementsOf(
                         expectedValues.stream()
@@ -358,10 +374,8 @@ public class FlinkUnionReadDataStreamITCase extends FlinkUnionReadTestBase {
 
     private List<Row> readIcebergUserRows(TablePath tablePath, boolean isPartitioned)
             throws Exception {
-        // Read Iceberg directly via a full generic scan. This reads all partitions and applies
-        // primary-key deletes (so a PK table yields the latest value per key), and avoids the
-        // shared test util's log-table reader which de-duplicates data files by __offset and would
-        // drop same-offset files from different partitions.
+        // full generic scan reads all partitions and applies PK deletes; avoids the shared util's
+        // log-table reader which drops same-offset data files from different partitions
         Table table = icebergCatalog.loadTable(toIceberg(tablePath));
         List<Row> rows = new ArrayList<>();
         try (CloseableIterable<Record> records = IcebergGenerics.read(table).build()) {
