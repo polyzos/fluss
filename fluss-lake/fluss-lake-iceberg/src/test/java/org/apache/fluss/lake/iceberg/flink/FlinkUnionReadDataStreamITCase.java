@@ -27,8 +27,11 @@ import org.apache.fluss.flink.source.deserializer.RowDataDeserializationSchema;
 import org.apache.fluss.metadata.Schema;
 import org.apache.fluss.metadata.TableDescriptor;
 import org.apache.fluss.metadata.TablePath;
+import org.apache.fluss.predicate.Predicate;
+import org.apache.fluss.predicate.PredicateBuilder;
 import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.types.DataTypes;
+import org.apache.fluss.types.RowType;
 
 import org.apache.flink.api.common.RuntimeExecutionMode;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
@@ -60,6 +63,7 @@ import static org.apache.fluss.lake.iceberg.utils.IcebergConversions.toIceberg;
 import static org.apache.fluss.testutils.DataTestUtils.row;
 import static org.apache.fluss.testutils.common.CommonTestUtils.waitUntil;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Integration tests for union read through the DataStream {@link FlussSource}.
@@ -67,6 +71,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>These tests mirror the Flink SQL union-read coverage ({@code FlinkUnionReadLogTableITCase} and
  * {@code FlinkUnionReadPrimaryKeyTableITCase}) but exercise the programmatic DataStream source.
  * Each test asserts the three properties that make a union read meaningful:
+ *
+ * <ul>
+ *   <li>data tiered to the lake before tiering stopped is read back from the lake snapshot;
+ *   <li>data written to Fluss after tiering stopped is read from the live Fluss log;
+ *   <li>the union of both is returned exactly once (for PK tables the Fluss changelog is applied as
+ *       -U/+U on top of the lake snapshot read as +I).
+ * </ul>
  */
 public class FlinkUnionReadDataStreamITCase extends FlinkUnionReadTestBase {
 
@@ -148,8 +159,8 @@ public class FlinkUnionReadDataStreamITCase extends FlinkUnionReadTestBase {
         assertRowsIgnoreOrder(actual, expected);
     }
 
-    // projection and boundedness are independent of partitioning, which the log/PK tests above
-    // already cover, so these run on a single non-partitioned table
+    // projection, filtering and boundedness are independent of partitioning, which the log/PK tests
+    // above already cover, so these run on a single non-partitioned table
     @Test
     void testUnionReadWithProjectionPushdown() throws Exception {
         JobClient tieringJob = buildTieringJob(execEnv);
@@ -177,6 +188,90 @@ public class FlinkUnionReadDataStreamITCase extends FlinkUnionReadTestBase {
                         .collect(Collectors.toList());
 
         assertRowsIgnoreOrder(actual, expected);
+    }
+
+    @Test
+    void testUnionReadWithFilterPushdown() throws Exception {
+        JobClient tieringJob = buildTieringJob(execEnv);
+
+        String tableName = "ds_union_filter";
+        TablePath tablePath = TablePath.of(DEFAULT_DB, tableName);
+        long tableId = createLogTable(tablePath, false);
+
+        // amounts 0..40, tiered to the lake snapshot
+        List<Row> firstBatch = appendLogRows(tablePath, 0, 5, null);
+        waitUntilBucketSynced(tablePath, tableId, DEFAULT_BUCKET_NUM, false);
+        assertIcebergContainsExactly(tablePath, false, firstBatch);
+
+        // amounts 1000..1020, written after tiering stops so they live only in the Fluss log
+        tieringJob.cancel().get();
+        List<Row> secondBatch = appendLogRows(tablePath, 100, 3, null);
+        assertIcebergContainsExactly(tablePath, false, firstBatch);
+
+        // 'amount >= 100' prunes the lake snapshot file (max amount 40) during Iceberg planning and
+        // keeps the Fluss batch (min amount 1000), so the union read must return exactly the Fluss
+        // batch. If the filter were not pushed to the lake side, the snapshot rows would leak in.
+        RowType rowType =
+                RowType.builder()
+                        .field("id", DataTypes.INT())
+                        .field("name", DataTypes.STRING())
+                        .field("amount", DataTypes.BIGINT())
+                        .build();
+        Predicate filter = new PredicateBuilder(rowType).greaterOrEqual(2, 100L);
+
+        FlussSource<RowData> source =
+                FlussSource.<RowData>builder()
+                        .setBootstrapServers(bootstrapServers())
+                        .setDatabase(DEFAULT_DB)
+                        .setTable(tableName)
+                        .setStartingOffsets(OffsetsInitializer.full())
+                        .setScanPartitionDiscoveryIntervalMs(100L)
+                        .setFilter(filter)
+                        .setDeserializationSchema(new RowDataDeserializationSchema())
+                        .build();
+        List<Row> actual = collect(source, secondBatch.size(), FULL_COLS);
+
+        assertRowsIgnoreOrder(actual, secondBatch);
+    }
+
+    @Test
+    void testBoundedRequiresFullStartupModeFailsFast() throws Exception {
+        String tableName = "ds_bounded_invalid_startup";
+        TablePath tablePath = TablePath.of(DEFAULT_DB, tableName);
+        createLogTable(tablePath, false);
+
+        FlussSourceBuilder<RowData> builder =
+                FlussSource.<RowData>builder()
+                        .setBootstrapServers(bootstrapServers())
+                        .setDatabase(DEFAULT_DB)
+                        .setTable(tableName)
+                        .setStartingOffsets(OffsetsInitializer.earliest())
+                        .setBounded()
+                        .setDeserializationSchema(new RowDataDeserializationSchema());
+
+        assertThatThrownBy(builder::build)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Bounded (batch) read requires");
+    }
+
+    @Test
+    void testBoundedRequiresDataLakeEnabledFailsFast() throws Exception {
+        String tableName = "ds_bounded_no_lake";
+        TablePath tablePath = TablePath.of(DEFAULT_DB, tableName);
+        createNonLakeLogTable(tablePath);
+
+        FlussSourceBuilder<RowData> builder =
+                FlussSource.<RowData>builder()
+                        .setBootstrapServers(bootstrapServers())
+                        .setDatabase(DEFAULT_DB)
+                        .setTable(tableName)
+                        .setStartingOffsets(OffsetsInitializer.full())
+                        .setBounded()
+                        .setDeserializationSchema(new RowDataDeserializationSchema());
+
+        assertThatThrownBy(builder::build)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Bounded (batch) read requires");
     }
 
     @Test
@@ -425,6 +520,21 @@ public class FlinkUnionReadDataStreamITCase extends FlinkUnionReadTestBase {
         }
         tableBuilder.distributedBy(DEFAULT_BUCKET_NUM, "id").schema(schemaBuilder.build());
         return createTable(tablePath, tableBuilder.build());
+    }
+
+    private long createNonLakeLogTable(TablePath tablePath) throws Exception {
+        Schema schema =
+                Schema.newBuilder()
+                        .column("id", DataTypes.INT())
+                        .column("name", DataTypes.STRING())
+                        .column("amount", DataTypes.BIGINT())
+                        .build();
+        TableDescriptor descriptor =
+                TableDescriptor.builder()
+                        .distributedBy(DEFAULT_BUCKET_NUM, "id")
+                        .schema(schema)
+                        .build();
+        return createTable(tablePath, descriptor);
     }
 
     private long createPkTable(TablePath tablePath, boolean isPartitioned) throws Exception {

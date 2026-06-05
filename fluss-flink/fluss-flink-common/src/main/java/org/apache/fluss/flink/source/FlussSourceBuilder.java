@@ -37,6 +37,7 @@ import org.apache.fluss.types.RowType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -349,17 +350,35 @@ public class FlussSourceBuilder<OUT> {
 
         // union read (lake historical + Fluss) only applies to full startup mode, like the SQL
         // connector; other startup modes read Fluss only.
+        boolean lakeEnabled = tableInfo.getTableConfig().isDataLakeEnabled();
+        boolean fullStartup = offsetsInitializer instanceof SnapshotOffsetsInitializer;
+
+        if (bounded && !(lakeEnabled && fullStartup)) {
+            throw new IllegalArgumentException(
+                    String.format(
+                            "Bounded (batch) read requires a datalake-enabled table started in "
+                                    + "full mode (OffsetsInitializer.full()), but table '%s' has "
+                                    + "datalake enabled=%s and full startup mode=%s.",
+                            tablePath, lakeEnabled, fullStartup));
+        }
+
         LakeSource<LakeSplit> lakeSource = null;
-        if (tableInfo.getTableConfig().isDataLakeEnabled()
-                && offsetsInitializer instanceof SnapshotOffsetsInitializer) {
+        if (lakeEnabled && fullStartup) {
             lakeSource =
                     LakeSourceUtils.createLakeSource(tablePath, tableInfo.getProperties().toMap());
-            if (lakeSource != null && projectedFields != null) {
-                int[][] nestedProjectedFields = new int[projectedFields.length][];
-                for (int i = 0; i < projectedFields.length; i++) {
-                    nestedProjectedFields[i] = new int[] {projectedFields[i]};
+            if (lakeSource != null) {
+                if (projectedFields != null) {
+                    int[][] nestedProjectedFields = new int[projectedFields.length][];
+                    for (int i = 0; i < projectedFields.length; i++) {
+                        nestedProjectedFields[i] = new int[] {projectedFields[i]};
+                    }
+                    lakeSource.withProject(nestedProjectedFields);
                 }
-                lakeSource.withProject(nestedProjectedFields);
+                // push the record-batch filter to the lake side as well,
+                // so the historical lake scan is filtered consistently with Fluss.
+                if (logRecordBatchFilter != null) {
+                    lakeSource.withFilters(Collections.singletonList(logRecordBatchFilter));
+                }
             }
         }
 
