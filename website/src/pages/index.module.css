@@ -1022,34 +1022,25 @@
     color: transparent;
 }
 
-/* Architecture section has no lead paragraph between the H2 and the diagram,
-   so we collapse the header's bottom spacing and the title's own bottom
-   margin to put the SVG directly under "Unlocking the Lakestream Architecture". */
-.archSection .sectionHeader,
-.archSection .archTitle {
-    margin-bottom: 0;
+/* Keep the architecture definitions readable above the storage diagram. */
+.archSection .archLead {
+    max-width: 860px;
+    margin: var(--fluss-space-6) auto;
 }
 
-/* Canvas for the SVG diagram. Aspect-ratio matches the SVG viewBox so the
- * box reserves the correct height before paint. The diagram is a
- * four-column architectural map (sources / hot tier / read patterns /
- * engines), so we use a 1200×640 (15:8) viewBox to give each column
- * breathing room without crowding labels.
- *
- * Previously the diagram broke out of its parent .container to reclaim
- * page width up to 1480px. On ≥ 1440px displays that gave the architecture
- * section visibly narrower side margins than the other homepage sections,
- * which all respect the 1240px container (Michael feedback, PR #3226).
- * Diagram now stays within the standard container for visual rhythm. */
+/* Keep the original diagram within the page container. On narrow screens,
+ * allow horizontal scrolling so its labels remain readable. */
 .archDiagram {
     position: relative;
     width: 100%;
-    aspect-ratio: 1200 / 640;
+    overflow-x: auto;
 }
 
 .archDiagram svg {
+    display: block;
     width: 100%;
-    height: 100%;
-    overflow: visible;
+    min-width: 1000px;
+    height: auto;
+    aspect-ratio: 1200 / 820;
     filter: drop-shadow(0 24px 60px rgba(38, 109, 149, 0.25));
 }

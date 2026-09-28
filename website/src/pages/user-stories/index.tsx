@@ -44,7 +44,7 @@ export default function UserStories(): JSX.Element {
     return (
         <Layout
             title="User Stories"
-            description="Explore how organizations use Apache Fluss for real-time analytics, AI applications, and streaming Lakehouses."
+            description="Explore how organizations use Apache Fluss for real-time analytics, AI applications, and Lakestream."
         >
             <main className={styles.page}>
                 <header className={styles.hero}>

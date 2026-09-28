@@ -50,7 +50,7 @@ export const userStories: UserStory[] = [
         title: 'Unified real-time analytics across Alibaba Group',
         summary:
             'Alibaba uses Fluss as a shared ingestion and serving layer for behavioral analytics across Taobao, Tmall, Ele.me, Amap, and Alibaba Pictures.',
-        tags: ['User-behavior analytics', 'Streaming Lakehouse'],
+        tags: ['User-behavior analytics', 'Lakestream'],
         href: '/user-stories/alibaba/',
         submission: `${userDiscussion}#discussioncomment-18067474`,
         sections: [
@@ -157,7 +157,7 @@ export const userStories: UserStory[] = [
         title: 'Migrating a core real-time indexing pipeline from Kafka',
         summary:
             'rednote uses column pruning and tiered storage to reduce read amplification and isolate historical index builds from online workloads.',
-        tags: ['Real-time indexing', 'Streaming lakehouse'],
+        tags: ['Real-time indexing', 'Lakestream'],
         href: '/user-stories/rednote/',
         submission: `${userDiscussion}#discussioncomment-18089790`,
         sections: [
@@ -221,7 +221,7 @@ export const userStories: UserStory[] = [
         title: 'Connecting online and offline samples for model training',
         summary:
             'JD combines Fluss and Apache Hudi to produce recommendation-ranking samples for online serving and near-real-time and offline model training.',
-        tags: ['Model training', 'Streaming lakehouse'],
+        tags: ['Model training', 'Lakestream'],
         href: '/user-stories/jd/',
         submission: `${userDiscussion}#discussioncomment-18149379`,
         sections: [
@@ -247,16 +247,16 @@ export const userStories: UserStory[] = [
         region: 'Global',
         about: 'Webex is Cisco’s collaboration and customer-experience platform, offering meetings, calling, messaging, and contact-center services.',
         website: 'https://www.webex.com/',
-        title: 'Streaming Lakehouse for high-throughput events',
+        title: 'Lakestream for high-throughput events',
         summary:
-            'Cisco Webex’s streaming Lakehouse architecture combines Fluss, Flink, and Iceberg for event ingestion, primary-key lookups, and simpler data lifecycle management.',
+            'Cisco Webex’s Lakestream foundation combines Fluss, Flink, and Iceberg for event ingestion, primary-key lookups, and simpler data lifecycle management.',
         tags: ['Event ingestion', 'Primary-key lookups'],
         href: '/user-stories/cisco/',
         submission: `${userDiscussion}#discussioncomment-18173301`,
         sections: [
             {
                 heading: 'A real-time layer for event data',
-                text: 'Cisco Webex’s streaming Lakehouse architecture brings together Apache Fluss for high-throughput event ingestion, Apache Flink for processing, and Apache Iceberg for historical analytics.',
+                text: 'Cisco Webex’s Lakestream foundation brings together Apache Fluss for high-throughput event ingestion, Apache Flink for processing, and Apache Iceberg for historical analytics.',
             },
             {
                 heading: 'Reducing the state in Flink',
@@ -293,7 +293,7 @@ export const userStories: UserStory[] = [
             },
             {
                 heading: 'Building with Flink and the Lakehouse',
-                text: 'Integration with Alibaba Cloud Realtime Compute for Apache Flink supports real-time warehouses and Streaming Lakehouse workloads. Teams can use Fluss capabilities such as column pruning, partial updates, and Delta Join within their data pipelines.',
+                text: 'Integration with Alibaba Cloud Realtime Compute for Apache Flink supports real-time warehouses and Lakestream workloads. Teams can use Fluss capabilities such as column pruning, partial updates, and Delta Join within their data pipelines.',
             },
         ],
         references: [
@@ -328,7 +328,7 @@ export const userStories: UserStory[] = [
             },
             {
                 heading: 'A shared layer for streaming and historical data',
-                text: 'Fluss adds low-latency reads and writes, columnar streaming, and table updates to Ververica’s data platform. Flink integration and lake tiering connect real-time pipelines with historical data for warehouse and Streaming Lakehouse applications.',
+                text: 'Fluss adds low-latency reads and writes, columnar streaming, and table updates to Ververica’s data platform. Flink integration and lake tiering connect real-time pipelines with historical data for warehouse and Lakestream applications.',
             },
         ],
         references: [
