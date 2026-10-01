@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 
 # Deploying Lakestream
 
-This guide covers how to deploy a Lakestream foundation with Fluss, a Flink tiering service, and lakehouse storage. For the relationship between Streamhouse, Lakestream, and Fluss, see the [Lakestream Overview](../streaming-lakehouse/overview.mdx).
+This guide covers how to deploy a Lakestream foundation with Fluss, a Flink tiering service, and lakehouse storage. For the relationship between Streamhouse, Lakestream, and Fluss, see [Streamhouse and Lakestream](../concepts/streamhouse-and-lakestream.mdx).
 
 ## Prerequisites
 

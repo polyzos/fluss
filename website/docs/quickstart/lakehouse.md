@@ -6,7 +6,7 @@ sidebar_position: 2
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-This guide sets up a Lakestream foundation using Fluss with Paimon or Iceberg. You will use managed tiering and Union Read to access fresh streaming data and committed lakehouse data as layers of one logical table. For the definitions of Streamhouse and Lakestream, see the [Lakestream Overview](../streaming-lakehouse/overview.mdx).
+This guide sets up a Lakestream foundation using Fluss with Paimon or Iceberg. You will use managed tiering and Union Read to access fresh streaming data and committed lakehouse data as layers of one logical table. For the definitions of Streamhouse and Lakestream, see [Streamhouse and Lakestream](../concepts/streamhouse-and-lakestream.mdx).
 
 ## Environment Setup
 ### Prerequisites

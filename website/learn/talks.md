@@ -8,7 +8,7 @@ Talks and presentations about Apache Fluss from conferences, meetups, and commun
 
 ---
 
-### Lake, Stream, and Everything In Between: Apache Fluss and Lakestream
+### Lake, Stream, and Everything In Between: Apache Fluss and the Streaming Lakehouse
 **Mehul Batra** • OpenXdata 2026 • April 2026
 
 A walkthrough of Apache Fluss as table-first columnar streaming storage, covering union reads across streaming and lakehouse layers, zero-ETL integration with open table formats (Iceberg), and the architectural shift from Lambda to Kappa patterns for real-time analytics in the AI era.

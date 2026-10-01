@@ -8,22 +8,18 @@ import { useColorMode } from '@docusaurus/theme-common';
 
 # What is Apache Fluss?
 
-**Streaming tables on a shared, open foundation.** Apache Fluss is an open-source, lakehouse-native streaming storage system for real-time analytics and AI. It provides the streaming table layer and lakehouse integration that enable Lakestream within the Streamhouse architecture.
+Apache Fluss is an open-source, lakehouse-native streaming storage system for real-time analytics and AI. Applications can consume table changes, look up rows by primary key, and access historical data through lakehouse integrations.
 
-**Streamhouse** is an open, table-centric architecture that brings streaming, operational serving, and analytics onto a shared, lakehouse-native data foundation. Independent engines maintain and consume reusable tables; the architecture also includes transformations, query and serving services, catalogs, governance, and applications.
+Fluss integrates with **Apache Flink** and **Apache Spark**, supports streaming reads and writes with sub-second latency, and uses columnar storage for projection and predicate pushdown. It offers two table types: append-only **Log Tables** and updatable **PrimaryKey Tables**.
 
-**Lakestream** is Streamhouse's open table storage foundation. It coordinates fresh streaming data and historical data in open lakehouse tables as different freshness layers of one logical table, using shared metadata, managed tiering, and supported access across the layers.
-
-Fluss maintains streaming tables with defined schemas and row semantics. Compatible workloads can consume changes, look up primary-key rows, or access tiered lake data through supported integrations. Compute engines run transformations and queries, and can publish reusable results back as shared tables. Learn how these responsibilities fit together in the [Lakestream Overview](streaming-lakehouse/overview.mdx).
+Fluss also enables **Lakestream**, the shared streaming and lakehouse table foundation of the **Streamhouse** architecture. Learn how storage and independent compute engines fit together in [Streamhouse and Lakestream](concepts/streamhouse-and-lakestream.mdx).
 
 {(() => {
   const { colorMode } = useColorMode();
   return (
-    <img src={colorMode === 'dark' ? '/img/fluss.png' : '/img/fluss_light_mode.png'} alt="arch" />
+    <img src={colorMode === 'dark' ? '/img/fluss.png' : '/img/fluss_light_mode.png'} alt="Apache Fluss architecture and lakehouse integrations" />
   );
 })()}
-
-It integrates first-class with **Apache Flink** and **Apache Spark**, supports streaming reads and writes with sub-second latency, stores data in a columnar layout for projection and predicate pushdown, and offers two table types (append-only **Log Tables** and updatable **PrimaryKey Tables**) to cover both event-stream and database-style workloads.
 
 **Fluss (German: river, pronounced `/flus/`)** carries streaming data continuously into lakes, like a river 🌊
 
@@ -65,7 +61,7 @@ Flink jobs can read shared tables, perform joins or aggregations, and publish ma
 ## Where to go next?
 
 - [QuickStart](quickstart/flink.md): Get started with Fluss in minutes.
-- [Architecture](concepts/architecture.mdx): Learn about Fluss's architecture.
+- [Fluss Architecture](concepts/architecture.mdx): Learn about Fluss's architecture.
 - [Table Design](table-design/overview.mdx): Explore Fluss's table types, partitions and buckets.
-- [Streamhouse and Lakestream](streaming-lakehouse/overview.mdx): Understand the architecture and its coordinated stream–lake table foundation.
+- [Streamhouse and Lakestream](concepts/streamhouse-and-lakestream.mdx): Understand the architecture and its coordinated stream–lake table foundation.
 - [Development](/community/dev/ide-setup): Set up your development environment and contribute to the community.

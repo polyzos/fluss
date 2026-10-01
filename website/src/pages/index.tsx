@@ -136,7 +136,7 @@ function HeroDiagram() {
                 and union reads across hot and cold data in a single query.
                 Query engines can query Fluss directly through supported
                 integrations. Engines shown are Apache Flink, Apache Spark,
-                StarRocks, Apache DataFusion (work in progress), Apache Doris
+                StarRocks (planned), Apache DataFusion (work in progress), Apache Doris
                 (work in progress), DuckDB (experimental), and Trino (work in
                 progress). Data access patterns include column pruning,
                 partition pruning, and predicate pushdowns.
@@ -462,7 +462,7 @@ function HeroDiagram() {
                     {x: 434, y: 656, w: 122, label: 'Apache Spark', status: ''},
                     {x: 566, y: 656, w: 122, label: 'Apache DataFusion', status: 'WIP'},
                     {x: 698, y: 656, w: 120, label: 'Apache Doris', status: 'WIP'},
-                    {x: 330, y: 720, w: 144, label: 'StarRocks', status: ''},
+                    {x: 330, y: 720, w: 144, label: 'StarRocks', status: 'Planned'},
                     {x: 486, y: 720, w: 144, label: 'DuckDB', status: 'Experimental'},
                     {x: 642, y: 720, w: 144, label: 'Trino', status: 'WIP'},
                 ].map((e) => (
@@ -662,18 +662,12 @@ function ArchitectureSection() {
                         Unlocking the Streamhouse Architecture
                     </h2>
                     <p className={clsx(styles.sectionLead, styles.archLead)}>
-                        Streamhouse is an open, table-centric architecture that
-                        brings streaming, operational serving, and analytics onto
-                        a shared, lakehouse-native data foundation. Independent
-                        engines maintain and consume reusable tables.
+                        Streamhouse brings streaming, serving, and analytics
+                        together through shared tables and independent compute
+                        engines. Fluss enables its Lakestream storage foundation
+                        by coordinating fresh streaming data with historical lakehouse data.
                     </p>
-                    <p className={clsx(styles.sectionLead, styles.archLead)}>
-                        Lakestream is its open table storage foundation, coordinating
-                        fresh streaming data and historical lakehouse data as
-                        different freshness layers of one logical table. Apache
-                        Fluss provides the streaming table layer and lakehouse integration.
-                    </p>
-                    <Link className={styles.btnSecondary} to="/docs/next/streaming-lakehouse/overview">
+                    <Link className={styles.btnSecondary} to="/docs/next/concepts/streamhouse-and-lakestream">
                         Explore Streamhouse and Lakestream
                         <span aria-hidden="true">→</span>
                     </Link>
