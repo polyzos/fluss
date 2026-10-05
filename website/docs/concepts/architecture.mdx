@@ -1,7 +1,7 @@
 ---
 title: "Fluss Architecture"
 sidebar_position: 2
-description: "How Apache Fluss coordinates distributed tables, serves reads and writes, replicates logs, recovers key-value state, and integrates with lakehouse storage."
+displayed_sidebar: docsSidebar
 ---
 
 {/*
@@ -34,7 +34,7 @@ This chapter explains how those components work together and what their responsi
 A Fluss cluster separates coordination from data serving. The **CoordinatorServer** manages metadata and placement, while **TabletServers** host table data and serve client requests. **ZooKeeper** provides shared metadata and coordination. Remote storage holds tiered log segments and key-value snapshots; an optional lakehouse integration maintains data in an open lake format.
 
 <ThemedImage
-    alt="Fluss cluster with a CoordinatorServer managing TabletServers, each hosting log and key-value storage, and a tiering service connecting to lakehouse storage"
+    alt="Architecture"
     light="architecture_light.png"
     dark="architecture.png"
 />
