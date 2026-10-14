@@ -54,6 +54,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+      # Registered as a Maven toolchain for fluss-lake-iceberg-1.12. The next step sets the JDK
+      # that runs Maven and every other module.
+      - name: Set up JDK 17 toolchain
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
