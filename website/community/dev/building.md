@@ -16,6 +16,7 @@ The Iceberg 1.12 lake plugin (`fluss-lake-iceberg-1.12`) also needs a **JDK 17**
 The JDK 17 is found automatically in `~/.m2/toolchains.xml`, through `JAVA<version>_HOME` environment variables
 (e.g. `JAVA17_HOME`), or in common install locations such as SDKMAN! and `/Library/Java/JavaVirtualMachines`.
 To build without it, exclude the module: `mvn clean install -DskipTests -pl '!fluss-lake/fluss-lake-iceberg-1.12'`.
+If the build fails with `Non-existing JDK home configuration`, remove the entry for that JDK from `~/.m2/toolchains.xml`.
 
 To clone from git, enter:
 
