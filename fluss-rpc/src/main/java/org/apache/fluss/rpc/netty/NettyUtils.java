@@ -71,11 +71,18 @@ public class NettyUtils {
         }
     }
 
+    /**
+     * Shuts down the given event loop group without a quiet period, closing all of its channels.
+     *
+     * <p>Netty's default 2 second quiet period keeps accepting tasks that other threads submit
+     * after the shutdown started, and delays every shutdown by at least 2 seconds. Without it, the
+     * group terminates as soon as its pending tasks have run, and later submissions are rejected
+     * with a {@link java.util.concurrent.RejectedExecutionException}. Callers must therefore only
+     * shut down a group once nothing submits work to it anymore, or tolerate the rejection.
+     */
     public static CompletableFuture<Void> shutdownGroup(EventLoopGroup group) {
         CompletableFuture<Void> shutdownFuture = new CompletableFuture<>();
         if (group != null) {
-            // No quiet period: Netty closes all channels and cancels scheduled tasks as soon as
-            // shutdown starts, so waiting 2s (the default) only delays every close.
             group.shutdownGracefully(0, 10, TimeUnit.SECONDS)
                     .addListener(
                             finished -> {

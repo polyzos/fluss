@@ -279,7 +279,8 @@ public class RequestChannelTest {
         }
         assertThat(channel.requestsCount()).isZero();
 
-        // once the event loop accepts tasks again, backpressure is applied as usual
+        // a real event loop never accepts tasks again after shutting down; this only verifies
+        // that the skipped tasks did not leave the backpressure state machine stuck
         testChannel.eventLoop.rejectTasks(false);
         for (int i = 0; i < backpressureThreshold; i++) {
             channel.putRequest(createTestRequest(i));

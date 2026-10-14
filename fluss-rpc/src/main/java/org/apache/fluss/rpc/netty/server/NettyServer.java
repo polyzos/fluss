@@ -304,27 +304,28 @@ public final class NettyServer implements RpcServer {
 
         isRunning = false;
 
+        // Stop accepting new connections.
         CompletableFuture<Void> channelShutdownFuture =
                 FutureUtils.completeAll(
                         bindChannels.stream()
                                 .map(NettyUtils::shutdownChannel)
                                 .collect(Collectors.toList()));
-        // Shut down the event loops only after the bind channels are closed: the channel close
-        // listeners run on the event loops, which terminate right away without a quiet period.
-        CompletableFuture<Void> groupShutdownFuture =
-                FutureUtils.composeAfterwards(
-                        channelShutdownFuture,
-                        () ->
-                                CompletableFuture.allOf(
-                                        shutdownGroup(acceptorGroup),
-                                        shutdownGroup(selectorGroup)));
+        // Drain the requests that were already accepted.
         CompletableFuture<Void> workerShutdownFuture;
         if (workerPool != null) {
             workerShutdownFuture = workerPool.closeAsync();
         } else {
             workerShutdownFuture = CompletableFuture.completedFuture(null);
         }
-
-        return CompletableFuture.allOf(groupShutdownFuture, workerShutdownFuture);
+        // Shut down the event loops only after both of the above completed. The event loops
+        // terminate without a quiet period, so they must outlive the tasks still submitted to
+        // them: the bind channel close listeners, and the responses (and backpressure updates)
+        // of the requests drained by the worker pool. Shutting the event loops down closes the
+        // remaining client connections.
+        return FutureUtils.composeAfterwards(
+                CompletableFuture.allOf(channelShutdownFuture, workerShutdownFuture),
+                () ->
+                        CompletableFuture.allOf(
+                                shutdownGroup(acceptorGroup), shutdownGroup(selectorGroup)));
     }
 }

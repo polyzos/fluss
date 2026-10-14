@@ -265,7 +265,11 @@ public class RequestChannel {
      * Executes the task on the channel's EventLoop. The EventLoop may already be shutting down
      * (e.g. during server shutdown) even though the channel was still active when checked; in that
      * case the task is skipped, because the channel is about to be closed anyway. Letting the
-     * rejection propagate would kill the calling request processor thread.
+     * rejection propagate would kill the calling request processor thread, and its shutdown future
+     * would never complete.
+     *
+     * <p>A skipped task leaves {@link #isBackpressureActive} out of sync with the channel's actual
+     * auto-read state. This is harmless, as the channel is closed together with its EventLoop.
      */
     private static void executeOnEventLoop(Channel channel, Runnable task) {
         try {
