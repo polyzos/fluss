@@ -180,28 +180,33 @@ public class NettyServerTest {
                 new Socket(bindEndpoint.getHost(), bindEndpoint.getPort()).close();
 
                 blockRequests.set(true);
-                CompletableFuture<ApiMessage> response =
-                        nettyClient.sendRequest(serverNode, ApiKeys.API_VERSIONS, request);
-                requestBlocked.await();
+                try {
+                    CompletableFuture<ApiMessage> response =
+                            nettyClient.sendRequest(serverNode, ApiKeys.API_VERSIONS, request);
+                    requestBlocked.await();
 
-                CompletableFuture<Void> closeFuture = nettyServer.closeAsync();
-                // the server no longer accepts new connections ...
-                retry(
-                        Duration.ofMinutes(1),
-                        () ->
-                                assertThatThrownBy(
-                                                () ->
-                                                        new Socket(
-                                                                        bindEndpoint.getHost(),
-                                                                        bindEndpoint.getPort())
-                                                                .close())
-                                        .isInstanceOf(ConnectException.class));
-                assertThat(closeFuture).isNotDone();
+                    CompletableFuture<Void> closeFuture = nettyServer.closeAsync();
+                    // the server no longer accepts new connections ...
+                    retry(
+                            Duration.ofMinutes(1),
+                            () ->
+                                    assertThatThrownBy(
+                                                    () ->
+                                                            new Socket(
+                                                                            bindEndpoint.getHost(),
+                                                                            bindEndpoint.getPort())
+                                                                    .close())
+                                            .isInstanceOf(ConnectException.class));
+                    assertThat(closeFuture).isNotDone();
 
-                // ... but still responds to the request it accepted before
-                releaseRequest.countDown();
-                assertThat(response.get()).isInstanceOf(ApiVersionsResponse.class);
-                closeFuture.get();
+                    // ... but still responds to the request it accepted before
+                    releaseRequest.countDown();
+                    assertThat(response.get()).isInstanceOf(ApiVersionsResponse.class);
+                    closeFuture.get();
+                } finally {
+                    // never leave the request processor blocked, even if an assertion failed
+                    releaseRequest.countDown();
+                }
             }
         }
     }
