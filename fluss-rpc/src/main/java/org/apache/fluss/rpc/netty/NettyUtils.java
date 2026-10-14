@@ -32,6 +32,7 @@ import org.apache.fluss.shaded.netty4.io.netty.channel.unix.Errors;
 import org.apache.fluss.shaded.netty4.io.netty.util.concurrent.DefaultThreadFactory;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /** Utils of netty. */
 public class NettyUtils {
@@ -73,7 +74,9 @@ public class NettyUtils {
     public static CompletableFuture<Void> shutdownGroup(EventLoopGroup group) {
         CompletableFuture<Void> shutdownFuture = new CompletableFuture<>();
         if (group != null) {
-            group.shutdownGracefully()
+            // No quiet period: Netty closes all channels and cancels scheduled tasks as soon as
+            // shutdown starts, so waiting 2s (the default) only delays every close.
+            group.shutdownGracefully(0, 10, TimeUnit.SECONDS)
                     .addListener(
                             finished -> {
                                 if (finished.isSuccess()) {

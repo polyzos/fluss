@@ -304,13 +304,20 @@ public final class NettyServer implements RpcServer {
 
         isRunning = false;
 
-        CompletableFuture<Void> acceptorShutdownFuture = shutdownGroup(acceptorGroup);
-        CompletableFuture<Void> selectorShutdownFuture = shutdownGroup(selectorGroup);
         CompletableFuture<Void> channelShutdownFuture =
                 FutureUtils.completeAll(
                         bindChannels.stream()
                                 .map(NettyUtils::shutdownChannel)
                                 .collect(Collectors.toList()));
+        // Shut down the event loops only after the bind channels are closed: the channel close
+        // listeners run on the event loops, which terminate right away without a quiet period.
+        CompletableFuture<Void> groupShutdownFuture =
+                FutureUtils.composeAfterwards(
+                        channelShutdownFuture,
+                        () ->
+                                CompletableFuture.allOf(
+                                        shutdownGroup(acceptorGroup),
+                                        shutdownGroup(selectorGroup)));
         CompletableFuture<Void> workerShutdownFuture;
         if (workerPool != null) {
             workerShutdownFuture = workerPool.closeAsync();
@@ -318,10 +325,6 @@ public final class NettyServer implements RpcServer {
             workerShutdownFuture = CompletableFuture.completedFuture(null);
         }
 
-        return CompletableFuture.allOf(
-                acceptorShutdownFuture,
-                selectorShutdownFuture,
-                channelShutdownFuture,
-                workerShutdownFuture);
+        return CompletableFuture.allOf(groupShutdownFuture, workerShutdownFuture);
     }
 }
