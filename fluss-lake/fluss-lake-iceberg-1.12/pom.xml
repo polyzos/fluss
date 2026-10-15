@@ -119,6 +119,12 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
+                    <!-- Check against the Java 11 API, not just emit Java 11 class files. -->
+                    <release>11</release>
+                    <!-- Drop the root add-exports args: javac rejects them with release. -->
+                    <compilerArgs combine.self="override">
+                        <arg>-Xpkginfo:always</arg>
+                    </compilerArgs>
                     <!-- compilation of main sources -->
                     <skipMain>${skip.on.java8}</skipMain>
                     <!-- compilation of test sources -->
