@@ -186,19 +186,29 @@ public final class NettyClient implements RpcClient {
         }
     }
 
-    private ServerConnection getOrCreateConnection(ServerNode node) {
+    @VisibleForTesting
+    ServerConnection getOrCreateConnection(ServerNode node) {
         String serverId = node.uid();
-        return connections.computeIfAbsent(
-                serverId,
-                ignored -> {
-                    LOG.debug("Creating connection to server {}.", node);
-                    return new ServerConnection(
-                            bootstrap,
-                            node,
-                            clientMetricGroup,
-                            authenticatorSupplier.get(),
-                            (con, ignore) -> connections.remove(serverId, con));
-                });
+        ServerConnection connection =
+                connections.computeIfAbsent(
+                        serverId,
+                        ignored -> {
+                            LOG.debug("Creating connection to server {}.", node);
+                            return new ServerConnection(
+                                    bootstrap,
+                                    node,
+                                    clientMetricGroup,
+                                    authenticatorSupplier.get(),
+                                    (con, ignore) -> connections.remove(serverId, con));
+                        });
+        // close() may have run before the connection was added and missed it. Its event loop is
+        // then terminated, so the connection would never connect and its requests would never
+        // complete. Close it here, so they fail instead. isClosed is volatile: either this check
+        // sees the client closed, or close() sees the connection.
+        if (isClosed) {
+            connection.close();
+        }
+        return connection;
     }
 
     @VisibleForTesting
