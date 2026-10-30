@@ -31,6 +31,7 @@ import org.apache.fluss.rpc.TestingGatewayService;
 import org.apache.fluss.rpc.TestingTabletGatewayService;
 import org.apache.fluss.rpc.messages.ApiMessage;
 import org.apache.fluss.rpc.messages.ApiVersionsRequest;
+import org.apache.fluss.rpc.messages.ApiVersionsResponse;
 import org.apache.fluss.rpc.messages.GetTableInfoRequest;
 import org.apache.fluss.rpc.messages.LookupRequest;
 import org.apache.fluss.rpc.messages.LookupResponse;
@@ -40,14 +41,25 @@ import org.apache.fluss.rpc.netty.NettyUtils;
 import org.apache.fluss.rpc.netty.server.NettyServer;
 import org.apache.fluss.rpc.netty.server.RequestsMetrics;
 import org.apache.fluss.rpc.protocol.ApiKeys;
+import org.apache.fluss.shaded.netty4.io.netty.channel.EventLoop;
+import org.apache.fluss.shaded.netty4.io.netty.channel.EventLoopGroup;
+import org.apache.fluss.shaded.netty4.io.netty.resolver.AbstractAddressResolver;
+import org.apache.fluss.shaded.netty4.io.netty.resolver.AddressResolver;
+import org.apache.fluss.shaded.netty4.io.netty.resolver.AddressResolverGroup;
+import org.apache.fluss.shaded.netty4.io.netty.util.concurrent.EventExecutor;
+import org.apache.fluss.shaded.netty4.io.netty.util.concurrent.Promise;
 import org.apache.fluss.utils.NetUtils;
 import org.apache.fluss.utils.concurrent.FutureUtils;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.net.ConnectException;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -622,8 +634,52 @@ final class NettyClientTest {
                                         .sendRequest(serverNode, ApiKeys.API_VERSIONS, request)
                                         .get())
                 .hasMessageContaining("Disconnected from node");
+        retry(Duration.ofSeconds(10), () -> assertThat(nettyClient.connections()).isEmpty());
+    }
 
-        assertThat(nettyClient.connections()).isEmpty();
+    @ParameterizedTest
+    @ValueSource(ints = {1, 4})
+    void testReconnectAfterImmediateResolutionFailureOnEventLoop(int networkThreads)
+            throws Exception {
+        nettyClient.close();
+        conf.setInt(ConfigOptions.NETTY_CLIENT_NUM_NETWORK_THREADS, networkThreads);
+        nettyClient = new NettyClient(conf, TestingClientMetricGroup.newInstance());
+        InetSocketAddress resolvedAddress =
+                new InetSocketAddress(serverNode.host(), serverNode.port());
+        try (TestingAddressResolverGroup resolver =
+                new TestingAddressResolverGroup(resolvedAddress)) {
+            nettyClient.bootstrap().resolver(resolver);
+            EventLoopGroup eventLoopGroup = nettyClient.bootstrap().config().group();
+            // Preserve the chooser so connect() selects the caller's loop and fails synchronously.
+            EventLoop eventLoop = (EventLoop) eventLoopGroup.iterator().next();
+            ApiVersionsRequest request =
+                    new ApiVersionsRequest()
+                            .setClientSoftwareName("testing_client")
+                            .setClientSoftwareVersion("1.0");
+
+            CompletableFuture<ApiMessage> failedRequest =
+                    eventLoop
+                            .submit(
+                                    () ->
+                                            nettyClient.sendRequest(
+                                                    serverNode, ApiKeys.API_VERSIONS, request))
+                            .get(10, TimeUnit.SECONDS);
+            assertThatThrownBy(() -> failedRequest.get(10, TimeUnit.SECONDS))
+                    .rootCause()
+                    .isInstanceOfAny(UnknownHostException.class, DisconnectException.class);
+            retry(Duration.ofSeconds(10), () -> assertThat(nettyClient.connections()).isEmpty());
+
+            resolver.failResolution = false;
+            CompletableFuture<ApiMessage> recoveredRequest =
+                    eventLoop
+                            .submit(
+                                    () ->
+                                            nettyClient.sendRequest(
+                                                    serverNode, ApiKeys.API_VERSIONS, request))
+                            .get(10, TimeUnit.SECONDS);
+            assertThat(recoveredRequest.get(10, TimeUnit.SECONDS))
+                    .isInstanceOf(ApiVersionsResponse.class);
+        }
     }
 
     private NettyServer createTabletServer(
@@ -691,6 +747,43 @@ final class NettyClientTest {
                             RequestsMetrics.createCoordinatorServerRequestMetrics(metricGroup));
 
             nettyServer.start();
+        }
+    }
+
+    private static final class TestingAddressResolverGroup
+            extends AddressResolverGroup<InetSocketAddress> {
+
+        private final InetSocketAddress resolvedAddress;
+        private volatile boolean failResolution = true;
+
+        private TestingAddressResolverGroup(InetSocketAddress resolvedAddress) {
+            this.resolvedAddress = resolvedAddress;
+        }
+
+        @Override
+        protected AddressResolver<InetSocketAddress> newResolver(EventExecutor executor) {
+            return new AbstractAddressResolver<InetSocketAddress>(executor) {
+                @Override
+                protected boolean doIsResolved(InetSocketAddress address) {
+                    return false;
+                }
+
+                @Override
+                protected void doResolve(
+                        InetSocketAddress address, Promise<InetSocketAddress> promise) {
+                    if (failResolution) {
+                        promise.setFailure(new UnknownHostException(address.getHostString()));
+                    } else {
+                        promise.setSuccess(resolvedAddress);
+                    }
+                }
+
+                @Override
+                protected void doResolveAll(
+                        InetSocketAddress address, Promise<List<InetSocketAddress>> promise) {
+                    throw new UnsupportedOperationException();
+                }
+            };
         }
     }
 }

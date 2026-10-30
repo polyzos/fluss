@@ -225,7 +225,10 @@ public final class NettyClient implements RpcClient {
                             node,
                             clientMetricGroup,
                             authenticatorSupplier.get(),
-                            (con, ignore) -> connections.remove(connectionKey, con));
+                            // Avoid recursive map updates when connecting fails synchronously.
+                            (con, ignore) ->
+                                    eventGroup.execute(
+                                            () -> connections.remove(connectionKey, con)));
                 });
     }
 
@@ -289,5 +292,10 @@ public final class NettyClient implements RpcClient {
             result = 31 * result + port;
             return result;
         }
+    }
+
+    @VisibleForTesting
+    Bootstrap bootstrap() {
+        return bootstrap;
     }
 }
