@@ -544,6 +544,136 @@ class TableDescriptorValidationTest {
                 .withReplicationFactor(3);
     }
 
+    @Test
+    void testIcebergTableWithBucketKeyAsStrictPrefixOfPrimaryKey() {
+        assertThatCode(
+                        () ->
+                                validateIcebergTable(
+                                        icebergTable(true, KV_FORMAT_VERSION_2, "a", "b")))
+                .doesNotThrowAnyException();
+
+        // the physical primary key excludes partition keys
+        TableDescriptor partitioned =
+                TableDescriptor.builder()
+                        .schema(
+                                Schema.newBuilder()
+                                        .column("dt", DataTypes.STRING())
+                                        .column("a", DataTypes.STRING())
+                                        .column("b", DataTypes.BIGINT())
+                                        .column("c", DataTypes.INT())
+                                        .primaryKey("dt", "a", "b", "c")
+                                        .build())
+                        .partitionedBy("dt")
+                        .distributedBy(3, "a", "b")
+                        .property(ConfigOptions.TABLE_DATALAKE_FORMAT, DataLakeFormat.ICEBERG)
+                        .property(ConfigOptions.TABLE_KV_FORMAT_VERSION, KV_FORMAT_VERSION_2)
+                        .build()
+                        .withReplicationFactor(3);
+        assertThatCode(() -> validateIcebergTable(partitioned)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void testIcebergTableRejectsUnsupportedMultiColumnBucketKeys() {
+        // log table
+        assertThatThrownBy(() -> validateIcebergTable(icebergTable(false, null, "a", "b")))
+                .isInstanceOf(InvalidTableException.class)
+                .hasMessageContaining("the table is a log table");
+        // composite default bucket key (no explicit bucket key)
+        assertThatThrownBy(() -> validateIcebergTable(icebergTable(true, KV_FORMAT_VERSION_2)))
+                .isInstanceOf(InvalidTableException.class)
+                .hasMessageContaining("must be a strict prefix of the primary key");
+        // bucket key equal to the primary key
+        assertThatThrownBy(
+                        () ->
+                                validateIcebergTable(
+                                        icebergTable(true, KV_FORMAT_VERSION_2, "a", "b", "c")))
+                .isInstanceOf(InvalidTableException.class)
+                .hasMessageContaining("must be a strict prefix of the primary key");
+        // not an ordered prefix of the primary key
+        assertThatThrownBy(
+                        () ->
+                                validateIcebergTable(
+                                        icebergTable(true, KV_FORMAT_VERSION_2, "b", "a")))
+                .isInstanceOf(InvalidTableException.class)
+                .hasMessageContaining("must be a strict prefix of the primary key");
+        // legacy kv format version 1
+        assertThatThrownBy(() -> validateIcebergTable(icebergTable(true, 1, "a", "b")))
+                .isInstanceOf(InvalidTableException.class)
+                .hasMessageContaining("must use kv format version 2");
+    }
+
+    @Test
+    void testMultiColumnBucketKeysOnNonIcebergTablesAreUnaffected() {
+        for (TableDescriptor descriptor :
+                new TableDescriptor[] {
+                    compositeKeyTable(false, null, "a", "b").build().withReplicationFactor(3),
+                    compositeKeyTable(true, KV_FORMAT_VERSION_2).build().withReplicationFactor(3),
+                    compositeKeyTable(true, KV_FORMAT_VERSION_2, "b", "a")
+                            .property(ConfigOptions.TABLE_DATALAKE_FORMAT, DataLakeFormat.PAIMON)
+                            .build()
+                            .withReplicationFactor(3)
+                }) {
+            assertThatCode(
+                            () ->
+                                    TableDescriptorValidation.validateTableDescriptor(
+                                            descriptor, 100, null))
+                    .doesNotThrowAnyException();
+        }
+    }
+
+    @Test
+    void testIcebergTableAcceptsSingleColumnBucketKeysOfAnyEncodableType() {
+        // a FLOAT/DOUBLE bucket key can't be bucketed by Iceberg's bucket[N] transform, but the
+        // table works as long as the datalake isn't enabled, so the creation must not be rejected
+        for (DataType keyType : new DataType[] {DataTypes.FLOAT(), DataTypes.DOUBLE()}) {
+            TableDescriptor descriptor =
+                    TableDescriptor.builder()
+                            .schema(
+                                    Schema.newBuilder()
+                                            .column("k", keyType)
+                                            .column("v", DataTypes.INT())
+                                            .primaryKey("k")
+                                            .build())
+                            .distributedBy(3)
+                            .property(ConfigOptions.TABLE_DATALAKE_FORMAT, DataLakeFormat.ICEBERG)
+                            .property(ConfigOptions.TABLE_KV_FORMAT_VERSION, KV_FORMAT_VERSION_2)
+                            .build()
+                            .withReplicationFactor(3);
+            assertThatCode(() -> validateIcebergTable(descriptor)).doesNotThrowAnyException();
+        }
+    }
+
+    private static void validateIcebergTable(TableDescriptor descriptor) {
+        TableDescriptorValidation.validateTableDescriptor(descriptor, 100, DataLakeFormat.ICEBERG);
+    }
+
+    private static TableDescriptor icebergTable(
+            boolean hasPrimaryKey, Integer kvFormatVersion, String... bucketKeys) {
+        return compositeKeyTable(hasPrimaryKey, kvFormatVersion, bucketKeys)
+                .property(ConfigOptions.TABLE_DATALAKE_FORMAT, DataLakeFormat.ICEBERG)
+                .build()
+                .withReplicationFactor(3);
+    }
+
+    private static TableDescriptor.Builder compositeKeyTable(
+            boolean hasPrimaryKey, Integer kvFormatVersion, String... bucketKeys) {
+        Schema.Builder schema =
+                Schema.newBuilder()
+                        .column("a", DataTypes.STRING())
+                        .column("b", DataTypes.BIGINT())
+                        .column("c", DataTypes.INT())
+                        .column("v", DataTypes.STRING());
+        if (hasPrimaryKey) {
+            schema.primaryKey("a", "b", "c");
+        }
+        TableDescriptor.Builder builder =
+                TableDescriptor.builder().schema(schema.build()).distributedBy(3, bucketKeys);
+        if (kvFormatVersion != null) {
+            builder.property(ConfigOptions.TABLE_KV_FORMAT_VERSION, kvFormatVersion);
+        }
+        return builder;
+    }
+
     private TableInfo plainTableInfo() {
         return TableInfo.of(
                 TablePath.of("db", "t"),

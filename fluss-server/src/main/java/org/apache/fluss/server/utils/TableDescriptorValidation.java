@@ -18,6 +18,7 @@
 package org.apache.fluss.server.utils;
 
 import org.apache.fluss.annotation.Internal;
+import org.apache.fluss.bucketing.IcebergBucketing;
 import org.apache.fluss.config.AutoPartitionTimeUnit;
 import org.apache.fluss.config.ConfigOption;
 import org.apache.fluss.config.ConfigOptions;
@@ -127,6 +128,7 @@ public class TableDescriptorValidation {
 
         // check distribution
         checkDistribution(tableDescriptor, maxBucketNum);
+        checkIcebergBucketKeys(tableDescriptor, tableConf);
         checkPrimaryKey(tableDescriptor);
         // check individual options
         checkReplicationFactor(tableConf);
@@ -489,6 +491,19 @@ public class TableDescriptorValidation {
                 }
             }
         }
+    }
+
+    /**
+     * Checks the bucket keys of Iceberg-format tables. This runs whether or not the table enables
+     * the datalake, because the Iceberg key encoders apply as soon as the format is set.
+     */
+    private static void checkIcebergBucketKeys(
+            TableDescriptor tableDescriptor, Configuration tableConf) {
+        if (tableConf.getOptional(ConfigOptions.TABLE_DATALAKE_FORMAT).orElse(null)
+                != DataLakeFormat.ICEBERG) {
+            return;
+        }
+        IcebergBucketing.validateBucketKeys(tableDescriptor);
     }
 
     private static void checkPrimaryKey(TableDescriptor tableDescriptor) {

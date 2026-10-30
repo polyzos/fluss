@@ -18,6 +18,7 @@
 package org.apache.fluss.server.replica;
 
 import org.apache.fluss.annotation.VisibleForTesting;
+import org.apache.fluss.bucketing.IcebergBucketing;
 import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.config.Configuration;
 import org.apache.fluss.config.TableConfig;
@@ -1644,6 +1645,7 @@ public class ReplicaManager implements ServerReconfigurable {
             TableMetricGroup tableMetrics = null;
             try {
                 Replica replica = getReplicaOrException(tb);
+                IcebergBucketing.validateBucketKeys(replica.getTableInfo());
                 tableMetrics = replica.tableMetrics();
                 tableMetrics.totalProduceLogRequests().inc();
                 // record user metrics before appending to log,
@@ -1696,6 +1698,7 @@ public class ReplicaManager implements ServerReconfigurable {
                 LOG.trace("Put records to local kv tablet for table bucket {}", tb);
                 Replica replica = getReplicaOrException(tb);
                 validateClientVersionForPkTable(apiVersion, replica.getTableInfo());
+                IcebergBucketing.validateBucketKeys(replica.getTableInfo());
                 tableMetrics = replica.tableMetrics();
                 tableMetrics.totalPutKvRequests().inc();
                 LogAppendInfo appendInfo =
