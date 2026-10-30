@@ -25,11 +25,24 @@ use crate::row::encode::KeyEncoder;
 use crate::row::field_getter::FieldGetter;
 use crate::row::{Datum, InternalRow};
 
+/// Returns the column hashed by Iceberg's single-argument `bucket[N]`
+/// transform: the first bucket key column. Mirrors Java's
+/// `org.apache.fluss.bucketing.IcebergBucketing.hashKey`.
+///
+/// A bucket key of an Iceberg table may have several columns (a strict prefix
+/// of the primary key): all of them form the prefix lookup key, but only the
+/// first one decides the bucket, so the Fluss bucket is the Iceberg bucket.
+pub fn hash_key(bucket_keys: &[String]) -> Result<&String> {
+    bucket_keys.first().ok_or_else(|| IllegalArgument {
+        message: "Bucket keys must not be empty.".to_string(),
+    })
+}
+
 /// Rust port of Java's `org.apache.fluss.row.encode.iceberg.IcebergKeyEncoder`.
 ///
-/// Iceberg currently supports exactly one bucket key field. The field is
-/// encoded with Iceberg's single-value binary representation before being
-/// passed to the Iceberg bucketing function.
+/// It encodes exactly one key field with Iceberg's single-value binary
+/// representation before it is passed to the Iceberg bucketing function. The
+/// encoding has no length prefix, so it must never encode several fields.
 pub struct IcebergKeyEncoder {
     field_getter: FieldGetter,
     field_encoder: ValueWriter,
