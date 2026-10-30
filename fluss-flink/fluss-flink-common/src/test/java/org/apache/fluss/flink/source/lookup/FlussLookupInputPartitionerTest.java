@@ -114,6 +114,47 @@ class FlussLookupInputPartitionerTest {
         assertGoldenRouting(keyRowType, bucketKeyNames, DataLakeFormat.HUDI, hudiGolden);
     }
 
+    /**
+     * An Iceberg bucket key with multiple columns is routed by Iceberg's {@code bucket[N]} of its
+     * first column only, so the frozen single-key {@code ICEBERG} vectors above must hold whatever
+     * the other bucket key columns are.
+     */
+    @Test
+    void testGoldenBucketVectorsForIcebergCompositeBucketKey() {
+        RowType keyRowType =
+                RowType.of(
+                        new LogicalType[] {new IntType(), new VarCharType(VarCharType.MAX_LENGTH)},
+                        new String[] {"id", "tenant"});
+        List<String> bucketKeyNames = Arrays.asList("id", "tenant");
+        LookupNormalizer normalizer =
+                LookupNormalizer.createPrimaryKeyLookupNormalizer(new int[] {0, 1}, keyRowType);
+        FlussLookupInputPartitioner partitioner =
+                new FlussLookupInputPartitioner(
+                        normalizer,
+                        keyRowType,
+                        bucketKeyNames,
+                        DataLakeFormat.ICEBERG,
+                        GOLDEN_NUM_BUCKETS);
+
+        Map<Integer, Integer> icebergGolden = new LinkedHashMap<>();
+        icebergGolden.put(1, 4);
+        icebergGolden.put(2, 4);
+        icebergGolden.put(42, 14);
+        icebergGolden.put(100, 0);
+        icebergGolden.put(12345, 1);
+        for (Map.Entry<Integer, Integer> entry : icebergGolden.entrySet()) {
+            for (String tenant : new String[] {"a", "tenant-b", ""}) {
+                assertThat(
+                                partitioner.partition(
+                                        GenericRowData.of(
+                                                entry.getKey(), StringData.fromString(tenant)),
+                                        GOLDEN_NUM_BUCKETS))
+                        .as("id=%d tenant=%s", entry.getKey(), tenant)
+                        .isEqualTo(entry.getValue());
+            }
+        }
+    }
+
     private static void assertGoldenRouting(
             RowType keyRowType,
             List<String> bucketKeyNames,

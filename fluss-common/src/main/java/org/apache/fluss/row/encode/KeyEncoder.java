@@ -17,6 +17,7 @@
 
 package org.apache.fluss.row.encode;
 
+import org.apache.fluss.bucketing.IcebergBucketing;
 import org.apache.fluss.config.TableConfig;
 import org.apache.fluss.metadata.DataLakeFormat;
 import org.apache.fluss.row.InternalRow;
@@ -27,10 +28,12 @@ import org.apache.fluss.types.RowType;
 
 import javax.annotation.Nullable;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 import static org.apache.fluss.utils.Preconditions.checkNotNull;
+import static org.apache.fluss.utils.Preconditions.checkState;
 
 /** An interface for encoding key of row into bytes. */
 public interface KeyEncoder {
@@ -63,7 +66,9 @@ public interface KeyEncoder {
      * also provides a performance benefit: since bucket calculation always requires encoding the
      * bucket key using the lake's encoder (to ensure correct bucketing for the lake), when the
      * primary key uses the same lake's encoder, the encoded primary key bytes can be directly
-     * reused for bucket calculation, saving one encoding operation.
+     * reused for bucket calculation, saving one encoding operation. For Iceberg this only holds
+     * because the default bucket key of an Iceberg table always has a single column (see {@link
+     * IcebergBucketing}).
      *
      * @param rowType the row type of the input row
      * @param keyFields the primary key fields to encode
@@ -105,6 +110,9 @@ public interface KeyEncoder {
     /**
      * Creates a bucket key encoder for bucket calculation with a custom row type.
      *
+     * <p>For Iceberg, only the first bucket key column is encoded, because Iceberg's {@code
+     * bucket[N]} transform takes a single column (see {@link IcebergBucketing}).
+     *
      * @param rowType the row type of the input row
      * @param keyFields the bucket key fields to encode
      * @param lakeFormat the datalake format
@@ -112,6 +120,10 @@ public interface KeyEncoder {
      */
     static KeyEncoder ofBucketKeyEncoder(
             RowType rowType, List<String> keyFields, @Nullable DataLakeFormat lakeFormat) {
+        if (lakeFormat == DataLakeFormat.ICEBERG) {
+            return new IcebergKeyEncoder(
+                    rowType, Collections.singletonList(IcebergBucketing.hashKey(keyFields)));
+        }
         return of(rowType, keyFields, lakeFormat);
     }
 
@@ -138,6 +150,12 @@ public interface KeyEncoder {
             KeyEncoder primaryKeyEncoder) {
         DataLakeFormat dataLakeFormat = tableConfig.getDataLakeFormat().orElse(null);
         if (isDefaultBucketKey && dataLakeFormat != DataLakeFormat.HUDI) {
+            // The Iceberg bucket key encoder only encodes the first bucket key column, so the
+            // primary key encoder is only the bucket key encoder for a single-column key.
+            checkState(
+                    dataLakeFormat != DataLakeFormat.ICEBERG || keyFields.size() == 1,
+                    "The default bucket key %s of an Iceberg table must have exactly one column.",
+                    keyFields);
             return checkNotNull(primaryKeyEncoder, "Primary key encoder must not be null.");
         }
         return ofBucketKeyEncoder(rowType, keyFields, dataLakeFormat);
