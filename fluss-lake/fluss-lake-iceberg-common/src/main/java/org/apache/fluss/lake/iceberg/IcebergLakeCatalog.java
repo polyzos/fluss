@@ -18,6 +18,7 @@
 package org.apache.fluss.lake.iceberg;
 
 import org.apache.fluss.annotation.VisibleForTesting;
+import org.apache.fluss.bucketing.IcebergBucketing;
 import org.apache.fluss.config.Configuration;
 import org.apache.fluss.exception.InvalidAlterTableException;
 import org.apache.fluss.exception.InvalidTableException;
@@ -94,12 +95,9 @@ public class IcebergLakeCatalog implements LakeCatalog {
     @Override
     public void createTable(TablePath tablePath, TableDescriptor tableDescriptor, Context context)
             throws TableAlreadyExistException {
-        // validate at most one key field requirement
-        List<String> keys = tableDescriptor.getBucketKeys();
-        checkArgument(
-                keys.size() <= 1,
-                "Iceberg format supports at most one bucket key, but got: %s",
-                keys);
+        // The coordinator validates the bucket keys when the table is created, but lake tiering
+        // can be enabled later on a table created before that validation existed.
+        IcebergBucketing.validateBucketKeys(tableDescriptor);
 
         // convert Fluss table path to iceberg table
         boolean isPkTable = tableDescriptor.hasPrimaryKey();

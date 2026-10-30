@@ -318,6 +318,56 @@ CREATE TABLE user_profiles (
 ) PARTITIONED BY (bucket(user_id, 4));
 ```
 
+#### Multiple Bucket Keys
+
+A bucket key is also the index of prefix lookups, and of lookup joins and delta joins whose join
+key is a prefix of the primary key. A bucket key with multiple columns narrows such a lookup to
+exactly the rows that match all of its columns, instead of scanning every row that matches the
+first column and filtering the rest on the client.
+
+Iceberg's bucket transform takes a single column, so rows of an Iceberg table are distributed, and
+the Iceberg table is partitioned, by the **first** bucket key column only. The other bucket key
+columns only make lookups narrower; they don't change how rows are distributed. Put a
+high-cardinality column first to avoid skewed buckets. External engines prune Iceberg files with
+`=` and `IN` filters on that column.
+
+A bucket key with multiple columns is only supported when:
+
+- the table is a primary key table (log tables support at most one bucket key column),
+- the bucket key is a strict prefix of the primary key, in the same column order (excluding
+  partition keys), so a bucket key equal to the whole primary key isn't supported,
+- the table uses `table.kv.format-version` 2, which is the default for new primary key tables.
+
+```sql title="Primary Key Table with Multiple Bucket Keys"
+CREATE TABLE order_items (
+    `order_id` BIGINT,
+    `tenant_id` BIGINT,
+    `item_id` BIGINT,
+    `amount` DECIMAL(10, 2),
+    PRIMARY KEY (`order_id`, `tenant_id`, `item_id`) NOT ENFORCED
+) WITH (
+    'table.datalake.enabled' = 'true',
+    'bucket.num' = '4',
+    'bucket.key' = 'order_id,tenant_id'
+);
+```
+
+**Corresponding Iceberg table structure:**
+```sql
+CREATE TABLE order_items (
+    order_id BIGINT,
+    tenant_id BIGINT,
+    item_id BIGINT,
+    amount DECIMAL(10, 2),
+    PRIMARY KEY (order_id, tenant_id, item_id) NOT ENFORCED
+) PARTITIONED BY (bucket(order_id, 4));
+```
+
+A lookup join on `order_id` and `tenant_id` then returns only the items of that tenant's order.
+
+Clients and tiering services of Fluss versions before $FLUSS_VERSION$ can't compute the buckets of
+such tables and fail with an error, so upgrade them before creating such tables.
+
 ### Log Tables
 
 The table mapping for Fluss log tables varies depending on whether the bucket key is specified or not.
@@ -629,4 +679,4 @@ For partitioned tables, the metadata structure includes partition information:
 
 ## Current Limitations
 
-- **Multiple bucket keys**: Not supported until Iceberg implements multi-argument partition transforms
+- **Multiple bucket keys**: Only supported for primary key tables as a strict prefix of the primary key, and rows are distributed by the first bucket key column only (see [Multiple Bucket Keys](#multiple-bucket-keys)). Hashing all bucket key columns needs multi-argument partition transforms in Iceberg

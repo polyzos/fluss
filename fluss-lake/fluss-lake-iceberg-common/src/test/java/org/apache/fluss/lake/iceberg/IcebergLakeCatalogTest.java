@@ -259,10 +259,13 @@ class IcebergLakeCatalogTest {
                         .primaryKey("user_id", "shop_id")
                         .build();
 
+        // a multi-column bucket key equal to the primary key has no lookup benefit, see
+        // IcebergCompositeBucketKeyCatalogTest for the supported shape
         TableDescriptor tableDescriptor =
                 TableDescriptor.builder()
                         .schema(flussSchema)
                         .distributedBy(4, "user_id", "shop_id") // Multiple bucket keys
+                        .property(ConfigOptions.TABLE_KV_FORMAT_VERSION, 2)
                         .build();
 
         TablePath tablePath = TablePath.of(database, tableName);
@@ -273,8 +276,8 @@ class IcebergLakeCatalogTest {
                                         tablePath,
                                         tableDescriptor,
                                         new TestingLakeCatalogContext()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Iceberg format supports at most one bucket key");
+                .isInstanceOf(InvalidTableException.class)
+                .hasMessageContaining("must be a strict prefix of the primary key");
     }
 
     @Test
@@ -486,8 +489,8 @@ class IcebergLakeCatalogTest {
                                         tablePath,
                                         tableDescriptor,
                                         new TestingLakeCatalogContext()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Iceberg format supports at most one bucket key");
+                .isInstanceOf(InvalidTableException.class)
+                .hasMessageContaining("the table is a log table");
     }
 
     @ParameterizedTest

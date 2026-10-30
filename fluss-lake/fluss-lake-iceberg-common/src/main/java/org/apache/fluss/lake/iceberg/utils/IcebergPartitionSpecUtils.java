@@ -18,12 +18,15 @@
 package org.apache.fluss.lake.iceberg.utils;
 
 import org.apache.fluss.annotation.Internal;
+import org.apache.fluss.bucketing.IcebergBucketing;
 import org.apache.fluss.exception.InvalidTableException;
 import org.apache.fluss.metadata.TableDescriptor;
 
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.transforms.Transforms;
+import org.apache.iceberg.types.Type;
 
 import java.util.List;
 
@@ -61,11 +64,6 @@ public final class IcebergPartitionSpecUtils {
             List<String> bucketKeys,
             List<String> partitionKeys,
             int bucketCount) {
-        if (bucketKeys.size() > 1) {
-            throw new UnsupportedOperationException(
-                    "Only one bucket key is supported for Iceberg at the moment");
-        }
-
         if (bucketKeys.isEmpty() && isPrimaryKeyTable) {
             throw new IllegalArgumentException(
                     "Bucket key must be set for primary key Iceberg tables");
@@ -91,7 +89,18 @@ public final class IcebergPartitionSpecUtils {
                 builder.identity(BUCKET_COLUMN_NAME);
             }
         } else {
-            builder.bucket(bucketKeys.get(0), bucketCount);
+            // Iceberg's bucket transform takes a single column, so a multi-column bucket key is
+            // bucketed by its first column, matching the Fluss bucket assignment.
+            String hashKey = IcebergBucketing.hashKey(bucketKeys);
+            Type hashKeyType = icebergSchema.findType(hashKey);
+            if (!Transforms.bucket(bucketCount).canTransform(hashKeyType)) {
+                throw new InvalidTableException(
+                        String.format(
+                                "Iceberg tables are bucketed by the first bucket key column, but "
+                                        + "column `%s` of type %s can't be bucketed by Iceberg.",
+                                hashKey, hashKeyType));
+            }
+            builder.bucket(hashKey, bucketCount);
         }
         return builder.build();
     }
