@@ -40,6 +40,15 @@ public abstract class RecordWriter implements AutoCloseable {
             Schema icebergSchema,
             RowType flussRowType,
             TableBucket tableBucket) {
+        this(taskWriter, icebergSchema, flussRowType, tableBucket, false);
+    }
+
+    public RecordWriter(
+            TaskWriter<Record> taskWriter,
+            Schema icebergSchema,
+            RowType flussRowType,
+            TableBucket tableBucket,
+            boolean dvEnabled) {
         this.taskWriter = taskWriter;
         this.icebergSchema = icebergSchema;
         this.bucket = tableBucket.getBucket();
@@ -48,7 +57,8 @@ public abstract class RecordWriter implements AutoCloseable {
                         tableBucket.getBucket(),
                         icebergSchema.asStruct(),
                         flussRowType,
-                        IcebergUtils.isLegacyTable(icebergSchema));
+                        IcebergUtils.isLegacyTable(icebergSchema),
+                        dvEnabled);
     }
 
     public abstract void write(LogRecord record) throws Exception;

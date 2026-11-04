@@ -21,8 +21,10 @@ import org.apache.fluss.annotation.VisibleForTesting;
 import org.apache.fluss.client.Connection;
 import org.apache.fluss.client.ConnectionFactory;
 import org.apache.fluss.client.admin.Admin;
+import org.apache.fluss.client.metadata.LakeSnapshot;
 import org.apache.fluss.client.metadata.MetadataUpdater;
 import org.apache.fluss.client.tiering.TieringLogSplit;
+import org.apache.fluss.client.tiering.TieringRowPosSplit;
 import org.apache.fluss.client.tiering.TieringSplit;
 import org.apache.fluss.client.tiering.TieringSplitGenerator;
 import org.apache.fluss.config.ConfigOptions;
@@ -30,6 +32,7 @@ import org.apache.fluss.config.Configuration;
 import org.apache.fluss.flink.metrics.FlinkMetricRegistry;
 import org.apache.fluss.flink.tiering.event.FailedTieringEvent;
 import org.apache.fluss.flink.tiering.event.FinishedTieringEvent;
+import org.apache.fluss.flink.tiering.event.RowPosRequestEvent;
 import org.apache.fluss.flink.tiering.event.TieringReachMaxDurationEvent;
 import org.apache.fluss.flink.tiering.source.metrics.TieringMetrics;
 import org.apache.fluss.flink.tiering.source.split.FlinkTieringSplit;
@@ -37,6 +40,8 @@ import org.apache.fluss.flink.tiering.source.state.TieringSourceEnumeratorState;
 import org.apache.fluss.lake.committer.TieringStats;
 import org.apache.fluss.lake.writer.LakeTieringFactory;
 import org.apache.fluss.lake.writer.TieringTableValidator;
+import org.apache.fluss.metadata.DataLakeFormat;
+import org.apache.fluss.metadata.PartitionInfo;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.metadata.TablePath;
@@ -124,6 +129,9 @@ public class TieringSourceEnumerator
     private final Map<Long, Long> tieringTableEpochs;
     private final Map<Long, Long> failedTableEpochs;
     private final Map<Long, TieringFinishInfo> finishedTables;
+    // tableId -> latest lake snapshot already given an index-only round (lost on restart: one
+    // rerun)
+    private final Map<Long, Long> indexOnlySnapshots = new ConcurrentHashMap<>();
     private final Set<Long> tieringReachMaxDurationsTables;
 
     // lazily instantiated
@@ -348,6 +356,10 @@ public class TieringSourceEnumerator
             }
         }
 
+        if (sourceEvent instanceof RowPosRequestEvent) {
+            handleRowPosRequest((RowPosRequestEvent) sourceEvent);
+        }
+
         if (sourceEvent instanceof FailedTieringEvent) {
             FailedTieringEvent failedEvent = (FailedTieringEvent) sourceEvent;
             long failedTableId = failedEvent.getTableId();
@@ -371,6 +383,93 @@ public class TieringSourceEnumerator
             LOG.info("Finished tiering table {}.", finishedTables);
             requestTableAndAssign(0);
         }
+    }
+
+    /**
+     * Handles a {@link RowPosRequestEvent} from the Committer. Batches all files for the same
+     * bucket into a single {@link TieringRowPosSplit} and adds them to pendingSplits for
+     * assignment.
+     */
+    private void handleRowPosRequest(RowPosRequestEvent event) {
+        long tableId = event.getTableId();
+        TablePath tablePath = event.getTablePath();
+        int nextFileId = event.getNextFileId();
+        long compactSnapshotId = event.getCompactSnapshotId();
+        String remoteUploadBasePath = event.getRemoteUploadBasePath();
+        int flussColumnCount = event.getFlussColumnCount();
+        Map<String, Map<Integer, List<byte[]>>> splitsByPartitionAndBucket =
+                event.getSerializedSplitsByPartitionAndBucket();
+
+        // count total batched splits (one per partition+bucket combo)
+        int totalBatchCount = 0;
+        for (Map<Integer, List<byte[]>> bucketMap : splitsByPartitionAndBucket.values()) {
+            totalBatchCount += bucketMap.size();
+        }
+
+        // resolve partition name → partition id for partitioned tables
+        boolean hasPartitions =
+                splitsByPartitionAndBucket.keySet().stream().anyMatch(k -> k != null);
+        Map<String, Long> partitionIdByName = new HashMap<>();
+        if (hasPartitions) {
+            try {
+                List<PartitionInfo> partitionInfos = flussAdmin.listPartitionInfos(tablePath).get();
+                for (PartitionInfo info : partitionInfos) {
+                    partitionIdByName.put(info.getPartitionName(), info.getPartitionId());
+                }
+            } catch (Exception e) {
+                throw new FlinkRuntimeException(
+                        "Failed to list partition infos for " + tablePath, e);
+            }
+        }
+
+        int fileIdCounter = nextFileId;
+        List<TieringRowPosSplit> rowPosSplits = new ArrayList<>();
+        for (Map.Entry<String, Map<Integer, List<byte[]>>> partitionEntry :
+                splitsByPartitionAndBucket.entrySet()) {
+            String partitionName = partitionEntry.getKey();
+            for (Map.Entry<Integer, List<byte[]>> bucketEntry :
+                    partitionEntry.getValue().entrySet()) {
+                int bucketId = bucketEntry.getKey();
+                Long partitionId =
+                        partitionName != null ? partitionIdByName.get(partitionName) : null;
+                TableBucket tableBucket = new TableBucket(tableId, partitionId, bucketId);
+                List<byte[]> bucketSplits = bucketEntry.getValue();
+
+                // batch all files for the same bucket into one split
+                int[] fileIds = new int[bucketSplits.size()];
+                byte[][] serializedLakeSplits = new byte[bucketSplits.size()][];
+                for (int i = 0; i < bucketSplits.size(); i++) {
+                    fileIds[i] = fileIdCounter++;
+                    serializedLakeSplits[i] = bucketSplits.get(i);
+                }
+
+                TieringRowPosSplit rowPosSplit =
+                        new TieringRowPosSplit(
+                                tablePath,
+                                tableBucket,
+                                partitionName,
+                                fileIds,
+                                serializedLakeSplits,
+                                totalBatchCount,
+                                compactSnapshotId,
+                                remoteUploadBasePath,
+                                flussColumnCount,
+                                event.isByPrimaryKey());
+                rowPosSplits.add(rowPosSplit);
+            }
+        }
+
+        LOG.info(
+                "Received RowPosRequestEvent for table {} ({}): {} batched splits "
+                        + "(total files={}), nextFileId={}",
+                tablePath,
+                tableId,
+                rowPosSplits.size(),
+                fileIdCounter - nextFileId,
+                nextFileId);
+
+        pendingSplits.addAll(rowPosSplits);
+        assignSplits();
     }
 
     private void handleSourceReaderFailOver() {
@@ -518,6 +617,9 @@ public class TieringSourceEnumerator
                 ((TieringTableValidator) lakeTieringFactory).validateTable(tableInfo);
             }
             List<TieringSplit> tieringSplits = splitGenerator.generateTableSplits(tableInfo);
+            if (tieringSplits.isEmpty()) {
+                tieringSplits = new ArrayList<>(dvIndexOnlySplits(tableInfo));
+            }
             if (tieringSplits.isEmpty()
                     && lakeTieringConfig.get(ConfigOptions.LAKE_TIERING_PARTITION_MARK_DONE_ENABLED)
                     && lakeTieringFactory.supportsPartitionMarkDone()
@@ -599,6 +701,44 @@ public class TieringSourceEnumerator
                                 }),
                 delayMs,
                 TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Idle DV table with a latest commit not yet given an index-only round: one empty split so the
+     * committer indexes it (a no-op if already indexed), else its last writes stay unmasked.
+     */
+    private List<TieringSplit> dvIndexOnlySplits(TableInfo tableInfo) throws Exception {
+        // Iceberg only: Paimon's readable snapshot follows its own compaction, not this lag
+        if (!tableInfo.getTableConfig().isDeletionVectorsEnabled()
+                || tableInfo.getTableConfig().getDataLakeFormat().orElse(null)
+                        != DataLakeFormat.ICEBERG) {
+            return Collections.emptyList();
+        }
+        TablePath tablePath = tableInfo.getTablePath();
+        LakeSnapshot latest;
+        try {
+            latest = flussAdmin.getLatestLakeSnapshot(tablePath).get();
+        } catch (Exception e) {
+            return Collections.emptyList(); // nothing tiered yet
+        }
+        Long done = indexOnlySnapshots.put(tableInfo.getTableId(), latest.getSnapshotId());
+        if (done != null && done == latest.getSnapshotId()) {
+            return Collections.emptyList();
+        }
+        Map.Entry<TableBucket, Long> any =
+                latest.getTableBucketsOffset().entrySet().iterator().next();
+        TableBucket tb = any.getKey();
+        String partitionName = null;
+        if (tb.getPartitionId() != null) {
+            for (PartitionInfo info : flussAdmin.listPartitionInfos(tablePath).get()) {
+                if (info.getPartitionId() == tb.getPartitionId()) {
+                    partitionName = info.getPartitionName();
+                }
+            }
+        }
+        LOG.info("DV index-only round for table {} (latest snapshot not yet indexed).", tablePath);
+        return Collections.singletonList(
+                new TieringLogSplit(tablePath, tb, partitionName, any.getValue(), any.getValue()));
     }
 
     private List<TieringSplit> populateTieringRoundMetadata(List<TieringSplit> tieringSplits) {

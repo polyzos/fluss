@@ -18,6 +18,8 @@
 
 package org.apache.fluss.lake.iceberg.tiering;
 
+import org.apache.fluss.lake.dv.index.KeyPosition;
+import org.apache.fluss.lake.dv.index.PositionIndexDelta;
 import org.apache.fluss.lake.iceberg.maintenance.RewriteDataFileResult;
 import org.apache.fluss.lake.iceberg.utils.IcebergJsonSerdeUtils;
 import org.apache.fluss.shaded.jackson2.com.fasterxml.jackson.core.JsonGenerator;
@@ -29,6 +31,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.io.WriteResult;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -59,6 +62,9 @@ import static org.apache.fluss.utils.Preconditions.checkArgument;
  *       files
  *   <li>"rewritten_delete_files": the delete files rewritten by the {@link WriteResult}
  *   <li>"rewrite_result": the {@link RewriteDataFileResult}, or null if there is none
+ *   <li>"position_index_delta": optional, the {@link PositionIndexDelta} of a table with derived
+ *       deletion vectors, as {@code {"changed_keys": [...], "puts": [{"key": ..., "file": ...,
+ *       "pos": ...}, ...], "deletes": [...]}} with keys in base64. Absent if there is none.
  * </ul>
  *
  * <p>Specs, files and rewrite results are written as described in {@link IcebergJsonSerdeUtils}.
@@ -73,6 +79,13 @@ public class IcebergWriteResultJsonSerde
     private static final String REFERENCED_DATA_FILES_FIELD = "referenced_data_files";
     private static final String REWRITTEN_DELETE_FILES_FIELD = "rewritten_delete_files";
     private static final String REWRITE_RESULT_FIELD = "rewrite_result";
+    private static final String POSITION_INDEX_DELTA_FIELD = "position_index_delta";
+    private static final String CHANGED_KEYS_FIELD = "changed_keys";
+    private static final String PUTS_FIELD = "puts";
+    private static final String DELETES_FIELD = "deletes";
+    private static final String KEY_FIELD = "key";
+    private static final String FILE_FIELD = "file";
+    private static final String POS_FIELD = "pos";
 
     @Override
     public void serialize(IcebergWriteResult icebergWriteResult, JsonGenerator generator)
@@ -109,6 +122,14 @@ public class IcebergWriteResultJsonSerde
             generator.writeFieldName(REWRITE_RESULT_FIELD);
             writeRewriteDataFileResult(generator, rewriteDataFileResult, specs);
         }
+
+        // Optional and only written when present, so the documents of tables without derived
+        // deletion vectors are unchanged.
+        PositionIndexDelta positionIndexDelta = icebergWriteResult.positionIndexDelta();
+        if (positionIndexDelta != null) {
+            generator.writeFieldName(POSITION_INDEX_DELTA_FIELD);
+            writePositionIndexDelta(generator, positionIndexDelta);
+        }
         generator.writeEndObject();
     }
 
@@ -136,6 +157,72 @@ public class IcebergWriteResultJsonSerde
         JsonNode rewriteNode = getField(node, REWRITE_RESULT_FIELD);
         RewriteDataFileResult rewriteDataFileResult =
                 rewriteNode.isNull() ? null : readRewriteDataFileResult(rewriteNode, specs);
-        return new IcebergWriteResult(writeResult, specs, rewriteDataFileResult);
+
+        JsonNode deltaNode = node.get(POSITION_INDEX_DELTA_FIELD);
+        PositionIndexDelta positionIndexDelta =
+                deltaNode == null || deltaNode.isNull() ? null : readPositionIndexDelta(deltaNode);
+        return new IcebergWriteResult(
+                writeResult, specs, rewriteDataFileResult, positionIndexDelta);
+    }
+
+    private static void writePositionIndexDelta(JsonGenerator generator, PositionIndexDelta delta)
+            throws IOException {
+        generator.writeStartObject();
+        writeKeys(generator, CHANGED_KEYS_FIELD, delta.changedKeys());
+        generator.writeArrayFieldStart(PUTS_FIELD);
+        for (KeyPosition put : delta.puts()) {
+            generator.writeStartObject();
+            generator.writeBinaryField(KEY_FIELD, put.key());
+            generator.writeStringField(FILE_FIELD, put.file());
+            generator.writeNumberField(POS_FIELD, put.pos());
+            generator.writeEndObject();
+        }
+        generator.writeEndArray();
+        writeKeys(generator, DELETES_FIELD, delta.deletes());
+        generator.writeEndObject();
+    }
+
+    private static void writeKeys(JsonGenerator generator, String field, List<byte[]> keys)
+            throws IOException {
+        generator.writeArrayFieldStart(field);
+        for (byte[] key : keys) {
+            generator.writeBinary(key);
+        }
+        generator.writeEndArray();
+    }
+
+    private static PositionIndexDelta readPositionIndexDelta(JsonNode node) {
+        List<KeyPosition> puts = new ArrayList<>();
+        for (JsonNode putNode : getArrayField(node, PUTS_FIELD)) {
+            JsonNode fileNode = getField(putNode, FILE_FIELD);
+            checkArgument(fileNode.isTextual(), "Field %s must be a string.", FILE_FIELD);
+            JsonNode posNode = getField(putNode, POS_FIELD);
+            checkArgument(posNode.canConvertToLong(), "Field %s must be a long.", POS_FIELD);
+            puts.add(
+                    new KeyPosition(
+                            readKey(getField(putNode, KEY_FIELD), KEY_FIELD),
+                            fileNode.asText(),
+                            posNode.asLong()));
+        }
+        return new PositionIndexDelta(
+                readKeys(node, CHANGED_KEYS_FIELD), puts, readKeys(node, DELETES_FIELD));
+    }
+
+    private static List<byte[]> readKeys(JsonNode node, String field) {
+        List<byte[]> keys = new ArrayList<>();
+        for (JsonNode keyNode : getArrayField(node, field)) {
+            keys.add(readKey(keyNode, field));
+        }
+        return keys;
+    }
+
+    private static byte[] readKey(JsonNode keyNode, String field) {
+        checkArgument(keyNode.isTextual(), "Field %s must contain base64 strings.", field);
+        try {
+            return keyNode.binaryValue();
+        } catch (IOException e) {
+            throw new UncheckedIOException(
+                    String.format("Field %s must contain base64 strings.", field), e);
+        }
     }
 }

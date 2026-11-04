@@ -47,6 +47,7 @@ import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.SupportsNamespaces;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.deletes.DeleteGranularity;
 import org.apache.iceberg.exceptions.AlreadyExistsException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
@@ -65,6 +66,8 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.apache.fluss.lake.iceberg.IcebergSchemaUtils.LEGACY_SYSTEM_COLUMNS;
+import static org.apache.fluss.lake.iceberg.IcebergSchemaUtils.ROWID_COLUMN_NAME;
+import static org.apache.fluss.lake.iceberg.IcebergSchemaUtils.isDeletionVectorsEnabled;
 import static org.apache.fluss.metadata.TableDescriptor.OFFSET_COLUMN_NAME;
 import static org.apache.fluss.utils.Preconditions.checkArgument;
 
@@ -114,7 +117,12 @@ public class IcebergLakeCatalog implements LakeCatalog {
                 IcebergPartitionSpecUtils.createPartitionSpec(tableDescriptor, icebergSchema);
         // FIP-27: newly created tables are clean and carry no __offset column, so they need no
         // sort order. (Legacy tables keep ASC(__offset), but those are never created here.)
-        SortOrder sortOrder = SortOrder.unsorted();
+        // Deletion-vector tables keep the legacy system columns, and thus ASC(__offset), so that
+        // re-enabling them matches the legacy expectations below.
+        SortOrder sortOrder =
+                isDeletionVectorsEnabled(tableDescriptor)
+                        ? SortOrder.builderFor(icebergSchema).asc(OFFSET_COLUMN_NAME).build()
+                        : SortOrder.unsorted();
         Map<String, String> expectedProperties = buildTableProperties(tableDescriptor, isPkTable);
         tableBuilder.withProperties(expectedProperties);
         tableBuilder.withPartitionSpec(partitionSpec);
@@ -252,7 +260,8 @@ public class IcebergLakeCatalog implements LakeCatalog {
                 }
                 TableChange.AddColumn addColumn = (TableChange.AddColumn) tableChange;
 
-                if (LEGACY_SYSTEM_COLUMNS.containsKey(addColumn.getName())) {
+                if (LEGACY_SYSTEM_COLUMNS.containsKey(addColumn.getName())
+                        || ROWID_COLUMN_NAME.equals(addColumn.getName())) {
                     throw new InvalidTableException(
                             "Column '"
                                     + addColumn.getName()
@@ -568,7 +577,10 @@ public class IcebergLakeCatalog implements LakeCatalog {
     boolean isIcebergPropertiesCompatible(
             Map<String, String> existingProperties, Map<String, String> expectedProperties) {
         for (Map.Entry<String, String> entry : expectedProperties.entrySet()) {
-            if (entry.getKey().startsWith(FLUSS_CONF_PREFIX)) {
+            // format-version is moved into the table metadata by Iceberg and never surfaces in the
+            // table properties, so it cannot be compared here.
+            if (entry.getKey().startsWith(FLUSS_CONF_PREFIX)
+                    || TableProperties.FORMAT_VERSION.equals(entry.getKey())) {
                 continue;
             }
             String actual = existingProperties.get(entry.getKey());
@@ -622,6 +634,13 @@ public class IcebergLakeCatalog implements LakeCatalog {
                     TableProperties.UPDATE_MODE, RowLevelOperationMode.MERGE_ON_READ.modeName());
             icebergProperties.put(
                     TableProperties.MERGE_MODE, RowLevelOperationMode.MERGE_ON_READ.modeName());
+
+            // DV tables use Iceberg v3 Puffin deletion vectors instead of equality deletes.
+            if (isDeletionVectorsEnabled(tableDescriptor)) {
+                icebergProperties.put(TableProperties.FORMAT_VERSION, "3");
+                icebergProperties.put(
+                        TableProperties.DELETE_GRANULARITY, DeleteGranularity.FILE.toString());
+            }
         }
 
         tableDescriptor

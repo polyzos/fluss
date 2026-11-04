@@ -20,20 +20,59 @@ package org.apache.fluss.flink.tiering.committer;
 import org.apache.fluss.client.Connection;
 import org.apache.fluss.client.ConnectionFactory;
 import org.apache.fluss.client.admin.Admin;
+import org.apache.fluss.client.metadata.LakeSnapshot;
 import org.apache.fluss.client.tiering.FlussTableLakeSnapshotCommitter;
 import org.apache.fluss.client.tiering.TableBucketWriteResult;
 import org.apache.fluss.client.tiering.TieringCommitResult;
 import org.apache.fluss.client.tiering.TieringCommitter;
+import org.apache.fluss.client.tiering.TieringCommitterInitContext;
+import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.config.Configuration;
+import org.apache.fluss.config.FlussConfigUtils;
+import org.apache.fluss.exception.LakeTableSnapshotNotExistException;
 import org.apache.fluss.flink.tiering.event.FailedTieringEvent;
 import org.apache.fluss.flink.tiering.event.FinishedTieringEvent;
+import org.apache.fluss.flink.tiering.event.RowPosRequestEvent;
 import org.apache.fluss.flink.tiering.source.TieringSource;
+import org.apache.fluss.fs.FsPath;
+import org.apache.fluss.lake.committer.CommittedLakeSnapshot;
+import org.apache.fluss.lake.committer.LakeCommitResult;
 import org.apache.fluss.lake.committer.LakeCommitter;
+import org.apache.fluss.lake.committer.PartitionMarkDoneCommitter;
+import org.apache.fluss.lake.dv.RowPosSstIndex;
+import org.apache.fluss.lake.dv.RowPosSstUploader;
+import org.apache.fluss.lake.dv.index.KeyPosition;
+import org.apache.fluss.lake.dv.index.PositionIndexChangeBuilder;
+import org.apache.fluss.lake.dv.index.PositionIndexDelta;
+import org.apache.fluss.lake.dv.index.PositionIndexDeltaProvider;
+import org.apache.fluss.lake.dv.index.PositionIndexStore;
+import org.apache.fluss.lake.lakestorage.LakeCatalog;
+import org.apache.fluss.lake.lakestorage.LakeStorage;
+import org.apache.fluss.lake.lakestorage.LakeStoragePlugin;
+import org.apache.fluss.lake.lakestorage.LakeStoragePluginSetUp;
+import org.apache.fluss.lake.serializer.SimpleVersionedSerializer;
+import org.apache.fluss.lake.source.DataDeltaPlan;
+import org.apache.fluss.lake.source.LakeSource;
+import org.apache.fluss.lake.source.LakeSplit;
+import org.apache.fluss.lake.source.RowPosResult;
 import org.apache.fluss.lake.writer.LakeTieringFactory;
 import org.apache.fluss.lake.writer.LakeWriter;
+import org.apache.fluss.metadata.DataLakeFormat;
+import org.apache.fluss.metadata.PartitionInfo;
+import org.apache.fluss.metadata.ResolvedPartitionSpec;
 import org.apache.fluss.metadata.TableBucket;
+import org.apache.fluss.metadata.TableInfo;
+import org.apache.fluss.metadata.TablePath;
+import org.apache.fluss.rpc.messages.GetDvSnapshotResponse;
+import org.apache.fluss.rpc.messages.PbDvKeyPosition;
+import org.apache.fluss.rpc.messages.PbLakeDvEntry;
 import org.apache.fluss.utils.ExceptionUtils;
+import org.apache.fluss.utils.FlussPaths;
 
+import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.Gauge;
+import org.apache.flink.metrics.MetricGroup;
+import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.operators.coordination.OperatorEventGateway;
 import org.apache.flink.runtime.source.event.SourceEventWrapper;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
@@ -41,13 +80,25 @@ import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperatorParameters;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 
+import javax.annotation.Nullable;
+
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 
+import static org.apache.fluss.lake.committer.LakeCommitter.FLUSS_LAKE_SNAP_BUCKET_OFFSET_PROPERTY;
+import static org.apache.fluss.lake.committer.LakeCommitter.FLUSS_LAKE_SNAP_NEXT_FILE_ID_PROPERTY;
 import static org.apache.fluss.utils.Preconditions.checkState;
 
 /**
@@ -75,6 +126,8 @@ public class TieringCommitOperator<WriteResult, Committable>
     private final Configuration flussConfig;
     private final Configuration lakeTieringConfig;
     private final LakeTieringFactory<WriteResult, Committable> lakeTieringFactory;
+    private final Configuration dataLakeConfig;
+    private final String dataLakeFormat;
     private final FlussTableLakeSnapshotCommitter flussTableLakeSnapshotCommitter;
     private TieringCommitter<WriteResult, Committable> tieringCommitter;
     private Connection connection;
@@ -86,15 +139,87 @@ public class TieringCommitOperator<WriteResult, Committable>
     // Table ID -> accumulator for the current tiering round.
     private final Map<Long, TableWriteResultAccumulator<WriteResult>> tableWriteResultAccumulators;
 
+    // RowPos scan state
+    // tableId -> collected RowPos results
+    private final Map<Long, List<RowPosResult>> pendingRowPosResults;
+    // tableId -> expected count of RowPos results
+    private final Map<Long, Integer> expectedRowPosResultCounts;
+    // tableId -> partition -> bucket -> deleted file names
+    private final Map<Long, Map<String, Map<Integer, List<String>>>> pendingDeletedFiles;
+    // tableId -> next file id counter
+    private final Map<Long, Integer> nextFileIdByTable;
+    // tableId -> table path (for deferred commit after DV scan completes)
+    private final Map<Long, TablePath> pendingTablePaths;
+    // tableId -> compact snapshot id (for index.json writing after DV scan completes)
+    private final Map<Long, Long> pendingCompactSnapshotIds;
+    // table id -> base snapshot of a round held until its rewritten files are re-indexed
+    private final Map<Long, LakeSnapshot> derivedReindexBase = new HashMap<>();
+    // table id -> index change id of the re-index in flight
+    private final Map<Long, Long> derivedReindexChange = new HashMap<>();
+    // Tables whose held round is resuming; it committed its own compaction before the hold.
+    private final Set<Long> resumingDerived = new HashSet<>();
+
+    /** Holds a derived round until its rewritten files are re-indexed on the tiering readers. */
+    private static final class DerivedReindexDeferred extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+        final long compactSnapshotId;
+        // Files were only removed: the re-index is already published, so resume at once.
+        final boolean published;
+
+        DerivedReindexDeferred(long compactSnapshotId, boolean published) {
+            super(
+                    "derived re-index of snapshot " + compactSnapshotId + " pending",
+                    null,
+                    false,
+                    false);
+            this.compactSnapshotId = compactSnapshotId;
+            this.published = published;
+        }
+    }
+
+    /** Restarts a held derived round on the re-indexed snapshot. */
+    private void resumeDerivedRound(long tableId, TablePath tablePath) {
+        try {
+            resumingDerived.add(tableId);
+            commitAndFinish(tableId, tablePath, collectedWriteResults(tableId), null, null, 0L);
+        } catch (DerivedReindexDeferred d) {
+            if (d.published) {
+                resumeDerivedRound(tableId, tablePath);
+            } else {
+                LOG.info(
+                        "Derived DV: {} was rewritten again meanwhile; re-indexing snapshot {}.",
+                        tablePath,
+                        d.compactSnapshotId);
+            }
+        } catch (Exception e) {
+            resumingDerived.remove(tableId);
+            tableWriteResultAccumulators.remove(tableId);
+            operatorEventGateway.sendEventToCoordinator(
+                    new SourceEventWrapper(
+                            new FailedTieringEvent(tableId, ExceptionUtils.stringifyException(e))));
+            LOG.warn("Derived DV: resumed round of {} failed; it is tiered again.", tablePath, e);
+        }
+    }
+
     /** Creates an operator that collects and commits table tiering rounds. */
     public TieringCommitOperator(
             StreamOperatorParameters<CommittableMessage<Committable>> parameters,
             Configuration flussConf,
             Configuration lakeTieringConfig,
-            LakeTieringFactory<WriteResult, Committable> lakeTieringFactory) {
+            LakeTieringFactory<WriteResult, Committable> lakeTieringFactory,
+            Configuration dataLakeConfig,
+            String dataLakeFormat) {
         this.lakeTieringFactory = lakeTieringFactory;
+        this.dataLakeConfig = dataLakeConfig;
+        this.dataLakeFormat = dataLakeFormat;
         this.flussTableLakeSnapshotCommitter = new FlussTableLakeSnapshotCommitter(flussConf);
         this.tableWriteResultAccumulators = new HashMap<>();
+        this.pendingRowPosResults = new HashMap<>();
+        this.expectedRowPosResultCounts = new HashMap<>();
+        this.pendingDeletedFiles = new HashMap<>();
+        this.nextFileIdByTable = new HashMap<>();
+        this.pendingTablePaths = new HashMap<>();
+        this.pendingCompactSnapshotIds = new HashMap<>();
         this.flussConfig = flussConf;
         this.lakeTieringConfig = lakeTieringConfig;
         this.setup(
@@ -119,12 +244,40 @@ public class TieringCommitOperator<WriteResult, Committable>
                         lakeTieringConfig,
                         lakeTieringFactory,
                         flussTableLakeSnapshotCommitter);
+        MetricGroup dv = getMetricGroup().addGroup("derivedDeletionVectors");
+        dvRounds = dv.counter("rounds");
+        dvChangedKeys = dv.counter("changedKeys");
+        dvReindexes = dv.counter("reindexes");
+        dvChainEntriesTrimmed = dv.counter("chainEntriesTrimmed");
+        dvOrphanChangesRemoved = dv.counter("orphanChangesRemoved");
+        dv.gauge("lastLookupMs", (Gauge<Long>) () -> dvLastLookupMs);
+        dv.gauge("lastLakeCommitMs", (Gauge<Long>) () -> dvLastLakeCommitMs);
+        dv.gauge("lastReindexMs", (Gauge<Long>) () -> dvLastReindexMs);
     }
+
+    // derived deletion vector metrics
+    private transient Counter dvRounds = new SimpleCounter();
+    private transient Counter dvChangedKeys = new SimpleCounter();
+    private transient Counter dvReindexes = new SimpleCounter();
+    private transient Counter dvChainEntriesTrimmed = new SimpleCounter();
+    private transient Counter dvOrphanChangesRemoved = new SimpleCounter();
+    private transient volatile long dvLastLookupMs;
+    private transient volatile long dvLastLakeCommitMs;
+    private transient volatile long dvLastReindexMs;
+    // table id -> when the re-index in flight was triggered
+    private final Map<Long, Long> derivedReindexStart = new HashMap<>();
 
     @Override
     public void processElement(StreamRecord<TableBucketWriteResult<WriteResult>> streamRecord)
             throws Exception {
         TableBucketWriteResult<WriteResult> tableBucketWriteResult = streamRecord.getValue();
+
+        // check if this is a RowPos scan result from Reader
+        if (tableBucketWriteResult.isRowPosResult()) {
+            handleRowPosResult(tableBucketWriteResult);
+            return;
+        }
+
         TableBucket tableBucket = tableBucketWriteResult.tableBucket();
         long tableId = tableBucket.getTableId();
         TableWriteResultAccumulator<WriteResult> accumulator =
@@ -136,24 +289,33 @@ public class TieringCommitOperator<WriteResult, Committable>
         accumulator.add(tableBucketWriteResult);
 
         if (accumulator.isComplete()) {
+            List<TableBucketWriteResult<WriteResult>> committableWriteResults =
+                    accumulator.bucketWriteResults;
+            TablePath tablePath = tableBucketWriteResult.tablePath();
             try {
-                TieringCommitResult<Committable> commitResult =
-                        tieringCommitter.commitWriteResults(
-                                tableId,
-                                tableBucketWriteResult.tablePath(),
-                                accumulator.bucketWriteResults);
-                // only emit downstream when actual data was written
-                if (commitResult.getCommittable() != null) {
-                    output.collect(
-                            new StreamRecord<>(
-                                    new CommittableMessage<>(commitResult.getCommittable())));
+                // check if DV scan is needed before committing
+                boolean scanTriggered =
+                        mayTriggerRowPosScan(tableId, tablePath, committableWriteResults);
+                if (scanTriggered) {
+                    // DV scan pending — defer commit until scan results are collected,
+                    // so the commit includes both write results and DV data
+                    pendingTablePaths.put(tableId, tablePath);
+                } else {
+                    // no DV scan needed — commit and finish immediately (no index snapshot)
+                    commitAndFinish(tableId, tablePath, committableWriteResults, null, null, 0L);
                 }
-                // notify that the table id has been finished tier
-                operatorEventGateway.sendEventToCoordinator(
-                        new SourceEventWrapper(
-                                new FinishedTieringEvent(tableId, commitResult.getStats())));
+            } catch (DerivedReindexDeferred d) {
+                if (d.published) {
+                    resumeDerivedRound(tableId, tablePath);
+                } else {
+                    LOG.info(
+                            "Derived DV: round of {} holds until rewritten files are re-indexed (snapshot {}).",
+                            tablePath,
+                            d.compactSnapshotId);
+                }
             } catch (Exception e) {
                 // if any exception happens, send to source coordinator to mark it as failed
+                tableWriteResultAccumulators.remove(tableId);
                 operatorEventGateway.sendEventToCoordinator(
                         new SourceEventWrapper(
                                 new FailedTieringEvent(
@@ -161,9 +323,1557 @@ public class TieringCommitOperator<WriteResult, Committable>
                 LOG.warn(
                         "Fail to commit tiering write result, will try to tier again in next round.",
                         e);
-            } finally {
-                tableWriteResultAccumulators.remove(tableId);
             }
+        }
+    }
+
+    /**
+     * Commits the collected write results for one table to the lake and Fluss.
+     *
+     * <p>Tables without deletion vectors are committed by the engine-agnostic {@link
+     * TieringCommitter}. Deletion-vector tables additionally carry the DV position report (and, in
+     * the derived mode, resolve the superseded rows' positions) with their commit.
+     *
+     * <p>Always returns a non-null {@link TieringCommitResult}. When nothing was committed, {@link
+     * TieringCommitResult#getCommittable()} is {@code null} and stats are {@code null}.
+     */
+    private TieringCommitResult<Committable> commitWriteResults(
+            long tableId,
+            TablePath tablePath,
+            List<TableBucketWriteResult<WriteResult>> committableWriteResults,
+            @Nullable List<RowPosResult> rowPosResults,
+            @Nullable Map<String, Map<Integer, List<String>>> deletedFiles,
+            long indexSnapshotId)
+            throws Exception {
+        boolean hasRowPosResults = rowPosResults != null && !rowPosResults.isEmpty();
+        TableInfo currentTableInfo = admin.getTableInfo(tablePath).get();
+        if (!hasRowPosResults && !currentTableInfo.isDeletionVectorsEnabled()) {
+            return tieringCommitter.commitWriteResults(tableId, tablePath, committableWriteResults);
+        }
+        // Check if the table was dropped and recreated during tiering.
+        // If the current table id differs from the committable's table id, fail this commit
+        // to avoid dirty commit to a newly created table.
+        if (currentTableInfo.getTableId() != tableId) {
+            throw new IllegalStateException(
+                    String.format(
+                            "The current table id %s for table path %s is different from the table id %s in the committable. "
+                                    + "This usually happens when a table was dropped and recreated during tiering. "
+                                    + "Aborting commit to prevent dirty commit.",
+                            currentTableInfo.getTableId(), tablePath, tableId));
+        }
+
+        // filter down to buckets that actually produced data
+        List<TableBucketWriteResult<WriteResult>> nonEmptyResults =
+                committableWriteResults.stream()
+                        .filter(r -> r.writeResult() != null)
+                        .collect(Collectors.toList());
+
+        // all buckets were empty — nothing to commit to the lake
+        if (nonEmptyResults.isEmpty()) {
+            if (hasRowPosResults) {
+                // DV index-only round (idle table): index the latest snapshot's files and make it
+                // readable without a lake commit, else its last writes stay unmasked until new data
+                commitDvIndexOnly(tableId, tablePath, rowPosResults, deletedFiles, indexSnapshotId);
+            } else {
+                LOG.info(
+                        "Commit tiering write results is empty for table {}, table path {}",
+                        tableId,
+                        tablePath);
+            }
+            return new TieringCommitResult<>(null, null);
+        }
+
+        try (LakeCommitter<WriteResult, Committable> lakeCommitter =
+                lakeTieringFactory.createLakeCommitter(
+                        new TieringCommitterInitContext(
+                                tablePath, currentTableInfo, lakeTieringConfig, flussConfig))) {
+            List<WriteResult> writeResults =
+                    nonEmptyResults.stream()
+                            .map(TableBucketWriteResult::writeResult)
+                            .collect(Collectors.toList());
+
+            // collect tiered offsets from all buckets, including those finished without writing
+            // data, otherwise their splits would be regenerated forever; buckets with unknown
+            // progress (e.g. splits skipped in this round) are excluded
+            Map<TableBucket, Long> logEndOffsets = new HashMap<>();
+            Map<TableBucket, Long> logMaxTieredTimestamps = new HashMap<>();
+            for (TableBucketWriteResult<WriteResult> writeResult : committableWriteResults) {
+                if (writeResult.logEndOffset() < 0) {
+                    continue;
+                }
+                TableBucket tableBucket = writeResult.tableBucket();
+                logEndOffsets.put(tableBucket, writeResult.logEndOffset());
+                if (writeResult.maxTimestamp() >= 0) {
+                    logMaxTieredTimestamps.put(tableBucket, writeResult.maxTimestamp());
+                }
+            }
+
+            // to committable
+            Committable committable = lakeCommitter.toCommittable(writeResults);
+            // before commit to lake, check fluss not missing any lake snapshot committed by fluss
+            LakeSnapshot flussCurrentLakeSnapshot = getLatestLakeSnapshot(tablePath);
+            checkFlussNotMissingLakeSnapshot(
+                    tablePath,
+                    tableId,
+                    lakeCommitter,
+                    committable,
+                    flussCurrentLakeSnapshot == null
+                            ? null
+                            : flussCurrentLakeSnapshot.getSnapshotId());
+            if (lakeTieringConfig.get(ConfigOptions.LAKE_TIERING_PARTITION_MARK_DONE_ENABLED)
+                    && lakeTieringFactory.supportsPartitionMarkDone()) {
+                preparePartitionMarkDone(lakeCommitter, committable);
+            }
+
+            // get the lake bucket offsets file storing the log end offsets
+            String lakeBucketTieredOffsetsFile =
+                    flussTableLakeSnapshotCommitter.prepareLakeSnapshot(
+                            tableId, tablePath, logEndOffsets);
+
+            // record the lake snapshot bucket offsets file to snapshot property
+            Map<String, String> snapshotProperties = new HashMap<>();
+            snapshotProperties.put(
+                    FLUSS_LAKE_SNAP_BUCKET_OFFSET_PROPERTY, lakeBucketTieredOffsetsFile);
+
+            if (currentTableInfo.isDeletionVectorsDerived()) {
+                return commitDerivedRound(
+                        tableId,
+                        tablePath,
+                        currentTableInfo,
+                        lakeCommitter,
+                        committable,
+                        nonEmptyResults,
+                        flussCurrentLakeSnapshot,
+                        lakeBucketTieredOffsetsFile,
+                        snapshotProperties,
+                        logEndOffsets,
+                        logMaxTieredTimestamps);
+            }
+
+            // persist nextFileId for DV tables so it survives Committer restarts
+            Integer nextFileId = nextFileIdByTable.get(tableId);
+            if (nextFileId != null) {
+                snapshotProperties.put(
+                        FLUSS_LAKE_SNAP_NEXT_FILE_ID_PROPERTY, String.valueOf(nextFileId));
+            }
+            // Pass the previous lake snapshot offsets merged with this round's log end offsets, the
+            // same merge the coordinator prepares when writing the offsets file.
+            Map<TableBucket, Long> tieredLogEndOffsets = new HashMap<>();
+            if (flussCurrentLakeSnapshot != null) {
+                tieredLogEndOffsets.putAll(flussCurrentLakeSnapshot.getTableBucketsOffset());
+            }
+            tieredLogEndOffsets.putAll(logEndOffsets);
+            LakeCommitResult lakeCommitResult =
+                    lakeCommitter.commit(
+                            committable,
+                            new LakeCommitter.CommitContext(
+                                    snapshotProperties, tieredLogEndOffsets));
+
+            Map<TableBucket, FlussTableLakeSnapshotCommitter.DvBucketData> dvReport =
+                    buildFullDvReport(
+                            tableId,
+                            tablePath,
+                            rowPosResults,
+                            deletedFiles,
+                            lakeCommitResult,
+                            flussCurrentLakeSnapshot,
+                            logEndOffsets.keySet(),
+                            indexSnapshotId);
+
+            // commit to fluss
+            flussTableLakeSnapshotCommitter.commit(
+                    tableId,
+                    tablePath,
+                    lakeCommitResult,
+                    lakeBucketTieredOffsetsFile,
+                    logEndOffsets,
+                    logMaxTieredTimestamps,
+                    dvReport,
+                    indexSnapshotId);
+            return new TieringCommitResult<>(committable, lakeCommitResult.getTieringStats());
+        }
+    }
+
+    private static final int DERIVED_LOOKUP_CHUNK = 50_000;
+
+    private final Map<Long, Integer> roundsSinceTrim = new HashMap<>();
+
+    private void maybeTrimIndexChain(
+            long tableId,
+            TablePath tablePath,
+            PositionIndexStore store,
+            Map<TableBucket, Long> readableOffsets) {
+        int rounds = roundsSinceTrim.merge(tableId, 1, Integer::sum);
+        if (rounds < flussConfig.get(ConfigOptions.LAKE_TIERING_DELETION_VECTORS_TRIM_INTERVAL)) {
+            return;
+        }
+        roundsSinceTrim.put(tableId, 0);
+        try {
+            List<TableBucket> withData = new ArrayList<>();
+            for (Map.Entry<TableBucket, Long> e : readableOffsets.entrySet()) {
+                if (e.getValue() != null && e.getValue() > 0) {
+                    withData.add(e.getKey());
+                }
+            }
+            long t0 = System.currentTimeMillis();
+            int trimmed =
+                    store.trim(
+                            withData,
+                            flussConfig.get(
+                                    ConfigOptions.LAKE_TIERING_DELETION_VECTORS_TRIM_RETAIN));
+            // Only failed attempts' changes are orphans here: this round's change is registered and
+            // repair registers a crashed round's change before any later commit.
+            int orphans =
+                    store.deleteOrphanChanges(
+                            flussConfig
+                                    .get(ConfigOptions.LAKE_TIERING_DELETION_VECTORS_ORPHAN_MIN_AGE)
+                                    .toMillis());
+            dvChainEntriesTrimmed.inc(trimmed);
+            dvOrphanChangesRemoved.inc(orphans);
+            if (orphans > 0) {
+                LOG.info("Derived DV: removed {} orphan index changes of {}.", orphans, tablePath);
+            }
+            LOG.info(
+                    "Derived DV: index chain of {} trimmed by {} entries in {} ms ({} buckets with data).",
+                    tablePath,
+                    trimmed,
+                    System.currentTimeMillis() - t0,
+                    withData.size());
+        } catch (Exception e) {
+            LOG.warn("Derived DV: trimming the index chain of {} failed.", tablePath, e);
+        }
+    }
+
+    /**
+     * Resolves the changed keys' positions in the base snapshot and commits data and deletion
+     * vectors in one lake commit, so every lake snapshot is consistent at its tiered offsets.
+     */
+    private TieringCommitResult<Committable> commitDerivedRound(
+            long tableId,
+            TablePath tablePath,
+            TableInfo tableInfo,
+            LakeCommitter<WriteResult, Committable> lakeCommitter,
+            Committable committable,
+            List<TableBucketWriteResult<WriteResult>> nonEmptyResults,
+            @Nullable LakeSnapshot flussCurrentLakeSnapshot,
+            String lakeBucketTieredOffsetsFile,
+            Map<String, String> snapshotProperties,
+            Map<TableBucket, Long> logEndOffsets,
+            Map<TableBucket, Long> logMaxTieredTimestamps)
+            throws Exception {
+        long base =
+                flussCurrentLakeSnapshot == null ? -1L : flussCurrentLakeSnapshot.getSnapshotId();
+        long t0 = System.currentTimeMillis();
+        // Compaction since the base, by Fluss or another engine, is re-indexed and made readable
+        // before this round resolves its keys.
+        if (base > 0) {
+            // This round's own compaction is committed first so its deletes never invalidate it;
+            // a resumed round did so before it was held.
+            if (!resumingDerived.remove(tableId)) {
+                lakeCommitter.commitPendingRewrite(committable);
+            }
+            // Holds the round while the tiering readers re-index the rewritten files.
+            Long compactSnapshotId =
+                    triggerDerivedReindex(tableId, tablePath, tableInfo, flussCurrentLakeSnapshot);
+            if (compactSnapshotId != null) {
+                throw new DerivedReindexDeferred(compactSnapshotId, false);
+            }
+        }
+        Map<TableBucket, PositionIndexDelta> deltas = new HashMap<>();
+        for (TableBucketWriteResult<WriteResult> r : nonEmptyResults) {
+            Object wr = r.writeResult();
+            if (wr instanceof PositionIndexDeltaProvider) {
+                PositionIndexDelta d = ((PositionIndexDeltaProvider) wr).positionIndexDelta();
+                if (d != null) {
+                    deltas.put(r.tableBucket(), d);
+                }
+            }
+        }
+        // 1. Look up the base snapshot's positions of the superseded rows.
+        Map<String, List<Long>> deleted = new HashMap<>();
+        long changed = 0;
+        long found = 0;
+        if (base > 0 && !deltas.isEmpty()) {
+            ExecutorService pool =
+                    Executors.newFixedThreadPool(Math.min(8, Math.max(1, deltas.size())));
+            try {
+                List<Future<GetDvSnapshotResponse>> futures = new ArrayList<>();
+                Map<TableBucket, Long> inBase = flussCurrentLakeSnapshot.getTableBucketsOffset();
+                for (Map.Entry<TableBucket, PositionIndexDelta> e : deltas.entrySet()) {
+                    List<byte[]> keys = e.getValue().changedKeys();
+                    changed += keys.size();
+                    if (!inBase.containsKey(e.getKey())) {
+                        continue; // a new bucket has nothing in the base
+                    }
+                    for (int from = 0; from < keys.size(); from += DERIVED_LOOKUP_CHUNK) {
+                        List<byte[]> chunk =
+                                keys.subList(
+                                        from, Math.min(keys.size(), from + DERIVED_LOOKUP_CHUNK));
+                        TableBucket tb = e.getKey();
+                        final long lookupBase = base;
+                        futures.add(
+                                pool.submit(
+                                        () -> lookupWithRetry(tablePath, tb, lookupBase, chunk)));
+                    }
+                }
+                for (Future<GetDvSnapshotResponse> f : futures) {
+                    for (PbDvKeyPosition kp : f.get().getKeyPositionsList()) {
+                        deleted.computeIfAbsent(kp.getFilePath(), k -> new ArrayList<>())
+                                .add(kp.getPos());
+                        found++;
+                    }
+                }
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+        Map<String, long[]> deletedByFile = new HashMap<>();
+        for (Map.Entry<String, List<Long>> e : deleted.entrySet()) {
+            long[] arr = new long[e.getValue().size()];
+            for (int i = 0; i < arr.length; i++) {
+                arr[i] = e.getValue().get(i);
+            }
+            deletedByFile.put(e.getKey(), arr);
+        }
+        long t1 = System.currentTimeMillis();
+        // 2. Publish the index change before the lake commit, under a new id the snapshot records:
+        //    a later crash is repaired by repairDerivedSnapshot, an earlier one leaves an orphan.
+        Set<TableBucket> switchBuckets = new HashSet<>(logEndOffsets.keySet());
+        if (flussCurrentLakeSnapshot != null) {
+            switchBuckets.addAll(flussCurrentLakeSnapshot.getTableBucketsOffset().keySet());
+        }
+        Map<TableBucket, Long> readableOffsets = new HashMap<>();
+        for (TableBucket tb : switchBuckets) {
+            Long off = logEndOffsets.get(tb);
+            readableOffsets.put(
+                    tb,
+                    off != null ? off : flussCurrentLakeSnapshot.getTableBucketsOffset().get(tb));
+        }
+        long indexId = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
+        Map<TableBucket, Map<Integer, String>> newFileDict = new HashMap<>();
+        PositionIndexDelta empty =
+                new PositionIndexDelta(
+                        Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        long puts = 0;
+        PositionIndexStore store = indexStore(tableId, tablePath);
+        PositionIndexChangeBuilder change = new PositionIndexChangeBuilder(store);
+        // File ids come from the table's persisted counter; a colliding id masks the wrong file.
+        LinkedHashSet<String> roundFiles = new LinkedHashSet<>();
+        for (TableBucket tb : switchBuckets) {
+            for (KeyPosition kp : deltas.getOrDefault(tb, empty).puts()) {
+                roundFiles.add(kp.file());
+            }
+        }
+        Map<String, Integer> roundFileIds = new HashMap<>();
+        if (!roundFiles.isEmpty()) {
+            int nextId = store.allocateFileIds(roundFiles.size());
+            for (String f : roundFiles) {
+                roundFileIds.put(f, nextId++);
+            }
+        }
+        for (TableBucket tb : switchBuckets) {
+            PositionIndexDelta d = deltas.getOrDefault(tb, empty);
+            Map<String, Integer> fileIds = new HashMap<>();
+            Map<Integer, String> dict = new HashMap<>();
+            for (KeyPosition kp : d.puts()) {
+                fileIds.computeIfAbsent(
+                        kp.file(),
+                        f -> {
+                            int id = roundFileIds.get(f);
+                            dict.put(id, f);
+                            return id;
+                        });
+            }
+            puts += d.puts().size();
+            change.add(tb, d, fileIds);
+            newFileDict.put(tb, dict);
+        }
+        change.commit(indexId);
+        long t2 = System.currentTimeMillis();
+        // 3. One lake commit of data and deletion vectors, validated against the base.
+        snapshotProperties.put(DERIVED_INDEX_ID_PROPERTY, String.valueOf(indexId));
+        snapshotProperties.put(DERIVED_BASE_PROPERTY, String.valueOf(base));
+        snapshotProperties.put(DERIVED_OFFSETS_PROPERTY, encodeOffsets(readableOffsets));
+        LakeCommitResult result =
+                lakeCommitter.commitWithDeletes(
+                        committable, snapshotProperties, deletedByFile, base);
+        long snapshotId = result.getCommittedSnapshotId();
+        // Links the base to snapshotId; the store refuses a chain that does not end at the base.
+        store.register(base, snapshotId, indexId);
+        maybeTrimIndexChain(tableId, tablePath, store, readableOffsets);
+        long t3 = System.currentTimeMillis();
+        // 4. Report: the coordinator prepares every bucket, then makes snapshotId readable.
+        Map<TableBucket, FlussTableLakeSnapshotCommitter.DvBucketData> dvReport = new HashMap<>();
+        for (TableBucket tb : switchBuckets) {
+            dvReport.put(
+                    tb,
+                    new FlussTableLakeSnapshotCommitter.DvBucketData(
+                            readableOffsets.get(tb), newFileDict.get(tb), Collections.emptyList()));
+        }
+        commitToFlussWithRetry(
+                tableId,
+                tablePath,
+                result,
+                lakeBucketTieredOffsetsFile,
+                logEndOffsets,
+                logMaxTieredTimestamps,
+                dvReport,
+                indexId);
+        long t4 = System.currentTimeMillis();
+        dvRounds.inc();
+        dvChangedKeys.inc(changed);
+        dvLastLookupMs = t1 - t0;
+        dvLastLakeCommitMs = t3 - t2;
+        LOG.info(
+                "Derived DV round {}: base {} -> snapshot {} (index {}); buckets {}; changed keys {} (in base: {}) "
+                        + "lookups {} ms; index publish ({} puts) {} ms; lake commit (data+DV) {} ms; fluss report {} ms.",
+                tablePath,
+                base,
+                snapshotId,
+                indexId,
+                switchBuckets.size(),
+                changed,
+                found,
+                t1 - t0,
+                puts,
+                t2 - t1,
+                t3 - t2,
+                t4 - t3);
+        return new TieringCommitResult<>(committable, result.getTieringStats());
+    }
+
+    static final String DERIVED_INDEX_ID_PROPERTY = "fluss-dv-index-id";
+    static final String DERIVED_OFFSETS_PROPERTY = "fluss-dv-offsets";
+    /** The snapshot a derived round's index change applies to (its parent in the chain). */
+    static final String DERIVED_BASE_PROPERTY = "fluss-dv-base";
+
+    private final Map<Long, PositionIndexStore> indexStores = new HashMap<>();
+
+    /** Returns the table's index store; one per table, since it owns the file-id counter. */
+    private PositionIndexStore indexStore(long tableId, TablePath tablePath) {
+        return indexStores.computeIfAbsent(
+                tableId,
+                id ->
+                        PositionIndexStore.forTable(
+                                FlussConfigUtils.getDefaultRemoteDataDir(flussConfig),
+                                tablePath,
+                                tableId));
+    }
+
+    /** Encodes "partitionId|bucket=offset,...", with an empty partitionId if unpartitioned. */
+    static String encodeOffsets(Map<TableBucket, Long> offsets) {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<TableBucket, Long> e : offsets.entrySet()) {
+            if (sb.length() > 0) {
+                sb.append(',');
+            }
+            Long pid = e.getKey().getPartitionId();
+            sb.append(pid == null ? "" : pid)
+                    .append('|')
+                    .append(e.getKey().getBucket())
+                    .append('=')
+                    .append(e.getValue());
+        }
+        return sb.toString();
+    }
+
+    static Map<TableBucket, Long> decodeOffsets(long tableId, String encoded) {
+        Map<TableBucket, Long> out = new HashMap<>();
+        if (encoded == null || encoded.isEmpty()) {
+            return out;
+        }
+        for (String part : encoded.split(",")) {
+            String[] kv = part.split("=");
+            String[] pb = kv[0].split("\\|", -1);
+            Long pid = pb[0].isEmpty() ? null : Long.parseLong(pb[0]);
+            out.put(new TableBucket(tableId, pid, Integer.parseInt(pb[1])), Long.parseLong(kv[1]));
+        }
+        return out;
+    }
+
+    private void commitToFlussWithRetry(
+            long tableId,
+            TablePath tablePath,
+            LakeCommitResult result,
+            String offsetsFile,
+            Map<TableBucket, Long> logEndOffsets,
+            Map<TableBucket, Long> logMaxTieredTimestamps,
+            Map<TableBucket, FlussTableLakeSnapshotCommitter.DvBucketData> dvReport,
+            long indexId)
+            throws Exception {
+        for (int attempt = 0; ; attempt++) {
+            try {
+                flussTableLakeSnapshotCommitter.commit(
+                        tableId,
+                        tablePath,
+                        result,
+                        offsetsFile,
+                        logEndOffsets,
+                        logMaxTieredTimestamps,
+                        dvReport,
+                        indexId);
+                return;
+            } catch (Exception e) {
+                if (attempt < 240
+                        && ExceptionUtils.stringifyException(e)
+                                .contains("DV orchestration already in progress")) {
+                    Thread.sleep(500);
+                    continue;
+                }
+                throw e;
+            }
+        }
+    }
+
+    /**
+     * Registers a derived lake snapshot whose round crashed after the lake commit; its index change
+     * is already published under the id the snapshot records.
+     */
+    private void repairDerivedSnapshot(
+            long tableId, TablePath tablePath, CommittedLakeSnapshot missing, String offsetsPath)
+            throws Exception {
+        Map<String, String> props = missing.getSnapshotProperties();
+        long indexId = Long.parseLong(props.get(DERIVED_INDEX_ID_PROPERTY));
+        Map<TableBucket, Long> offsets =
+                decodeOffsets(tableId, props.get(DERIVED_OFFSETS_PROPERTY));
+        // No file dicts: tablet servers read the file ids from the index change.
+        Map<TableBucket, FlussTableLakeSnapshotCommitter.DvBucketData> dvReport = new HashMap<>();
+        for (Map.Entry<TableBucket, Long> e : offsets.entrySet()) {
+            dvReport.put(
+                    e.getKey(),
+                    new FlussTableLakeSnapshotCommitter.DvBucketData(
+                            e.getValue(), Collections.emptyMap(), Collections.emptyList()));
+        }
+        // Without a recorded base, the parent is the chain's end, which was the base at commit.
+        PositionIndexStore store = indexStore(tableId, tablePath);
+        String baseProp = props.get(DERIVED_BASE_PROPERTY);
+        long parent;
+        if (baseProp != null) {
+            parent = Long.parseLong(baseProp);
+        } else {
+            List<PositionIndexStore.ChainEntry> chain = store.chain();
+            parent = chain.isEmpty() ? -1L : chain.get(chain.size() - 1).snapshotId;
+        }
+        store.register(parent, missing.getLakeSnapshotId(), indexId);
+        commitToFlussWithRetry(
+                tableId,
+                tablePath,
+                LakeCommitResult.unknownReadableSnapshot(missing.getLakeSnapshotId()),
+                offsetsPath,
+                Collections.emptyMap(),
+                Collections.emptyMap(),
+                dvReport,
+                indexId);
+        LOG.warn(
+                "Derived DV: repaired unregistered lake snapshot {} of {} (index {}, {} buckets).",
+                missing.getLakeSnapshotId(),
+                tablePath,
+                indexId,
+                dvReport.size());
+    }
+
+    /**
+     * Publishes and registers the re-index of a rewritten snapshot, then registers the snapshot in
+     * Fluss so tablet servers catch up to it.
+     */
+    private void publishDerivedReindex(
+            long tableId,
+            TablePath tablePath,
+            long baseSnapshotId,
+            long compactSnapshotId,
+            long changeId,
+            List<RowPosResult> results,
+            @Nullable Map<String, Map<Integer, List<String>>> replacedFiles)
+            throws Exception {
+        long t0 = System.currentTimeMillis();
+        // Per bucket: the readers' SSTs, new file ids, and the files that left the snapshot.
+        Map<TableBucket, PositionIndexStore.BucketChange> published = new HashMap<>();
+        Map<TableBucket, Map<Integer, String>> dicts = new HashMap<>();
+        for (RowPosResult r : results) {
+            TableBucket tb = new TableBucket(tableId, r.getPartitionId(), r.getBucketId());
+            List<RowPosSstIndex.SstFileEntry> entries = new ArrayList<>();
+            for (RowPosResult.SstMeta m : r.getSstMetas()) {
+                entries.add(new RowPosSstIndex.SstFileEntry(m.getFileName(), m.getFileSize()));
+            }
+            published.put(
+                    tb,
+                    new PositionIndexStore.BucketChange(
+                            new PositionIndexStore.BucketPart(entries),
+                            r.getNewFileDictEntries(),
+                            new ArrayList<>()));
+            dicts.put(tb, r.getNewFileDictEntries());
+        }
+        int replaced = 0;
+        if (replacedFiles != null && !replacedFiles.isEmpty()) {
+            Map<String, Long> partitionIds = new HashMap<>();
+            if (admin.getTableInfo(tablePath).get().isPartitioned()) {
+                for (PartitionInfo pi : admin.listPartitionInfos(tablePath).get()) {
+                    partitionIds.put(pi.getPartitionName(), pi.getPartitionId());
+                }
+            }
+            for (Map.Entry<String, Map<Integer, List<String>>> pe : replacedFiles.entrySet()) {
+                Long pid = pe.getKey() == null ? null : partitionIds.get(pe.getKey());
+                if (pe.getKey() != null && pid == null) {
+                    continue; // the partition is gone, so nothing references these files
+                }
+                for (Map.Entry<Integer, List<String>> be : pe.getValue().entrySet()) {
+                    published
+                            .computeIfAbsent(
+                                    new TableBucket(tableId, pid, be.getKey()),
+                                    k ->
+                                            new PositionIndexStore.BucketChange(
+                                                    PositionIndexStore.BucketPart.NONE,
+                                                    Collections.emptyMap(),
+                                                    new ArrayList<>()))
+                            .removedFiles
+                            .addAll(be.getValue());
+                    replaced += be.getValue().size();
+                }
+            }
+        }
+        PositionIndexStore store = indexStore(tableId, tablePath);
+        store.commitChange(changeId, published);
+        store.register(baseSnapshotId, compactSnapshotId, changeId);
+        registerDerivedSnapshot(
+                tableId,
+                tablePath,
+                compactSnapshotId,
+                changeId,
+                getLatestLakeSnapshot(tablePath),
+                dicts);
+        dvReindexes.inc();
+        Long started = derivedReindexStart.remove(tableId);
+        dvLastReindexMs = System.currentTimeMillis() - (started == null ? t0 : started);
+        LOG.info(
+                "Derived DV: rewritten snapshot {} of {} re-indexed by {} parallel scans, {} files dropped; published in {} ms.",
+                compactSnapshotId,
+                tablePath,
+                results.size(),
+                replaced,
+                System.currentTimeMillis() - t0);
+    }
+
+    /** Registers a derived snapshot in Fluss with the base's tiered offsets. */
+    private void registerDerivedSnapshot(
+            long tableId,
+            TablePath tablePath,
+            long snapshotId,
+            long indexId,
+            LakeSnapshot baseSnapshot,
+            Map<TableBucket, Map<Integer, String>> dicts)
+            throws Exception {
+        Map<TableBucket, Long> offsets = baseSnapshot.getTableBucketsOffset();
+        Map<TableBucket, FlussTableLakeSnapshotCommitter.DvBucketData> dvReport = new HashMap<>();
+        for (TableBucket tb : offsets.keySet()) {
+            dvReport.put(
+                    tb,
+                    new FlussTableLakeSnapshotCommitter.DvBucketData(
+                            offsets.get(tb),
+                            dicts.getOrDefault(tb, Collections.emptyMap()),
+                            Collections.emptyList()));
+        }
+        String offsetsFile =
+                flussTableLakeSnapshotCommitter.prepareLakeSnapshot(tableId, tablePath, offsets);
+        LakeCommitResult result = LakeCommitResult.unknownReadableSnapshot(snapshotId);
+        for (int attempt = 0; ; attempt++) {
+            try {
+                flussTableLakeSnapshotCommitter.commit(
+                        tableId,
+                        tablePath,
+                        result,
+                        offsetsFile,
+                        Collections.emptyMap(),
+                        Collections.emptyMap(),
+                        dvReport,
+                        indexId);
+                break;
+            } catch (Exception e) {
+                if (attempt < 240
+                        && ExceptionUtils.stringifyException(e)
+                                .contains("DV orchestration already in progress")) {
+                    Thread.sleep(500);
+                    continue;
+                }
+                throw e;
+            }
+        }
+    }
+
+    /**
+     * Sends the re-index of files rewritten since the base to the tiering readers; returns the
+     * rewritten snapshot id to wait for, or null if nothing was rewritten.
+     */
+    @Nullable
+    @SuppressWarnings("unchecked")
+    private Long triggerDerivedReindex(
+            long tableId, TablePath tablePath, TableInfo tableInfo, LakeSnapshot base)
+            throws Exception {
+        // the lake table may live under a custom lake table path
+        LakeSource<?> lakeSource =
+                lakeTieringFactory.createLakeSource(tableInfo.getLakeTablePath());
+        if (lakeSource == null || base == null) {
+            return null;
+        }
+        return triggerDerivedReindexInternal(
+                tableId, tablePath, tableInfo, (LakeSource<LakeSplit>) lakeSource, base);
+    }
+
+    @Nullable
+    private <Split extends LakeSplit> Long triggerDerivedReindexInternal(
+            long tableId,
+            TablePath tablePath,
+            TableInfo tableInfo,
+            LakeSource<Split> lakeSource,
+            LakeSnapshot base)
+            throws Exception {
+        DataDeltaPlan<Split> plan = lakeSource.planRewrite(base.getSnapshotId());
+        if (plan == null) {
+            return null;
+        }
+        long compactSnapshotId = plan.getCompactSnapshotId();
+        FsPath lakeDir =
+                FlussPaths.remoteLakeTableSnapshotDir(
+                        FlussConfigUtils.getDefaultRemoteDataDir(flussConfig), tablePath, tableId);
+        PositionIndexStore store = indexStore(tableId, tablePath);
+        for (PositionIndexStore.ChainEntry e : store.chain()) {
+            if (e.snapshotId == compactSnapshotId) {
+                // The change is already in the chain; only the Fluss registration is missing.
+                registerDerivedSnapshot(
+                        tableId,
+                        tablePath,
+                        compactSnapshotId,
+                        e.changeId,
+                        base,
+                        Collections.emptyMap());
+                pendingTablePaths.remove(tableId);
+                throw new DerivedReindexDeferred(compactSnapshotId, true);
+            }
+        }
+        // A new change id per attempt, so two attempts never share files.
+        long changeId = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
+        if (plan.getSplits().isEmpty()) {
+            // Files were only removed: publish at once and restart the round, whose lookups must
+            // not see the removed files.
+            publishDerivedReindex(
+                    tableId,
+                    tablePath,
+                    base.getSnapshotId(),
+                    compactSnapshotId,
+                    changeId,
+                    Collections.emptyList(),
+                    plan.getDeletedFiles());
+            pendingTablePaths.remove(tableId);
+            throw new DerivedReindexDeferred(compactSnapshotId, true);
+        }
+        int firstFileId = store.allocateFileIds(plan.getSplits().size());
+        sendRowPosScan(
+                tableId,
+                tablePath,
+                lakeSource,
+                plan,
+                tableInfo.getSchema().getColumns().size(),
+                firstFileId,
+                lakeDir,
+                true,
+                changeId);
+        derivedReindexBase.put(tableId, base);
+        derivedReindexChange.put(tableId, changeId);
+        derivedReindexStart.put(tableId, System.currentTimeMillis());
+        pendingTablePaths.put(tableId, tablePath);
+        LOG.info(
+                "Derived DV: {} files of {} rewritten since snapshot {}; re-indexing snapshot {} on the tiering readers.",
+                plan.getSplits().size(),
+                tablePath,
+                base.getSnapshotId(),
+                compactSnapshotId);
+        return compactSnapshotId;
+    }
+
+    private GetDvSnapshotResponse lookupWithRetry(
+            TablePath tablePath, TableBucket tb, long snapshotId, List<byte[]> keys)
+            throws Exception {
+        for (int attempt = 0; ; attempt++) {
+            try {
+                return admin.lookupDvPositions(
+                                tablePath,
+                                tb.getTableId(),
+                                tb.getPartitionId(),
+                                tb.getBucket(),
+                                snapshotId,
+                                keys)
+                        .get();
+            } catch (Exception e) {
+                // The bucket has not ingested the base snapshot's index yet.
+                if (attempt < 480
+                        && ExceptionUtils.stringifyException(e).contains("Stale snapshot")) {
+                    Thread.sleep(250);
+                    continue;
+                }
+                throw e;
+            }
+        }
+    }
+
+    @Nullable
+    private LakeSnapshot getLatestLakeSnapshot(TablePath tablePath) throws Exception {
+        LakeSnapshot flussCurrentLakeSnapshot;
+        try {
+            flussCurrentLakeSnapshot = admin.getLatestLakeSnapshot(tablePath).get();
+        } catch (Exception e) {
+            Throwable throwable = e.getCause();
+            if (throwable instanceof LakeTableSnapshotNotExistException) {
+                // do-nothing
+                flussCurrentLakeSnapshot = null;
+            } else {
+                throw e;
+            }
+        }
+        return flussCurrentLakeSnapshot;
+    }
+
+    private void checkFlussNotMissingLakeSnapshot(
+            TablePath tablePath,
+            long tableId,
+            LakeCommitter<WriteResult, Committable> lakeCommitter,
+            Committable committable,
+            Long flussCurrentLakeSnapshot)
+            throws Exception {
+        // get Fluss missing lake snapshot in Lake
+        CommittedLakeSnapshot missingCommittedSnapshot =
+                lakeCommitter.getMissingLakeSnapshot(flussCurrentLakeSnapshot);
+
+        // fluss's known snapshot is less than lake snapshot committed by fluss
+        // fail this commit since the data is read from the log end-offset of a invalid fluss
+        // known lake snapshot, which means the data already has been committed to lake,
+        // not to commit to lake to avoid data duplicated
+        if (missingCommittedSnapshot != null) {
+            String lakeSnapshotOffsetPath =
+                    missingCommittedSnapshot
+                            .getSnapshotProperties()
+                            .get(FLUSS_LAKE_SNAP_BUCKET_OFFSET_PROPERTY);
+
+            // should only will happen in v0.7 which won't put offsets info
+            // to properties
+            if (lakeSnapshotOffsetPath == null) {
+                throw new IllegalStateException(
+                        String.format(
+                                "Can't find %s field from snapshot property.",
+                                FLUSS_LAKE_SNAP_BUCKET_OFFSET_PROPERTY));
+            }
+
+            // the fluss-offsets will be a json string if it's tiered by v0.8,
+            // since this code path should be rare, we do not consider backward compatibility
+            // and throw IllegalStateException directly
+            String trimmedPath = lakeSnapshotOffsetPath.trim();
+            if (trimmedPath.contains("{")) {
+                throw new IllegalStateException(
+                        String.format(
+                                "The %s field in snapshot property is a JSON string (tiered by v0.8), "
+                                        + "which is not supported to restore. Snapshot ID: %d, Table: {tablePath=%s, tableId=%d}.",
+                                FLUSS_LAKE_SNAP_BUCKET_OFFSET_PROPERTY,
+                                missingCommittedSnapshot.getLakeSnapshotId(),
+                                tablePath,
+                                tableId));
+            }
+
+            // Offsets path: .../lake/{database}/{tableName}-{tableId}/metadata/{uuid}.offsets.
+            String tableDirName =
+                    new FsPath(lakeSnapshotOffsetPath).getParent().getParent().getName();
+            long snapshotTableId =
+                    Long.parseLong(tableDirName.substring(tableDirName.lastIndexOf('-') + 1));
+            // A recreated Fluss table can reuse a lake table containing the old table's snapshots.
+            if (snapshotTableId != tableId) {
+                LOG.warn(
+                        "Skipping recovery of lake snapshot {} for table {} (tableId={}) because "
+                                + "offsets file {} belongs to tableId={}. Continuing the current table's commit.",
+                        missingCommittedSnapshot.getLakeSnapshotId(),
+                        tablePath,
+                        tableId,
+                        lakeSnapshotOffsetPath,
+                        snapshotTableId);
+                return;
+            }
+
+            if (missingCommittedSnapshot
+                    .getSnapshotProperties()
+                    .containsKey(DERIVED_INDEX_ID_PROPERTY)) {
+                repairDerivedSnapshot(
+                        tableId, tablePath, missingCommittedSnapshot, lakeSnapshotOffsetPath);
+                lakeCommitter.abort(committable);
+                throw new IllegalStateException(
+                        "Derived DV: repaired a lake snapshot left unregistered by a previous attempt; "
+                                + "this round is retried on top of it.");
+            }
+            // commit this missing snapshot to fluss
+            flussTableLakeSnapshotCommitter.commit(
+                    tableId,
+                    missingCommittedSnapshot.getLakeSnapshotId(),
+                    lakeSnapshotOffsetPath,
+                    // don't care readable snapshot and offsets,
+                    null,
+                    // use empty log offsets, log max timestamp, since we can't know that
+                    // in last tiering, it doesn't matter for they are just used to
+                    // report metrics
+                    Collections.emptyMap(),
+                    Collections.emptyMap(),
+                    LakeCommitResult.KEEP_ALL_PREVIOUS,
+                    null,
+                    0L);
+            // abort this committable to delete the written files
+            lakeCommitter.abort(committable);
+            throw new IllegalStateException(
+                    String.format(
+                            "The current Fluss's lake snapshot %d is less than"
+                                    + " lake actual snapshot %d committed by Fluss for table: {tablePath=%s, tableId=%d},"
+                                    + " missing snapshot: %s.",
+                            flussCurrentLakeSnapshot,
+                            missingCommittedSnapshot.getLakeSnapshotId(),
+                            tablePath,
+                            tableId,
+                            missingCommittedSnapshot));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void preparePartitionMarkDone(
+            LakeCommitter<WriteResult, Committable> lakeCommitter, Committable committable)
+            throws IOException {
+        checkState(
+                lakeCommitter instanceof PartitionMarkDoneCommitter,
+                "Lake tiering factory %s declares partition mark-done support but its committer does not.",
+                lakeTieringFactory.getClass().getName());
+        ((PartitionMarkDoneCommitter<WriteResult, Committable>) lakeCommitter)
+                .preparePartitionMarkDone(committable);
+    }
+
+    /** Returns the write results collected for the table's current round, if any. */
+    @Nullable
+    private List<TableBucketWriteResult<WriteResult>> collectedWriteResults(long tableId) {
+        TableWriteResultAccumulator<WriteResult> accumulator =
+                tableWriteResultAccumulators.get(tableId);
+        return accumulator == null ? null : accumulator.bucketWriteResults;
+    }
+
+    /**
+     * Commits write results to the lake and Fluss, emits downstream, sends FinishedTieringEvent,
+     * and cleans up state. Used both for immediate commit (no DV scan) and deferred commit (after
+     * DV scan completes).
+     */
+    private void commitAndFinish(
+            long tableId,
+            TablePath tablePath,
+            List<TableBucketWriteResult<WriteResult>> committableWriteResults,
+            @Nullable List<RowPosResult> rowPosResults,
+            @Nullable Map<String, Map<Integer, List<String>>> deletedFiles,
+            long indexSnapshotId)
+            throws Exception {
+        TieringCommitResult<Committable> commitResult =
+                commitWriteResults(
+                        tableId,
+                        tablePath,
+                        committableWriteResults,
+                        rowPosResults,
+                        deletedFiles,
+                        indexSnapshotId);
+        if (commitResult.getCommittable() != null) {
+            output.collect(
+                    new StreamRecord<>(new CommittableMessage<>(commitResult.getCommittable())));
+        }
+        // Materialize the server's logical LakeDv into physical Iceberg Puffin DVs so $lake and
+        // external engines mask too. Runs every round (incl. empty delete rounds) keyed off the
+        // readable snapshot, since the readable-switch lags the data commit. Best-effort.
+        maybeMaterializeDeletionVectors(tableId, tablePath);
+        tableWriteResultAccumulators.remove(tableId);
+        operatorEventGateway.sendEventToCoordinator(
+                new SourceEventWrapper(new FinishedTieringEvent(tableId, commitResult.getStats())));
+    }
+
+    /**
+     * Handles a RowPos scan result received from a Reader. Collects results by tableId and triggers
+     * processing when all expected results have been received.
+     */
+    private void handleRowPosResult(TableBucketWriteResult<WriteResult> tableBucketWriteResult) {
+        RowPosResult rowPosResult = tableBucketWriteResult.getRowPosResult();
+        long tableId = tableBucketWriteResult.tableBucket().getTableId();
+        pendingRowPosResults.computeIfAbsent(tableId, k -> new ArrayList<>()).add(rowPosResult);
+
+        Integer expectedCount = expectedRowPosResultCounts.get(tableId);
+        if (expectedCount != null && pendingRowPosResults.get(tableId).size() >= expectedCount) {
+            processRowPosResults(tableId);
+        }
+    }
+
+    /**
+     * Processes all collected RowPos results for a table. SSTs have already been uploaded by
+     * Readers. This method writes the cross-bucket index.json, then commits the deferred write
+     * results to the lake.
+     */
+    private void processRowPosResults(long tableId) {
+        List<RowPosResult> results = pendingRowPosResults.remove(tableId);
+        Map<String, Map<Integer, List<String>>> deletedFiles = pendingDeletedFiles.remove(tableId);
+        expectedRowPosResultCounts.remove(tableId);
+        TablePath tablePath = pendingTablePaths.remove(tableId);
+        Long compactSnapshotId = pendingCompactSnapshotIds.remove(tableId);
+        LakeSnapshot reindexBase = derivedReindexBase.remove(tableId);
+        Long reindexChange = derivedReindexChange.remove(tableId);
+        if (reindexBase != null) {
+            try {
+                publishDerivedReindex(
+                        tableId,
+                        tablePath,
+                        reindexBase.getSnapshotId(),
+                        compactSnapshotId,
+                        reindexChange,
+                        results == null ? Collections.emptyList() : results,
+                        deletedFiles);
+                resumeDerivedRound(tableId, tablePath);
+            } catch (Exception e) {
+                tableWriteResultAccumulators.remove(tableId);
+                operatorEventGateway.sendEventToCoordinator(
+                        new SourceEventWrapper(
+                                new FailedTieringEvent(
+                                        tableId, ExceptionUtils.stringifyException(e))));
+                LOG.warn(
+                        "Derived DV: re-index of {} failed; the round is tiered again.",
+                        tablePath,
+                        e);
+            }
+            return;
+        }
+
+        LOG.info(
+                "Received all {} RowPos scan results for table {} (snapshot={}). "
+                        + "Deleted files: {}.",
+                results != null ? results.size() : 0,
+                tableId,
+                compactSnapshotId,
+                deletedFiles);
+
+        try {
+            // SSTs already uploaded by Readers. Write index.json.
+            if (results != null && !results.isEmpty() && compactSnapshotId != null) {
+                writeIndexJson(tableId, tablePath, compactSnapshotId, results);
+            }
+
+            // commit the deferred write results to the lake; the RowPos index was uploaded under
+            // compactSnapshotId, so carry it so the server downloads from the matching path.
+            List<TableBucketWriteResult<WriteResult>> writeResults = collectedWriteResults(tableId);
+            long indexSnapshotId = compactSnapshotId != null ? compactSnapshotId : 0L;
+            commitAndFinish(
+                    tableId, tablePath, writeResults, results, deletedFiles, indexSnapshotId);
+        } catch (Exception e) {
+            tableWriteResultAccumulators.remove(tableId);
+            operatorEventGateway.sendEventToCoordinator(
+                    new SourceEventWrapper(
+                            new FailedTieringEvent(tableId, ExceptionUtils.stringifyException(e))));
+            LOG.warn(
+                    "Failed to commit after RowPos scan for table {} ({}). "
+                            + "Will try to tier again in next round.",
+                    tablePath,
+                    tableId,
+                    e);
+        }
+    }
+
+    /**
+     * Writes the index.json file after all Readers have uploaded their per-bucket SST files. The
+     * index records which buckets participated in this snapshot and lists their SST files.
+     */
+    private void writeIndexJson(
+            long tableId, TablePath tablePath, long compactSnapshotId, List<RowPosResult> results)
+            throws IOException {
+        String remoteDataDir = FlussConfigUtils.getDefaultRemoteDataDir(flussConfig);
+        FsPath remoteLakeTableSnapshotDir =
+                FlussPaths.remoteLakeTableSnapshotDir(remoteDataDir, tablePath, tableId);
+        RowPosSstUploader uploader = new RowPosSstUploader(remoteLakeTableSnapshotDir);
+
+        // Group results by partitionId for partition-aware index writing
+        Map<Long, List<RowPosResult>> resultsByPartition = new HashMap<>();
+        for (RowPosResult result : results) {
+            Long partitionId = result.getPartitionId();
+            // Use -1 as sentinel key for non-partitioned results
+            long key = partitionId != null ? partitionId : -1L;
+            resultsByPartition.computeIfAbsent(key, k -> new ArrayList<>()).add(result);
+        }
+
+        for (Map.Entry<Long, List<RowPosResult>> partitionEntry : resultsByPartition.entrySet()) {
+            Long partitionId = partitionEntry.getKey() == -1L ? null : partitionEntry.getKey();
+            Map<Integer, List<RowPosSstIndex.SstFileEntry>> bucketEntries = new HashMap<>();
+            for (RowPosResult result : partitionEntry.getValue()) {
+                List<RowPosSstIndex.SstFileEntry> entries = new ArrayList<>();
+                for (RowPosResult.SstMeta meta : result.getSstMetas()) {
+                    entries.add(
+                            new RowPosSstIndex.SstFileEntry(
+                                    meta.getFileName(), meta.getFileSize()));
+                }
+                bucketEntries.put(result.getBucketId(), entries);
+            }
+            RowPosSstIndex index = new RowPosSstIndex(bucketEntries);
+            uploader.writeIndex(compactSnapshotId, partitionId, index);
+
+            LOG.info(
+                    "Wrote index.json for table {} (snapshot={}, partition={}) with {} buckets.",
+                    tablePath,
+                    compactSnapshotId,
+                    partitionId,
+                    bucketEntries.size());
+        }
+    }
+
+    /**
+     * Checks if DV is enabled for the table and triggers a row position scan if compaction is
+     * detected. Called at the end of a successful commitWriteResults().
+     *
+     * @return true if a RowPos scan was triggered (FinishedTieringEvent should be deferred)
+     */
+    private boolean mayTriggerRowPosScan(
+            long tableId,
+            TablePath tablePath,
+            List<TableBucketWriteResult<WriteResult>> committableWriteResults) {
+        try {
+            TableInfo tableInfo = admin.getTableInfo(tablePath).get();
+            if (!tableInfo.isDeletionVectorsEnabled() || tableInfo.isDeletionVectorsDerived()) {
+                return false;
+            }
+
+            int flussColumnCount = tableInfo.getSchema().getColumns().size();
+
+            // the lake table may live under a custom lake table path
+            TablePath lakeTablePath = tableInfo.getLakeTablePath();
+            LakeSource<?> lakeSource = lakeTieringFactory.createLakeSource(lakeTablePath);
+            if (lakeSource == null) {
+                return false;
+            }
+
+            // use the previous lake snapshot as fromSnapshotId
+            LakeSnapshot flussCurrentLakeSnapshot = getLatestLakeSnapshot(tablePath);
+            long fromSnapshotId =
+                    flussCurrentLakeSnapshot != null ? flussCurrentLakeSnapshot.getSnapshotId() : 0;
+            return triggerRowPosScanIfNeeded(
+                    tableId,
+                    tablePath,
+                    lakeTablePath,
+                    lakeSource,
+                    fromSnapshotId,
+                    flussColumnCount);
+        } catch (Exception e) {
+            LOG.warn(
+                    "Failed to trigger row position scan for table {} ({}). "
+                            + "Will retry in next tiering round.",
+                    tablePath,
+                    tableId,
+                    e);
+            return false;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private <Split extends LakeSplit> boolean triggerRowPosScanIfNeeded(
+            long tableId,
+            TablePath tablePath,
+            TablePath lakeTablePath,
+            LakeSource<Split> lakeSource,
+            long fromSnapshotId,
+            int flussColumnCount)
+            throws Exception {
+        DataDeltaPlan<Split> deltaPlan = lakeSource.planDelta(fromSnapshotId);
+        if (deltaPlan == null) {
+            return false;
+        }
+
+        List<Split> splits = deltaPlan.getSplits();
+        if (splits.isEmpty()) {
+            return false;
+        }
+        // Iceberg: plan(from) is deterministic; once indexed (e.g. by an index-only round) a rescan
+        // would re-upload the same SSTs (FileAlreadyExists) and double-index its files
+        String remoteDataDir = FlussConfigUtils.getDefaultRemoteDataDir(flussConfig);
+        FsPath remoteLakeTableSnapshotDir =
+                FlussPaths.remoteLakeTableSnapshotDir(remoteDataDir, tablePath, tableId);
+        if (DataLakeFormat.ICEBERG.toString().equalsIgnoreCase(dataLakeFormat)
+                && new RowPosSstUploader(remoteLakeTableSnapshotDir)
+                        .isIndexed(deltaPlan.getCompactSnapshotId())) {
+            return false;
+        }
+
+        // recover nextFileId from catalog if not cached locally
+        int nextFileId;
+        if (nextFileIdByTable.containsKey(tableId)) {
+            nextFileId = nextFileIdByTable.get(tableId);
+        } else {
+            // first trigger for this table after restart — read from lake snapshot properties
+            int recovered = 0;
+            LakeStoragePlugin plugin =
+                    LakeStoragePluginSetUp.fromDataLakeFormat(dataLakeFormat, null);
+            LakeStorage lakeStorage = plugin.createLakeStorage(dataLakeConfig);
+            try (LakeCatalog lakeCatalog = lakeStorage.createLakeCatalog()) {
+                Map<String, String> snapshotProps =
+                        lakeCatalog.loadSnapshotProperties(lakeTablePath);
+                String storedFileId = snapshotProps.get(FLUSS_LAKE_SNAP_NEXT_FILE_ID_PROPERTY);
+                if (storedFileId != null) {
+                    recovered = Integer.parseInt(storedFileId);
+                }
+            }
+            nextFileId = recovered;
+            // cache it for subsequent triggers within this Committer lifecycle
+            nextFileIdByTable.put(tableId, nextFileId);
+        }
+        sendRowPosScan(
+                tableId,
+                tablePath,
+                lakeSource,
+                deltaPlan,
+                flussColumnCount,
+                nextFileId,
+                remoteLakeTableSnapshotDir,
+                false,
+                deltaPlan.getCompactSnapshotId());
+        // update next file id counter (increments by total files, not batches)
+        nextFileIdByTable.put(tableId, nextFileId + splits.size());
+        return true;
+    }
+
+    /**
+     * Asks the enumerator to scan the plan's splits on the tiering readers, one split per bucket;
+     * the results arrive through {@link #handleRowPosResult}.
+     */
+    private <Split extends LakeSplit> void sendRowPosScan(
+            long tableId,
+            TablePath tablePath,
+            LakeSource<Split> lakeSource,
+            DataDeltaPlan<Split> deltaPlan,
+            int flussColumnCount,
+            int nextFileId,
+            FsPath remoteLakeTableSnapshotDir,
+            boolean byPrimaryKey,
+            long uploadId)
+            throws IOException {
+        List<Split> splits = deltaPlan.getSplits();
+        SimpleVersionedSerializer<Split> splitSerializer = lakeSource.getSplitSerializer();
+
+        // group serialized splits by partition and bucket
+        Map<String, Map<Integer, List<byte[]>>> serializedByPartitionAndBucket = new HashMap<>();
+        for (Split split : splits) {
+            byte[] serialized = splitSerializer.serialize(split);
+            // LakeSplit.partition() returns list of partition values; use joined form as key
+            // For non-partitioned, partition() returns empty list → key is null
+            List<String> partitionValues = split.partition();
+            String partitionName =
+                    (partitionValues == null || partitionValues.isEmpty())
+                            ? null
+                            : String.join(
+                                    ResolvedPartitionSpec.PARTITION_SPEC_SEPARATOR,
+                                    partitionValues);
+            int bucketId = split.bucket();
+            serializedByPartitionAndBucket
+                    .computeIfAbsent(partitionName, k -> new HashMap<>())
+                    .computeIfAbsent(bucketId, k -> new ArrayList<>())
+                    .add(serialized);
+        }
+
+        int totalFileCount = splits.size();
+
+        // expected results = number of batched splits (one per partition+bucket combo)
+        int expectedBatchCount = 0;
+        for (Map<Integer, List<byte[]>> bucketMap : serializedByPartitionAndBucket.values()) {
+            expectedBatchCount += bucketMap.size();
+        }
+
+        long compactSnapshotId = deltaPlan.getCompactSnapshotId();
+
+        // store expected count, deleted files, and compact snapshot id locally
+        expectedRowPosResultCounts.put(tableId, expectedBatchCount);
+        pendingDeletedFiles.put(tableId, deltaPlan.getDeletedFiles());
+        pendingCompactSnapshotIds.put(tableId, compactSnapshotId);
+
+        String remoteUploadBasePath = remoteLakeTableSnapshotDir.toString();
+
+        // send event to Enumerator
+        RowPosRequestEvent event =
+                new RowPosRequestEvent(
+                        tableId,
+                        tablePath,
+                        nextFileId,
+                        serializedByPartitionAndBucket,
+                        // readers upload under the index change id if derived, else the snapshot id
+                        uploadId,
+                        remoteUploadBasePath,
+                        flussColumnCount,
+                        byPrimaryKey);
+        operatorEventGateway.sendEventToCoordinator(new SourceEventWrapper(event));
+
+        LOG.info(
+                "Triggered RowPos scan for table {} ({}): {} batched splits ({} files), "
+                        + "nextFileId={}, deletedFiles={}",
+                tablePath,
+                tableId,
+                expectedBatchCount,
+                totalFileCount,
+                nextFileId,
+                deltaPlan.getDeletedFiles());
+    }
+
+    /** Builds the DV report and makes every bucket switch to the table-level readable snapshot. */
+    @Nullable
+    private Map<TableBucket, FlussTableLakeSnapshotCommitter.DvBucketData> buildFullDvReport(
+            long tableId,
+            TablePath tablePath,
+            @Nullable List<RowPosResult> rowPosResults,
+            @Nullable Map<String, Map<Integer, List<String>>> deletedFiles,
+            LakeCommitResult lakeCommitResult,
+            @Nullable LakeSnapshot flussCurrentLakeSnapshot,
+            Set<TableBucket> roundBuckets,
+            long indexSnapshotId)
+            throws IOException {
+        // build DvPositionReport if DV scan results are available
+        Map<TableBucket, FlussTableLakeSnapshotCommitter.DvBucketData> dvReport = null;
+        if (rowPosResults != null && !rowPosResults.isEmpty()) {
+            dvReport =
+                    buildDvPositionReport(tableId, rowPosResults, deletedFiles, lakeCommitResult);
+        }
+
+        // Ensure ALL buckets from ReadableSnapshot are present in dvReport.
+        // This handles two cases:
+        // 1. DV-only compaction: dvReport is null because no RowPos scan was
+        //    triggered, but we still need DV orchestration for all buckets.
+        // 2. Partial compaction: dvReport has entries for only some partitions
+        //    (those with RowPos results), but ALL buckets must be switched
+        //    because the readable snapshot is table-level.
+        // 3. Iceberg (readable unknown): readers pin one table-level id, so every tiered
+        //    bucket switches, not just those with RowPos results (-1 = Iceberg readable).
+        LakeCommitResult.ReadableSnapshot readable = lakeCommitResult.getReadableSnapshot();
+        Map<TableBucket, Long> switchBuckets = null;
+        if (readable != null) {
+            switchBuckets = readable.getReadableLogEndOffsets();
+        } else if (dvReport != null) {
+            switchBuckets = new HashMap<>();
+            if (flussCurrentLakeSnapshot != null) {
+                for (TableBucket tb : flussCurrentLakeSnapshot.getTableBucketsOffset().keySet()) {
+                    switchBuckets.put(tb, -1L);
+                }
+            }
+            for (TableBucket tb : roundBuckets) {
+                switchBuckets.put(tb, -1L);
+            }
+        }
+        if (switchBuckets != null) {
+            if (dvReport == null) {
+                dvReport = new HashMap<>();
+            }
+
+            // Collect partitions that already have index.json from RowPos results
+            Set<Long> partitionsWithIndex = new HashSet<>();
+            if (rowPosResults != null) {
+                for (RowPosResult result : rowPosResults) {
+                    Long pid = result.getPartitionId();
+                    partitionsWithIndex.add(pid != null ? pid : -1L);
+                }
+            }
+
+            Set<Long> emptyIndexPartitions = new HashSet<>();
+            for (Map.Entry<TableBucket, Long> entry : switchBuckets.entrySet()) {
+                dvReport.putIfAbsent(
+                        entry.getKey(),
+                        new FlussTableLakeSnapshotCommitter.DvBucketData(
+                                entry.getValue(), Collections.emptyMap(), Collections.emptyList()));
+
+                // Track partitions that need an empty index.json
+                Long partitionId = entry.getKey().getPartitionId();
+                long key = partitionId != null ? partitionId : -1L;
+                if (!partitionsWithIndex.contains(key)) {
+                    emptyIndexPartitions.add(key);
+                }
+            }
+
+            // Upload empty index.json for partitions without RowPos results
+            // so that DvPrepare can find the index file for every partition
+            if (!emptyIndexPartitions.isEmpty()) {
+                String remoteDataDir = FlussConfigUtils.getDefaultRemoteDataDir(flussConfig);
+                FsPath remoteLakeTableSnapshotDir =
+                        FlussPaths.remoteLakeTableSnapshotDir(remoteDataDir, tablePath, tableId);
+                RowPosSstUploader uploader = new RowPosSstUploader(remoteLakeTableSnapshotDir);
+                RowPosSstIndex emptyIndex = new RowPosSstIndex(Collections.emptyMap());
+                // empty index must key on the download snapshot (index snapshot when distinct)
+                long emptyIndexSnapshotId =
+                        indexSnapshotId > 0
+                                ? indexSnapshotId
+                                : readable != null
+                                        ? readable.getReadableSnapshotId()
+                                        : lakeCommitResult.getCommittedSnapshotId();
+                for (Long partKey : emptyIndexPartitions) {
+                    Long partitionId = partKey == -1L ? null : partKey;
+                    uploader.writeIndex(emptyIndexSnapshotId, partitionId, emptyIndex);
+                }
+            }
+        }
+        return dvReport;
+    }
+
+    private void commitDvIndexOnly(
+            long tableId,
+            TablePath tablePath,
+            List<RowPosResult> rowPosResults,
+            @Nullable Map<String, Map<Integer, List<String>>> deletedFiles,
+            long indexSnapshotId)
+            throws Exception {
+        LakeSnapshot latest = getLatestLakeSnapshot(tablePath);
+        if (latest == null) {
+            return;
+        }
+        // readable = the indexed snapshot: a compaction plan's id, so readers move onto the
+        // compacted
+        // files the server just re-masked (same data as latest, so latest's offsets still hold)
+        long readableId = indexSnapshotId > 0 ? indexSnapshotId : latest.getSnapshotId();
+        LakeCommitResult result = LakeCommitResult.unknownReadableSnapshot(readableId);
+        Map<TableBucket, FlussTableLakeSnapshotCommitter.DvBucketData> dvReport =
+                buildFullDvReport(
+                        tableId,
+                        tablePath,
+                        rowPosResults,
+                        deletedFiles,
+                        result,
+                        latest,
+                        Collections.emptySet(),
+                        indexSnapshotId);
+        flussTableLakeSnapshotCommitter.commit(
+                tableId,
+                tablePath,
+                result,
+                flussTableLakeSnapshotCommitter.prepareLakeSnapshot(
+                        tableId, tablePath, latest.getTableBucketsOffset()),
+                Collections.emptyMap(),
+                Collections.emptyMap(),
+                dvReport,
+                indexSnapshotId);
+        LOG.info("DV index-only round made snapshot {} of {} readable.", readableId, tablePath);
+    }
+
+    /**
+     * Builds a DvPositionReport from RowPos scan results and the lake commit result.
+     *
+     * <p>The readableOffset for each bucket comes from the {@link
+     * LakeCommitResult.ReadableSnapshot}, which is only available after {@code
+     * lakeCommitter.commit()} returns.
+     */
+    private Map<TableBucket, FlussTableLakeSnapshotCommitter.DvBucketData> buildDvPositionReport(
+            long tableId,
+            List<RowPosResult> rowPosResults,
+            @Nullable Map<String, Map<Integer, List<String>>> deletedFiles,
+            LakeCommitResult lakeCommitResult) {
+        Map<TableBucket, FlussTableLakeSnapshotCommitter.DvBucketData> report = new HashMap<>();
+        LakeCommitResult.ReadableSnapshot readable = lakeCommitResult.getReadableSnapshot();
+
+        for (RowPosResult result : rowPosResults) {
+            int bucketId = result.getBucketId();
+            Long partitionId = result.getPartitionId();
+            TableBucket tb = new TableBucket(tableId, partitionId, bucketId);
+            // readableOffset from ReadableSnapshot's readableLogEndOffsets
+            long readableOffset = getReadableOffset(readable, tb);
+            // deleted files from the deltaPlan
+            List<String> oldFiles =
+                    getDeletedFilesForBucket(deletedFiles, result.getPartitionName(), bucketId);
+
+            report.put(
+                    tb,
+                    new FlussTableLakeSnapshotCommitter.DvBucketData(
+                            readableOffset, result.getNewFileDictEntries(), oldFiles));
+        }
+        return report;
+    }
+
+    private long getReadableOffset(
+            @Nullable LakeCommitResult.ReadableSnapshot readable, TableBucket tb) {
+        if (readable == null) {
+            return -1;
+        }
+        Long offset = readable.getReadableLogEndOffsets().get(tb);
+        return offset != null ? offset : -1;
+    }
+
+    private List<String> getDeletedFilesForBucket(
+            @Nullable Map<String, Map<Integer, List<String>>> deletedFiles,
+            @Nullable String partitionName,
+            int bucketId) {
+        if (deletedFiles == null) {
+            return Collections.emptyList();
+        }
+        Map<Integer, List<String>> bucketMap = deletedFiles.get(partitionName);
+        if (bucketMap == null) {
+            return Collections.emptyList();
+        }
+        List<String> files = bucketMap.get(bucketId);
+        return files != null ? files : Collections.emptyList();
+    }
+
+    /**
+     * Fetches the server's logical LakeDv (per-file deleted positions) for the previous readable
+     * snapshot and asks the lake committer to materialize it into physical deletion vectors
+     * (Iceberg v3 Puffin), so {@code $lake} and external engines mask too. Best-effort: any failure
+     * is logged and skipped — union-read masking still works via the logical LakeDv, and the
+     * cumulative LakeDv is re-materialized next round.
+     */
+    private void maybeMaterializeDeletionVectors(long tableId, TablePath tablePath) {
+        try {
+            TableInfo tableInfo = admin.getTableInfo(tablePath).get();
+            if (!tableInfo.isDeletionVectorsEnabled() || tableInfo.isDeletionVectorsDerived()) {
+                return;
+            }
+            LOG.info("DV materialize: check for table {} ({}).", tablePath, tableId);
+            // Materialize against the READABLE snapshot (the one union read masks against);
+            // getDvSnapshot rejects any other id as stale. Absent early on -> nothing to do yet.
+            LakeSnapshot readable;
+            try {
+                readable = admin.getReadableLakeSnapshot(tablePath).get();
+            } catch (Exception noReadable) {
+                LOG.info(
+                        "DV materialize: no readable lake snapshot yet for table {} ({}), skipping.",
+                        tablePath,
+                        tableId);
+                return;
+            }
+            long baseSnapshotId = readable.getSnapshotId();
+            Map<String, byte[]> lakeDv = new HashMap<>();
+            for (TableBucket tb : readable.getTableBucketsOffset().keySet()) {
+                GetDvSnapshotResponse resp =
+                        admin.getDvSnapshot(
+                                        tablePath,
+                                        tableId,
+                                        tb.getPartitionId(),
+                                        tb.getBucket(),
+                                        baseSnapshotId)
+                                .get();
+                for (PbLakeDvEntry entry : resp.getLakeDvEntriesList()) {
+                    lakeDv.put(entry.getFilePath(), entry.getDeletedPositionsBitmap());
+                }
+            }
+            LOG.info(
+                    "DV materialize: table {} ({}) readable snapshot {} has {} LakeDv file(s).",
+                    tablePath,
+                    tableId,
+                    baseSnapshotId,
+                    lakeDv.size());
+            if (lakeDv.isEmpty()) {
+                return;
+            }
+            LOG.info(
+                    "DV materialize: writing Puffin DVs for {} file(s) on snapshot {} of table {}.",
+                    lakeDv.size(),
+                    baseSnapshotId,
+                    tablePath);
+            try (LakeCommitter<WriteResult, Committable> committer =
+                    lakeTieringFactory.createLakeCommitter(
+                            new TieringCommitterInitContext(
+                                    tablePath, tableInfo, lakeTieringConfig, flussConfig))) {
+                committer.materializeDeletionVectors(
+                        lakeDv, baseSnapshotId, Collections.<String, String>emptyMap());
+            }
+        } catch (Exception e) {
+            LOG.warn(
+                    "Failed to materialize deletion vectors for table {} ({}); union-read masking "
+                            + "still works via logical LakeDv, will retry next round.",
+                    tablePath,
+                    tableId,
+                    e);
         }
     }
 

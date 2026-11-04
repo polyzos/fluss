@@ -20,7 +20,10 @@ package org.apache.fluss.lake.paimon.source;
 
 import org.apache.fluss.lake.source.LakeSplit;
 
+import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.table.source.DataSplit;
+
+import javax.annotation.Nullable;
 
 import java.util.List;
 
@@ -54,6 +57,16 @@ public class PaimonSplit implements LakeSplit {
     @Override
     public List<String> partition() {
         return partition;
+    }
+
+    @Nullable
+    @Override
+    public String fileName() {
+        List<DataFileMeta> files = dataSplit.dataFiles();
+        if (files.size() == 1) {
+            return files.get(0).fileName();
+        }
+        return null;
     }
 
     public DataSplit dataSplit() {

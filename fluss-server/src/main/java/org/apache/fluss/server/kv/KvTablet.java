@@ -42,6 +42,11 @@ import org.apache.fluss.row.encode.ValueEncoder;
 import org.apache.fluss.rpc.protocol.MergeMode;
 import org.apache.fluss.server.kv.autoinc.AutoIncIDRange;
 import org.apache.fluss.server.kv.autoinc.AutoIncrementManager;
+import org.apache.fluss.server.kv.dv.DerivedDvManager;
+import org.apache.fluss.server.kv.dv.DerivedDvMetrics;
+import org.apache.fluss.server.kv.dv.DvManager;
+import org.apache.fluss.server.kv.dv.DvRWLock;
+import org.apache.fluss.server.kv.dv.DvRocksDB;
 import org.apache.fluss.server.kv.historical.HistoricalKvTombstone;
 import org.apache.fluss.server.kv.historical.HistoricalValueLookup;
 import org.apache.fluss.server.kv.historical.LocalValueLookupResult;
@@ -171,6 +176,12 @@ public final class KvTablet {
     private final boolean rowTtlEnabled;
     private final AutoIncrementManager autoIncrementManager;
 
+    // DV RocksDB instance for managing deletion vector data structures (null when DV disabled)
+    @Nullable private final DvRocksDB dvRocksDB;
+
+    // DV manager for processing deletion vector writes (null when DV disabled)
+    @Nullable private final DvManager dvManager;
+
     // RocksDB statistics accessor for this tablet
     @Nullable private final RocksDBStatistics rocksDBStatistics;
 
@@ -231,7 +242,10 @@ public final class KvTablet {
             @Nullable RowTtlTimestampProvider rowTtlTimestampProvider,
             Clock clock,
             boolean rowTtlEnabled,
-            boolean skipUnchangedUpsert) {
+            boolean skipUnchangedUpsert,
+            boolean rowIdEncoded,
+            @Nullable DvRocksDB dvRocksDB,
+            @Nullable DvManager dvManager) {
         this.physicalPath = physicalPath;
         this.tableBucket = tableBucket;
         this.historicalPartition =
@@ -247,10 +261,15 @@ public final class KvTablet {
         this.kvStateAccessor =
                 new KvStateAccessor(kvPreWriteBuffer, rocksDBKv, historicalPartition);
         this.kvValueLayout = kvValueLayout;
-        this.stateValueEncoder =
-                historicalPartition
-                        ? valueEncoder::encodeValue
-                        : (value, logOffset) -> valueEncoder.encodeValue(value);
+        if (historicalPartition) {
+            this.stateValueEncoder = valueEncoder::encodeValue;
+        } else if (rowIdEncoded) {
+            // DV-enabled (non-derived) tables prefix the value with its RowId, which is the log
+            // offset of the +I/+U record producing the value.
+            this.stateValueEncoder = (value, logOffset) -> value.encodeValueWithRowId(logOffset);
+        } else {
+            this.stateValueEncoder = (value, logOffset) -> valueEncoder.encodeValue(value);
+        }
         this.historicalCleanupOffset = historicalCleanupOffset;
         this.rowTtlTimestampProvider = rowTtlTimestampProvider;
         this.rowTtlEnabled = rowTtlEnabled;
@@ -270,9 +289,13 @@ public final class KvTablet {
                         valueDecoder,
                         rowTtlTimestampProvider,
                         clock,
-                        skipUnchangedUpsert);
+                        skipUnchangedUpsert,
+                        rowIdEncoded,
+                        dvManager);
         this.rocksDBStatistics = rocksDBStatistics;
         this.autoIncrementManager = autoIncrementManager;
+        this.dvRocksDB = dvRocksDB;
+        this.dvManager = dvManager;
         this.flushCompleteListener = flushCompleteListener;
         // TODO: Support row count for historical partitions.
         // Historical state only contains the WAL tail that has not been tiered to lake, so it
@@ -324,6 +347,93 @@ public final class KvTablet {
                 schemaGetter,
                 changelogImage,
                 sharedRateLimiter,
+                autoIncrementManager,
+                false,
+                false);
+    }
+
+    /**
+     * Creates a kv tablet with a dedicated {@link KvFlushScheduler}, with deletion vectors in the
+     * RowId-encoded mode enabled when {@code dvEnabled} is true.
+     */
+    @VisibleForTesting
+    public static KvTablet create(
+            PhysicalTablePath tablePath,
+            TableBucket tableBucket,
+            LogTablet logTablet,
+            File kvTabletDir,
+            Configuration serverConf,
+            TabletServerMetricGroup serverMetricGroup,
+            BufferAllocator arrowBufferAllocator,
+            MemorySegmentPool memorySegmentPool,
+            KvFormat kvFormat,
+            RowMerger rowMerger,
+            ArrowCompressionInfo arrowCompressionInfo,
+            SchemaGetter schemaGetter,
+            ChangelogImage changelogImage,
+            RateLimiter sharedRateLimiter,
+            AutoIncrementManager autoIncrementManager,
+            boolean dvEnabled)
+            throws IOException {
+        return create(
+                tablePath,
+                tableBucket,
+                logTablet,
+                kvTabletDir,
+                serverConf,
+                serverMetricGroup,
+                arrowBufferAllocator,
+                memorySegmentPool,
+                kvFormat,
+                rowMerger,
+                arrowCompressionInfo,
+                schemaGetter,
+                changelogImage,
+                sharedRateLimiter,
+                autoIncrementManager,
+                dvEnabled,
+                false);
+    }
+
+    /**
+     * Creates a kv tablet with a dedicated {@link KvFlushScheduler}, with deletion vectors in the
+     * RowId-encoded mode ({@code dvEnabled}) and/or the derived mode ({@code dvDerived}).
+     */
+    @VisibleForTesting
+    public static KvTablet create(
+            PhysicalTablePath tablePath,
+            TableBucket tableBucket,
+            LogTablet logTablet,
+            File kvTabletDir,
+            Configuration serverConf,
+            TabletServerMetricGroup serverMetricGroup,
+            BufferAllocator arrowBufferAllocator,
+            MemorySegmentPool memorySegmentPool,
+            KvFormat kvFormat,
+            RowMerger rowMerger,
+            ArrowCompressionInfo arrowCompressionInfo,
+            SchemaGetter schemaGetter,
+            ChangelogImage changelogImage,
+            RateLimiter sharedRateLimiter,
+            AutoIncrementManager autoIncrementManager,
+            boolean dvEnabled,
+            boolean dvDerived)
+            throws IOException {
+        return create(
+                tablePath,
+                tableBucket,
+                logTablet,
+                kvTabletDir,
+                serverConf,
+                serverMetricGroup,
+                arrowBufferAllocator,
+                memorySegmentPool,
+                kvFormat,
+                rowMerger,
+                arrowCompressionInfo,
+                schemaGetter,
+                changelogImage,
+                sharedRateLimiter,
                 null,
                 null,
                 null,
@@ -332,7 +442,9 @@ public final class KvTablet {
                 null,
                 autoIncrementManager,
                 SystemClock.getInstance(),
-                new TableConfig(new Configuration()));
+                new TableConfig(new Configuration()),
+                dvEnabled,
+                dvDerived);
     }
 
     static KvTablet create(
@@ -382,7 +494,9 @@ public final class KvTablet {
                 flushCompleteListener,
                 autoIncrementManager,
                 clock,
-                tableConfig);
+                tableConfig,
+                tableConfig.isRowIdEncoded(),
+                tableConfig.isDeletionVectorsDerived());
     }
 
     public static KvTablet create(
@@ -430,7 +544,9 @@ public final class KvTablet {
                 flushCompleteListener,
                 autoIncrementManager,
                 clock,
-                tableConfig);
+                tableConfig,
+                tableConfig.isRowIdEncoded(),
+                tableConfig.isDeletionVectorsDerived());
     }
 
     private static KvTablet create(
@@ -456,7 +572,9 @@ public final class KvTablet {
             @Nullable Runnable flushCompleteListener,
             AutoIncrementManager autoIncrementManager,
             Clock clock,
-            TableConfig tableConfig)
+            TableConfig tableConfig,
+            boolean dvEnabled,
+            boolean dvDerived)
             throws IOException {
         checkNotNull(tableConfig, "tableConfig must not be null.");
         boolean historicalPartition =
@@ -466,6 +584,12 @@ public final class KvTablet {
                 historicalPartition
                         ? KvValueLayout.TAGGED
                         : KvValueLayout.fromTableConfig(tableConfig);
+        // RowId-encoded DV values are written on top of the PLAIN layout only.
+        checkArgument(
+                !dvEnabled || !kvValueLayout.hasValueTag(),
+                "Deletion vectors require the PLAIN KV value layout, but %s uses version %s.",
+                tableBucket,
+                kvValueLayout.version());
         @Nullable
         RowTtlTimestampProvider rowTtlTimestampProvider =
                 !historicalPartition && kvValueLayout.hasValueTag()
@@ -513,6 +637,24 @@ public final class KvTablet {
                         kv.getDefaultColumnFamilyHandle(),
                         sharedBlockCache == null ? kv.getBlockCache() : null);
 
+        DvRocksDB dvRocksDB = null;
+        DvManager dvManager = null;
+        if (dvEnabled || dvDerived) {
+            File dvDir = new File(kvTabletDir, "dv");
+            dvRocksDB = DvRocksDB.open(dvDir.getAbsolutePath());
+            DvRWLock dvRWLock = new DvRWLock();
+            dvManager =
+                    dvDerived
+                            ? new DerivedDvManager(
+                                    dvRocksDB,
+                                    dvRWLock,
+                                    logTablet::getHighWatermark,
+                                    serverConf.get(
+                                            ConfigOptions.KV_DELETION_VECTORS_CHECKPOINT_INTERVAL),
+                                    DerivedDvMetrics.of(serverMetricGroup))
+                            : new DvManager(dvRocksDB, dvRWLock);
+        }
+
         return new KvTablet(
                 tablePath,
                 tableBucket,
@@ -540,7 +682,10 @@ public final class KvTablet {
                 rowTtlTimestampProvider,
                 clock,
                 rowTtl.isPresent(),
-                tableConfig.isUpsertSkipUnchanged());
+                tableConfig.isUpsertSkipUnchanged(),
+                dvEnabled,
+                dvRocksDB,
+                dvManager);
     }
 
     public static KvTablet create(
@@ -585,7 +730,9 @@ public final class KvTablet {
                 null,
                 autoIncrementManager,
                 clock,
-                tableConfig);
+                tableConfig,
+                tableConfig.isRowIdEncoded(),
+                tableConfig.isDeletionVectorsDerived());
     }
 
     private static RocksDBKv buildRocksDBKv(
@@ -1450,6 +1597,13 @@ public final class KvTablet {
                     // Close outside kvLock so active reads and async flushes can release leases.
                     rocksDBKv.close(closeMode);
                 }
+                if (dvManager != null) {
+                    // Drains background readers, so it must run before dvRocksDB.close().
+                    dvManager.close();
+                }
+                if (dvRocksDB != null) {
+                    dvRocksDB.close();
+                }
                 closeCompletion.complete(null);
             } catch (Throwable t) {
                 closeCompletion.completeExceptionally(t);
@@ -1496,6 +1650,24 @@ public final class KvTablet {
     @VisibleForTesting
     public RocksDBKv getRocksDBKv() {
         return rocksDBKv;
+    }
+
+    /** Returns the DvManager for this tablet, or null if DV is not enabled. */
+    @Nullable
+    public DvManager getDvManager() {
+        return dvManager;
+    }
+
+    /** Returns whether deletion vectors are enabled for this tablet. */
+    public boolean isDvEnabled() {
+        return dvManager != null;
+    }
+
+    // only for testing.
+    @VisibleForTesting
+    @Nullable
+    DvRocksDB getDvRocksDB() {
+        return dvRocksDB;
     }
 
     /** Returns the recent normalized backpressure pressure in {@code [0, 1)}. */

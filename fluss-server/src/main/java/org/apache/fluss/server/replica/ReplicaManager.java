@@ -22,8 +22,10 @@ import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.config.Configuration;
 import org.apache.fluss.config.TableConfig;
 import org.apache.fluss.config.cluster.ServerReconfigurable;
+import org.apache.fluss.exception.ApiException;
 import org.apache.fluss.exception.ConfigException;
 import org.apache.fluss.exception.FencedLeaderEpochException;
+import org.apache.fluss.exception.FlussRuntimeException;
 import org.apache.fluss.exception.HistoricalPartitionThrottledException;
 import org.apache.fluss.exception.InvalidBucketRoutingException;
 import org.apache.fluss.exception.InvalidColumnProjectionException;
@@ -69,6 +71,8 @@ import org.apache.fluss.rpc.entity.PutKvResultForBucket;
 import org.apache.fluss.rpc.entity.TableStatsResultForBucket;
 import org.apache.fluss.rpc.entity.WriteResultForBucket;
 import org.apache.fluss.rpc.gateway.CoordinatorGateway;
+import org.apache.fluss.rpc.messages.DvReadableSwitchResponse;
+import org.apache.fluss.rpc.messages.GetDvSnapshotResponse;
 import org.apache.fluss.rpc.messages.NotifyKvSnapshotOffsetResponse;
 import org.apache.fluss.rpc.messages.NotifyLakeTableOffsetResponse;
 import org.apache.fluss.rpc.messages.NotifyRemoteLogOffsetsResponse;
@@ -77,6 +81,9 @@ import org.apache.fluss.rpc.protocol.ApiKeys;
 import org.apache.fluss.rpc.protocol.Errors;
 import org.apache.fluss.rpc.protocol.MergeMode;
 import org.apache.fluss.server.coordinator.CoordinatorContext;
+import org.apache.fluss.server.entity.DvPositionReportData;
+import org.apache.fluss.server.entity.DvPrepareData;
+import org.apache.fluss.server.entity.DvReadableSwitchData;
 import org.apache.fluss.server.entity.FetchReqInfo;
 import org.apache.fluss.server.entity.LakeBucketOffset;
 import org.apache.fluss.server.entity.LookupDataForBucket;
@@ -92,6 +99,11 @@ import org.apache.fluss.server.entity.StopReplicaResultForBucket;
 import org.apache.fluss.server.entity.UserContext;
 import org.apache.fluss.server.kv.KvManager;
 import org.apache.fluss.server.kv.KvSnapshotResource;
+import org.apache.fluss.server.kv.KvTablet;
+import org.apache.fluss.server.kv.dv.DerivedDvManager;
+import org.apache.fluss.server.kv.dv.DvManager;
+import org.apache.fluss.server.kv.dv.DvSnapshot;
+import org.apache.fluss.server.kv.dv.RowPosSstDownloader;
 import org.apache.fluss.server.kv.scan.ScannerManager;
 import org.apache.fluss.server.kv.snapshot.CompletedKvSnapshotCommitter;
 import org.apache.fluss.server.kv.snapshot.DefaultSnapshotContext;
@@ -123,6 +135,7 @@ import org.apache.fluss.server.replica.historical.HistoricalPartitionManager;
 import org.apache.fluss.server.storage.DiskUsageMonitor;
 import org.apache.fluss.server.storage.LocalDiskManager;
 import org.apache.fluss.server.utils.FatalErrorHandler;
+import org.apache.fluss.server.utils.ServerRpcMessageUtils;
 import org.apache.fluss.server.zk.ZooKeeperClient;
 import org.apache.fluss.server.zk.data.LeaderAndIsr;
 import org.apache.fluss.server.zk.data.PartitionRegistration;
@@ -1423,6 +1436,12 @@ public class ReplicaManager implements ServerReconfigurable {
                             notifyLakeTableOffsetData.getCoordinatorEpoch(),
                             "notifyLakeTableOffset");
 
+                    // Handle DV prepare if present
+                    DvPrepareData dvPrepare = notifyLakeTableOffsetData.getDvPrepare();
+                    if (dvPrepare != null) {
+                        handleDvPrepare(dvPrepare);
+                    }
+
                     Map<TableBucket, LakeBucketOffset> lakeBucketOffsets =
                             notifyLakeTableOffsetData.getLakeBucketOffsets();
                     for (Map.Entry<TableBucket, LakeBucketOffset> lakeBucketOffsetEntry :
@@ -1432,6 +1451,14 @@ public class ReplicaManager implements ServerReconfigurable {
                         Replica replica = getReplicaOrException(tb);
                         LogTablet logTablet = replica.getLogTablet();
                         logTablet.updateLakeTableSnapshotId(lakeBucketOffset.getSnapshotId());
+                        // Catch up in the background; only the leader holds DV state.
+                        KvTablet notifiedKv = replica.isLeader() ? replica.getKvTablet() : null;
+                        if (notifiedKv != null
+                                && notifiedKv.isDvEnabled()
+                                && notifiedKv.getDvManager() instanceof DerivedDvManager) {
+                            ((DerivedDvManager) notifiedKv.getDvManager())
+                                    .advanceAsync(lakeBucketOffset.getSnapshotId());
+                        }
 
                         lakeBucketOffset
                                 .getLogStartOffset()
@@ -1453,10 +1480,263 @@ public class ReplicaManager implements ServerReconfigurable {
                         lakeBucketOffset
                                 .getMaxTimestamp()
                                 .ifPresent(logTablet::updateLakeMaxTimestamp);
-
-                        responseCallback.accept(new NotifyLakeTableOffsetResponse());
                     }
+                    responseCallback.accept(new NotifyLakeTableOffsetResponse());
                 });
+    }
+
+    /** Handles the DV readable switch request from the coordinator. */
+    public void dvReadableSwitch(
+            DvReadableSwitchData data, Consumer<DvReadableSwitchResponse> responseCallback) {
+        inLock(
+                replicaStateChangeLock,
+                () -> {
+                    validateAndApplyCoordinatorEpoch(
+                            data.getCoordinatorEpoch(), "dvReadableSwitch");
+                    handleDvReadableSwitch(data);
+                    responseCallback.accept(new DvReadableSwitchResponse());
+                });
+    }
+
+    private void handleDvPrepare(DvPrepareData dvPrepare) {
+        long tableId = dvPrepare.getTableId();
+        long snapshotId = dvPrepare.getReadableSnapshotId();
+        // The RowPos index/SST may live under a different snapshot than the readable one
+        // (e.g. Iceberg indexes the pre-commit snapshot). Fall back to readable when unset.
+        long indexSnapshotId =
+                dvPrepare.getIndexSnapshotId() > 0 ? dvPrepare.getIndexSnapshotId() : snapshotId;
+
+        for (Map.Entry<TableBucket, DvPositionReportData.DvBucketOffset> entry :
+                dvPrepare.getBucketOffsets().entrySet()) {
+            TableBucket tb = entry.getKey();
+            DvPositionReportData.DvBucketOffset bucketOffset = entry.getValue();
+
+            try {
+                Replica replica = getReplicaOrException(tb);
+                KvTablet kvTablet = replica.getKvTablet();
+                if (!replica.isLeader() || kvTablet == null) {
+                    // Only the leader holds DV state; a new leader rebuilds it.
+                    LOG.debug("Skip DV Prepare for non-leader replica {}", tb);
+                    continue;
+                }
+                checkState(kvTablet.isDvEnabled(), "DV not enabled for %s", tb);
+                DvManager dvManager = kvTablet.getDvManager();
+
+                // Construct remote dir and downloader
+                PhysicalTablePath tablePath = replica.getPhysicalTablePath();
+                FsPath remoteLakeDir =
+                        FlussPaths.remoteLakeTableSnapshotDir(
+                                conf.getString(ConfigOptions.REMOTE_DATA_DIR),
+                                tablePath.getTablePath(),
+                                tableId);
+                RowPosSstDownloader downloader = new RowPosSstDownloader(remoteLakeDir);
+
+                String localTempDir = createDvPrepareLocalTempDir(tb, snapshotId);
+
+                dvManager.handlePrepare(
+                        tb.getBucket(),
+                        tb.getPartitionId(),
+                        bucketOffset,
+                        downloader,
+                        indexSnapshotId,
+                        localTempDir);
+                if (dvManager instanceof DerivedDvManager) {
+                    ((DerivedDvManager) dvManager).setPreparedReadable(snapshotId);
+                }
+
+                LOG.info("DV Prepare completed for {} snapshot {}", tb, snapshotId);
+            } catch (Exception e) {
+                LOG.error("DV Prepare failed for {} snapshot {}", tb, snapshotId, e);
+                throw new FlussRuntimeException(
+                        "DV Prepare failed for " + tb + " snapshot " + snapshotId, e);
+            }
+        }
+    }
+
+    private void handleDvReadableSwitch(DvReadableSwitchData data) {
+        long snapshotId = data.getReadableSnapshotId();
+
+        for (TableBucket tb : data.getTableBuckets()) {
+            try {
+                Replica replica = getReplicaOrException(tb);
+                KvTablet kvTablet = replica.getKvTablet();
+                if (!replica.isLeader() || kvTablet == null) {
+                    LOG.debug("Skip DV ReadableSwitch for non-leader replica {}", tb);
+                    continue;
+                }
+                checkState(kvTablet.isDvEnabled(), "DV not enabled for %s", tb);
+                DvManager dvManager = kvTablet.getDvManager();
+
+                int bucketId = tb.getBucket();
+                long readableOffset = dvManager.getPendingReadableOffset(bucketId);
+                dvManager.handleReadableSwitch(bucketId, snapshotId, readableOffset);
+
+                // Clean up local temp dir used by Prepare
+                cleanupDvPrepareLocalTempDir(tb, snapshotId);
+
+                LOG.info("DV ReadableSwitch completed for {} snapshot {}", tb, snapshotId);
+            } catch (Exception e) {
+                LOG.error("DV ReadableSwitch failed for {} snapshot {}", tb, snapshotId, e);
+                throw new FlussRuntimeException(
+                        "DV ReadableSwitch failed for " + tb + " snapshot " + snapshotId, e);
+            }
+        }
+    }
+
+    private File dvPrepareLocalTempDir(TableBucket tb, long snapshotId) {
+        // partition in the path: same bucket id across partitions must not share (and delete) SSTs
+        String partition = tb.getPartitionId() == null ? "" : "p" + tb.getPartitionId() + "/";
+        return new File(
+                localDiskManager.dataDirs().get(0),
+                "dv-prepare/"
+                        + tb.getTableId()
+                        + "/"
+                        + partition
+                        + tb.getBucket()
+                        + "/"
+                        + snapshotId);
+    }
+
+    private String createDvPrepareLocalTempDir(TableBucket tb, long snapshotId) {
+        File tempDir = dvPrepareLocalTempDir(tb, snapshotId);
+        tempDir.mkdirs();
+        return tempDir.getAbsolutePath();
+    }
+
+    private void cleanupDvPrepareLocalTempDir(TableBucket tb, long snapshotId) {
+        File tempDir = dvPrepareLocalTempDir(tb, snapshotId);
+        if (tempDir.exists()) {
+            try {
+                FileUtils.deleteDirectory(tempDir);
+            } catch (IOException e) {
+                LOG.warn("Failed to clean up DV Prepare temp dir: {}", tempDir, e);
+            }
+        }
+    }
+
+    /**
+     * Gets the DV snapshot for a specific bucket for union read.
+     *
+     * @param tableId the table ID
+     * @param partitionId the partition ID, null for non-partitioned tables
+     * @param bucketId the bucket ID
+     * @param readableSnapshotId the requested readable snapshot ID
+     * @return a {@link GetDvSnapshotResponse} containing the DV snapshot data
+     */
+    public GetDvSnapshotResponse getDvSnapshot(
+            long tableId, @Nullable Long partitionId, int bucketId, long readableSnapshotId) {
+        TableBucket tb = new TableBucket(tableId, partitionId, bucketId);
+        try {
+            KvTablet kvTablet = dvLeaderKvTablet(tb);
+            checkState(kvTablet.isDvEnabled(), "DV not enabled for %s", tb);
+            DvManager dvManager = kvTablet.getDvManager();
+
+            long logEndOffset = getReplicaOrException(tb).getLocalLogEndOffset();
+
+            dvManager.getDvRWLock().readLock();
+            try {
+                DvSnapshot snapshot = dvManager.getDvForUnionRead(readableSnapshotId, logEndOffset);
+                return ServerRpcMessageUtils.buildGetDvSnapshotResponse(snapshot);
+            } finally {
+                dvManager.getDvRWLock().readUnlock();
+            }
+        } catch (ApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new FlussRuntimeException(
+                    "Failed to get DV snapshot for " + tb + " snapshot " + readableSnapshotId, e);
+        }
+    }
+
+    /**
+     * Returns the leader's KvTablet, or throws NotLeaderOrFollower so the client refreshes its
+     * cached leader instead of retrying this server.
+     */
+    private KvTablet dvLeaderKvTablet(TableBucket tb) {
+        Replica replica = getReplicaOrException(tb);
+        KvTablet kvTablet = replica.getKvTablet();
+        if (!replica.isLeader() || kvTablet == null) {
+            throw new NotLeaderOrFollowerException(
+                    String.format(
+                            "Server %s is not the leader of %s for a deletion-vector request.",
+                            serverId, tb));
+        }
+        return kvTablet;
+    }
+
+    /** Returns the positions of the given primary keys in snapshot {@code snapshotId}. */
+    public GetDvSnapshotResponse lookupDvPositions(
+            long tableId,
+            @Nullable Long partitionId,
+            int bucketId,
+            long snapshotId,
+            List<byte[]> keys) {
+        TableBucket tb = new TableBucket(tableId, partitionId, bucketId);
+        try {
+            KvTablet kvTablet = dvLeaderKvTablet(tb);
+            DvManager dvManager = kvTablet.getDvManager();
+            checkState(
+                    dvManager instanceof DerivedDvManager,
+                    "Derived DV mode not enabled for %s",
+                    tb);
+            List<Object[]> found = ((DerivedDvManager) dvManager).lookup(snapshotId, keys);
+            GetDvSnapshotResponse resp =
+                    new GetDvSnapshotResponse().setLogEndOffset(-1).setSnapshotStartOffset(-1);
+            for (Object[] f : found) {
+                resp.addKeyPosition()
+                        .setKey((byte[]) f[0])
+                        .setFilePath((String) f[1])
+                        .setPos((Long) f[2]);
+            }
+            return resp;
+        } catch (ApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new FlussRuntimeException(
+                    "Failed to get DV snapshot for " + tb + " snapshot " + snapshotId, e);
+        }
+    }
+
+    /**
+     * Gets LogDv snapshot for tiering. Returns the LogDv bitmap for [fromOffset, logEndOffset) and
+     * the logEndOffset, so the caller gets both stoppingOffset and logDvBitmap in a single RPC.
+     *
+     * @param tableId the table ID
+     * @param partitionId the partition ID, null for non-partitioned tables
+     * @param bucketId the bucket ID
+     * @param logDvFromOffset the start offset (inclusive), typically the last committed tiering
+     *     offset
+     * @return a {@link GetDvSnapshotResponse} containing logEndOffset and LogDv bitmap
+     */
+    public GetDvSnapshotResponse getLogDvSnapshot(
+            long tableId, @Nullable Long partitionId, int bucketId, long logDvFromOffset) {
+        TableBucket tb = new TableBucket(tableId, partitionId, bucketId);
+        try {
+            KvTablet kvTablet = dvLeaderKvTablet(tb);
+            checkState(kvTablet.isDvEnabled(), "DV not enabled for %s", tb);
+            DvManager dvManager = kvTablet.getDvManager();
+
+            long logEndOffset = getReplicaOrException(tb).getLocalLogEndOffset();
+
+            dvManager.getDvRWLock().readLock();
+            try {
+                byte[] logDvBytes = dvManager.getLogDvSnapshot(logDvFromOffset, logEndOffset);
+                GetDvSnapshotResponse resp =
+                        new GetDvSnapshotResponse()
+                                .setLogEndOffset(logEndOffset)
+                                .setSnapshotStartOffset(logDvFromOffset);
+                if (logDvBytes != null) {
+                    resp.setLogDvBitmap(logDvBytes);
+                }
+                return resp;
+            } finally {
+                dvManager.getDvRWLock().readUnlock();
+            }
+        } catch (ApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new FlussRuntimeException("Failed to get LogDv snapshot for " + tb, e);
+        }
     }
 
     /**

@@ -74,8 +74,10 @@ import org.apache.fluss.rpc.messages.CommitRemoteLogManifestRequest;
 import org.apache.fluss.rpc.messages.CreateAclsResponse;
 import org.apache.fluss.rpc.messages.DescribeClusterResponse;
 import org.apache.fluss.rpc.messages.DropAclsResponse;
+import org.apache.fluss.rpc.messages.DvReadableSwitchRequest;
 import org.apache.fluss.rpc.messages.FetchLogRequest;
 import org.apache.fluss.rpc.messages.FetchLogResponse;
+import org.apache.fluss.rpc.messages.GetDvSnapshotResponse;
 import org.apache.fluss.rpc.messages.GetFileSystemSecurityTokenResponse;
 import org.apache.fluss.rpc.messages.GetKvSnapshotMetadataResponse;
 import org.apache.fluss.rpc.messages.GetLakeSnapshotResponse;
@@ -115,10 +117,14 @@ import org.apache.fluss.rpc.messages.PbDescribeConfig;
 import org.apache.fluss.rpc.messages.PbDropAclsFilterResult;
 import org.apache.fluss.rpc.messages.PbDropAclsMatchingAcl;
 import org.apache.fluss.rpc.messages.PbDropColumn;
+import org.apache.fluss.rpc.messages.PbDvBucketOffset;
+import org.apache.fluss.rpc.messages.PbDvPositionReport;
+import org.apache.fluss.rpc.messages.PbDvPrepare;
 import org.apache.fluss.rpc.messages.PbFetchLogReqForBucket;
 import org.apache.fluss.rpc.messages.PbFetchLogReqForTable;
 import org.apache.fluss.rpc.messages.PbFetchLogRespForBucket;
 import org.apache.fluss.rpc.messages.PbFetchLogRespForTable;
+import org.apache.fluss.rpc.messages.PbFileDictEntry;
 import org.apache.fluss.rpc.messages.PbKeyValue;
 import org.apache.fluss.rpc.messages.PbKvSnapshot;
 import org.apache.fluss.rpc.messages.PbKvSnapshotLeaseForBucket;
@@ -180,6 +186,9 @@ import org.apache.fluss.server.authorizer.AclDeleteResult;
 import org.apache.fluss.server.entity.AdjustIsrResultForBucket;
 import org.apache.fluss.server.entity.CommitLakeTableSnapshotsData;
 import org.apache.fluss.server.entity.CommitRemoteLogManifestData;
+import org.apache.fluss.server.entity.DvPositionReportData;
+import org.apache.fluss.server.entity.DvPrepareData;
+import org.apache.fluss.server.entity.DvReadableSwitchData;
 import org.apache.fluss.server.entity.FetchReqInfo;
 import org.apache.fluss.server.entity.LakeBucketOffset;
 import org.apache.fluss.server.entity.LookupDataForBucket;
@@ -192,6 +201,7 @@ import org.apache.fluss.server.entity.ProduceLogDataForBucket;
 import org.apache.fluss.server.entity.PutKvDataForBucket;
 import org.apache.fluss.server.entity.StopReplicaData;
 import org.apache.fluss.server.entity.StopReplicaResultForBucket;
+import org.apache.fluss.server.kv.dv.DvSnapshot;
 import org.apache.fluss.server.kv.snapshot.CompletedSnapshot;
 import org.apache.fluss.server.kv.snapshot.CompletedSnapshotJsonSerde;
 import org.apache.fluss.server.kv.snapshot.KvSnapshotHandle;
@@ -2033,13 +2043,21 @@ public class ServerRpcMessageUtils {
                             ? pbLakeTableSnapshotMetadata.getEarliestSnapshotIdToKeep()
                             : null;
 
+            DvPositionReportData dvPositionReport = null;
+            if (pbLakeTableSnapshotMetadata.hasDvPositionReport()) {
+                dvPositionReport =
+                        parseDvPositionReport(
+                                tableId, pbLakeTableSnapshotMetadata.getDvPositionReport());
+            }
+
             // If this table already exists in builder (from V1), update it; otherwise add new
             builder.addTableSnapshot(
                     tableId,
                     lakeTableInfoByTableId.get(tableId), // may be null for V2-only
                     tableBucketsMaxTimestamp.get(tableId), // may be null
                     lakeSnapshotMetadata,
-                    earliestSnapshotIDToKeep);
+                    earliestSnapshotIDToKeep,
+                    dvPositionReport);
         }
 
         return builder.build();
@@ -2172,8 +2190,13 @@ public class ServerRpcMessageUtils {
                     new LakeBucketOffset(snapshotId, logStartOffset, logEndOffset, maxTimestamp));
         }
 
+        DvPrepareData dvPrepare = null;
+        if (notifyLakeTableOffsetRequest.hasDvPrepare()) {
+            dvPrepare = parseDvPrepare(notifyLakeTableOffsetRequest.getDvPrepare());
+        }
+
         return new NotifyLakeTableOffsetData(
-                notifyLakeTableOffsetRequest.getCoordinatorEpoch(), lakeBucketOffsetMap);
+                notifyLakeTableOffsetRequest.getCoordinatorEpoch(), lakeBucketOffsetMap, dvPrepare);
     }
 
     public static GetLakeSnapshotResponse makeGetLakeSnapshotResponse(
@@ -2535,5 +2558,112 @@ public class ServerRpcMessageUtils {
             pb.setRemoteLogEndOffset(entry.getManifestHandle().getRemoteLogEndOffset());
         }
         return response;
+    }
+
+    // ---- DV helpers ----
+
+    /** Parses a {@link PbDvPositionReport} proto into a {@link DvPositionReportData}. */
+    public static DvPositionReportData parseDvPositionReport(long tableId, PbDvPositionReport pb) {
+        Map<TableBucket, DvPositionReportData.DvBucketOffset> bucketOffsets = new HashMap<>();
+        for (PbDvBucketOffset bo : pb.getBucketOffsetsList()) {
+            Long partitionId = bo.hasPartitionId() ? bo.getPartitionId() : null;
+            TableBucket tb = new TableBucket(tableId, partitionId, bo.getBucketId());
+            bucketOffsets.put(tb, parseDvBucketOffset(bo));
+        }
+        long indexSnapshotId = pb.hasIndexSnapshotId() ? pb.getIndexSnapshotId() : 0L;
+        return new DvPositionReportData(bucketOffsets, indexSnapshotId);
+    }
+
+    /** Parses a {@link PbDvPrepare} proto into a {@link DvPrepareData}. */
+    public static DvPrepareData parseDvPrepare(PbDvPrepare pb) {
+        long tableId = pb.getTableId();
+        Map<TableBucket, DvPositionReportData.DvBucketOffset> bucketOffsets = new HashMap<>();
+        for (PbDvBucketOffset bo : pb.getBucketOffsetsList()) {
+            Long partitionId = bo.hasPartitionId() ? bo.getPartitionId() : null;
+            TableBucket tb = new TableBucket(tableId, partitionId, bo.getBucketId());
+            bucketOffsets.put(tb, parseDvBucketOffset(bo));
+        }
+        long indexSnapshotId = pb.hasIndexSnapshotId() ? pb.getIndexSnapshotId() : 0L;
+        return new DvPrepareData(
+                tableId, pb.getReadableSnapshotId(), indexSnapshotId, bucketOffsets);
+    }
+
+    private static DvPositionReportData.DvBucketOffset parseDvBucketOffset(PbDvBucketOffset bo) {
+        Map<Integer, String> newFileDictEntries = new HashMap<>();
+        for (PbFileDictEntry entry : bo.getNewFileDictEntriesList()) {
+            newFileDictEntries.put(entry.getFileId(), entry.getFilePath());
+        }
+        List<String> oldFiles = new ArrayList<>(bo.getOldFilesList());
+        return new DvPositionReportData.DvBucketOffset(
+                bo.getReadableOffset(), newFileDictEntries, oldFiles);
+    }
+
+    /** Extracts a {@link DvReadableSwitchData} from a {@link DvReadableSwitchRequest}. */
+    public static DvReadableSwitchData getDvReadableSwitchData(DvReadableSwitchRequest request) {
+        long tableId = request.getTableId();
+        int bucketCount = request.getBucketIdsCount();
+        int partitionCount = request.getPartitionIdsCount();
+        List<TableBucket> tableBuckets = new ArrayList<>(bucketCount);
+        for (int i = 0; i < bucketCount; i++) {
+            Long partitionId = (partitionCount > 0) ? request.getPartitionIdAt(i) : null;
+            tableBuckets.add(new TableBucket(tableId, partitionId, request.getBucketIdAt(i)));
+        }
+        return new DvReadableSwitchData(
+                request.getCoordinatorEpoch(),
+                tableId,
+                request.getReadableSnapshotId(),
+                tableBuckets);
+    }
+
+    /** Builds a {@link PbDvPrepare} proto from a {@link DvPrepareData}. */
+    public static PbDvPrepare buildDvPrepareMessage(DvPrepareData data) {
+        PbDvPrepare pb =
+                new PbDvPrepare()
+                        .setTableId(data.getTableId())
+                        .setReadableSnapshotId(data.getReadableSnapshotId());
+        if (data.getIndexSnapshotId() > 0) {
+            pb.setIndexSnapshotId(data.getIndexSnapshotId());
+        }
+
+        for (Map.Entry<TableBucket, DvPositionReportData.DvBucketOffset> entry :
+                data.getBucketOffsets().entrySet()) {
+            TableBucket tb = entry.getKey();
+            DvPositionReportData.DvBucketOffset bucketOffset = entry.getValue();
+            PbDvBucketOffset pbBucket =
+                    pb.addBucketOffset()
+                            .setBucketId(tb.getBucket())
+                            .setReadableOffset(bucketOffset.getReadableOffset());
+            if (tb.getPartitionId() != null) {
+                pbBucket.setPartitionId(tb.getPartitionId());
+            }
+            for (Map.Entry<Integer, String> dictEntry :
+                    bucketOffset.getNewFileDictEntries().entrySet()) {
+                pbBucket.addNewFileDictEntry()
+                        .setFileId(dictEntry.getKey())
+                        .setFilePath(dictEntry.getValue());
+            }
+            for (String oldFile : bucketOffset.getOldFiles()) {
+                pbBucket.addOldFile(oldFile);
+            }
+        }
+
+        return pb;
+    }
+
+    /** Builds a {@link GetDvSnapshotResponse} from a {@link DvSnapshot}. */
+    public static GetDvSnapshotResponse buildGetDvSnapshotResponse(DvSnapshot snapshot) {
+        GetDvSnapshotResponse resp =
+                new GetDvSnapshotResponse()
+                        .setLogEndOffset(snapshot.getLogEndOffset())
+                        .setSnapshotStartOffset(snapshot.getSnapshotStartOffset());
+        if (snapshot.getLogDvBitmap() != null) {
+            resp.setLogDvBitmap(snapshot.getLogDvBitmap());
+        }
+        for (Map.Entry<String, byte[]> entry : snapshot.getLakeDvEntries().entrySet()) {
+            resp.addLakeDvEntry()
+                    .setFilePath(entry.getKey())
+                    .setDeletedPositionsBitmap(entry.getValue());
+        }
+        return resp;
     }
 }

@@ -41,10 +41,15 @@ import static org.apache.fluss.utils.Preconditions.checkNotNull;
  *   <li><b>Version 0:</b> Initial version.
  *   <li><b>Version 1:</b> Adds the log stopping offset and the batch flag to {@link
  *       HybridSnapshotLogSplit}.
- *   <li><b>Version 2 (Current):</b> Adds {@code recordsToSkip} to {@link
+ *   <li><b>Version 2:</b> Adds {@code recordsToSkip} to {@link
  *       org.apache.fluss.flink.lake.split.LakeSnapshotSplit}, so that a partially consumed lake
  *       snapshot split resumes from where it stopped instead of re-emitting already emitted
  *       records. Lake snapshot splits restored from older versions start from the beginning.
+ *   <li><b>Version 3 (Current):</b> Adds the deletion-vector state: the LogDv bitmap of {@link
+ *       LogSplit}, the LakeDv map of {@link org.apache.fluss.flink.lake.split.LakeSnapshotSplit}
+ *       and the DV snapshot of {@link
+ *       org.apache.fluss.flink.lake.split.LakeSnapshotAndFlussLogSplit}. Splits restored from older
+ *       versions carry no deletion vectors.
  * </ul>
  *
  * <p>This serializer can deserialize splits of all previous versions, but always produces the
@@ -55,6 +60,7 @@ public class SourceSplitSerializer implements SimpleVersionedSerializer<SourceSp
     private static final int VERSION_0 = 0;
     private static final int VERSION_1 = 1;
     private static final int VERSION_2 = 2;
+    private static final int VERSION_3 = 3;
 
     private static final ThreadLocal<DataOutputSerializer> SERIALIZER_CACHE =
             ThreadLocal.withInitial(() -> new DataOutputSerializer(64));
@@ -63,7 +69,7 @@ public class SourceSplitSerializer implements SimpleVersionedSerializer<SourceSp
     private static final byte LOG_SPLIT_FLAG = 2;
     private static final byte KV_BATCH_SPLIT_FLAG = 3;
 
-    private static final int CURRENT_VERSION = VERSION_2;
+    private static final int CURRENT_VERSION = VERSION_3;
 
     @Nullable private final LakeSource<LakeSplit> lakeSource;
 
@@ -108,6 +114,15 @@ public class SourceSplitSerializer implements SimpleVersionedSerializer<SourceSp
                 out.writeLong(logSplit.getStartingOffset());
                 // write stopping offset
                 out.writeLong(logSplit.getStoppingOffset().orElse(LogSplit.NO_STOPPING_OFFSET));
+                // write logDvBitmap, since VERSION_3
+                byte[] logDvBitmap = logSplit.getLogDvBitmap();
+                if (logDvBitmap == null) {
+                    out.writeBoolean(false);
+                } else {
+                    out.writeBoolean(true);
+                    out.writeInt(logDvBitmap.length);
+                    out.write(logDvBitmap);
+                }
             } else {
                 // KvBatchSplit has no extra fields to serialize beyond the common header.
             }
@@ -180,7 +195,14 @@ public class SourceSplitSerializer implements SimpleVersionedSerializer<SourceSp
         } else if (splitKind == LOG_SPLIT_FLAG) {
             long startingOffset = in.readLong();
             long stoppingOffset = in.readLong();
-            return new LogSplit(tableBucket, partitionName, startingOffset, stoppingOffset);
+            // logDvBitmap is persisted since VERSION_3
+            byte[] logDvBitmap = null;
+            if (version >= VERSION_3 && in.readBoolean()) {
+                logDvBitmap = new byte[in.readInt()];
+                in.readFully(logDvBitmap);
+            }
+            return new LogSplit(
+                    tableBucket, partitionName, startingOffset, stoppingOffset, logDvBitmap);
         } else if (splitKind == KV_BATCH_SPLIT_FLAG) {
             return new KvBatchSplit(tableBucket, partitionName);
         } else {
@@ -188,8 +210,15 @@ public class SourceSplitSerializer implements SimpleVersionedSerializer<SourceSp
                     new LakeSplitSerializer(checkNotNull(lakeSource).getSplitSerializer());
             // records to skip of LakeSnapshotSplit are persisted since VERSION_2
             boolean readRecordsToSkip = version >= VERSION_2;
+            // deletion vectors of lake splits are persisted since VERSION_3
+            boolean readDeletionVectors = version >= VERSION_3;
             return lakeSplitSerializer.deserialize(
-                    splitKind, tableBucket, partitionName, in, readRecordsToSkip);
+                    splitKind,
+                    tableBucket,
+                    partitionName,
+                    in,
+                    readRecordsToSkip,
+                    readDeletionVectors);
         }
     }
 }

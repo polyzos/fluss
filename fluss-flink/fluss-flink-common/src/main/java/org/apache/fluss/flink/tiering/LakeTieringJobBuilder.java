@@ -114,7 +114,11 @@ public class LakeTieringJobBuilder {
                         CommittableMessageTypeInfo.of(
                                 () -> lakeTieringFactory.getCommittableSerializer()),
                         new TieringCommitOperatorFactory(
-                                flussConfig, lakeTieringConfig, lakeTieringFactory))
+                                flussConfig,
+                                lakeTieringConfig,
+                                lakeTieringFactory,
+                                dataLakeConfig,
+                                dataLakeFormat))
                 .setParallelism(1)
                 .setMaxParallelism(1)
                 // disable chaining with the tiering source

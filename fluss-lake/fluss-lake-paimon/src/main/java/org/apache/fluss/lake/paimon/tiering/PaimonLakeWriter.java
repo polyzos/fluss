@@ -76,6 +76,8 @@ public class PaimonLakeWriter implements LakeWriter<PaimonWriteResult>, Supports
         // legacy table (carrying the three Fluss system columns). Writers emit system columns only
         // for legacy tables.
         boolean paimonIncludingSystemColumns = PaimonUtils.isLegacyTable(fileStoreTable.rowType());
+        boolean dvEnabled = writerInitContext.tableInfo().isDeletionVectorsEnabled();
+        byte[] logDvBitmap = writerInitContext.logDvBitmap();
 
         this.recordWriter =
                 fileStoreTable.primaryKeys().isEmpty()
@@ -95,7 +97,9 @@ public class PaimonLakeWriter implements LakeWriter<PaimonWriteResult>, Supports
                                 flussRowType,
                                 writerInitContext.ioTmpDirs(),
                                 paimonIncludingSystemColumns,
-                                historicalPartition);
+                                historicalPartition,
+                                dvEnabled,
+                                logDvBitmap);
     }
 
     @Override

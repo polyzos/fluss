@@ -2284,6 +2284,33 @@ public class ConfigOptions {
                     .withDescription(
                             "If true, snapshot expiration will be triggered automatically when tiering service commits to the datalake. It is disabled by default.");
 
+    public static final ConfigOption<Boolean> TABLE_DELETION_VECTORS_ENABLED =
+            key("table.deletion-vectors.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Whether to enable Deletion Vector support for the table. "
+                                    + "Must be set at table creation time and cannot be changed afterwards. "
+                                    + "When enabled, Fluss maintains a three-layer DV architecture "
+                                    + "(Lake DV + Log DV + Paimon DV) for instant cross-layer deduplication "
+                                    + "during union reads. Disabled by default as it introduces additional "
+                                    + "storage, write path, and tiering overhead. "
+                                    + "Requires: primary key table, "
+                                    + "'table.datalake.enabled' = true, "
+                                    + "and FULL changelog image mode.");
+
+    public static final ConfigOption<String> TABLE_DELETION_VECTORS_MODE =
+            key("table.deletion-vectors.mode")
+                    .stringType()
+                    .defaultValue("fip31")
+                    .withDescription(
+                            "Deletion vector bookkeeping mode for DV tables. 'fip31' (default) keeps "
+                                    + "LakeDv/LogDv as mutable state advanced by the prepare/switch "
+                                    + "protocol. 'derived' resolves old-version positions at tiering "
+                                    + "time through a primary-key position index, commits data and "
+                                    + "deletion vectors in one lake commit, and derives the union-read "
+                                    + "masks per (readable snapshot, high watermark).");
+
     public static final ConfigOption<MergeEngineType> TABLE_MERGE_ENGINE =
             key("table.merge-engine")
                     .enumType(MergeEngineType.class)
@@ -2458,6 +2485,18 @@ public class ConfigOptions {
                     .withDescription(
                             "The interval to perform periodic snapshot for kv data. "
                                     + "The default setting is 10 minutes.");
+
+    public static final ConfigOption<Integer> KV_DELETION_VECTORS_CHECKPOINT_INTERVAL =
+            key("kv.deletion-vectors.checkpoint-interval")
+                    .intType()
+                    .defaultValue(50)
+                    .withDescription(
+                            "For tables with 'table.deletion-vectors.mode' = 'derived': the number "
+                                    + "of primary key position index changes a bucket applies "
+                                    + "between two checkpoints of its index. A restarted tablet "
+                                    + "server loads the newest checkpoint and applies only the later "
+                                    + "changes, and tiering removes changes older than the oldest "
+                                    + "checkpoint of all buckets.");
 
     public static final ConfigOption<Integer> KV_SNAPSHOT_SCHEDULER_THREAD_NUM =
             key("kv.snapshot.scheduler-thread-num")
@@ -3078,6 +3117,33 @@ public class ConfigOptions {
                                     + "Multiple directories can be separated by comma or the system path separator. "
                                     + "If not configured and the tiering service runs in a Flink job, Fluss uses "
                                     + "Flink's IO temporary directories with a 'fluss' child directory.");
+
+    public static final ConfigOption<Integer> LAKE_TIERING_DELETION_VECTORS_TRIM_INTERVAL =
+            key("lake.tiering.deletion-vectors.trim-interval")
+                    .intType()
+                    .defaultValue(20)
+                    .withDescription(
+                            "For tables with 'table.deletion-vectors.mode' = 'derived': every this "
+                                    + "many tiering rounds of a table, the tiering service removes "
+                                    + "primary key position index changes that every bucket with "
+                                    + "data has a checkpoint past, and index changes of failed "
+                                    + "rounds.");
+
+    public static final ConfigOption<Integer> LAKE_TIERING_DELETION_VECTORS_TRIM_RETAIN =
+            key("lake.tiering.deletion-vectors.trim-retain")
+                    .intType()
+                    .defaultValue(2)
+                    .withDescription(
+                            "The number of index changes kept before the oldest checkpoint when "
+                                    + "the index history of a table is trimmed.");
+
+    public static final ConfigOption<Duration> LAKE_TIERING_DELETION_VECTORS_ORPHAN_MIN_AGE =
+            key("lake.tiering.deletion-vectors.orphan-min-age")
+                    .durationType()
+                    .defaultValue(Duration.ofHours(6))
+                    .withDescription(
+                            "An index change that was never registered is removed once it is "
+                                    + "this old. It must be longer than the longest tiering round.");
 
     // ------------------------------------------------------------------------
     //  ConfigOptions for fluss kafka

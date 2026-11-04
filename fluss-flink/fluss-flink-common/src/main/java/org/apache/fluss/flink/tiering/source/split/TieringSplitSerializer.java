@@ -18,6 +18,7 @@
 package org.apache.fluss.flink.tiering.source.split;
 
 import org.apache.fluss.client.tiering.TieringLogSplit;
+import org.apache.fluss.client.tiering.TieringRowPosSplit;
 import org.apache.fluss.client.tiering.TieringSnapshotSplit;
 import org.apache.fluss.client.tiering.TieringSplit;
 import org.apache.fluss.flink.tiering.source.TieringSource;
@@ -31,6 +32,7 @@ import org.apache.flink.core.memory.DataOutputSerializer;
 
 import java.io.IOException;
 
+import static org.apache.fluss.client.tiering.TieringRowPosSplit.TIERING_ROW_POS_SPLIT_FLAG;
 import static org.apache.fluss.client.tiering.TieringSplit.TIERING_LOG_SPLIT_FLAG;
 import static org.apache.fluss.client.tiering.TieringSplit.TIERING_SNAPSHOT_SPLIT_FLAG;
 
@@ -46,11 +48,16 @@ public class TieringSplitSerializer implements SimpleVersionedSerializer<FlinkTi
     public static final TieringSplitSerializer INSTANCE = new TieringSplitSerializer();
 
     private static final int VERSION_0 = 0;
+    /**
+     * Adds the deletion-vector fields: the row-pos split kind (incl. its byPrimaryKey flag) and the
+     * optional LogDv bitmap of log splits.
+     */
+    private static final int VERSION_1 = 1;
 
     private static final ThreadLocal<DataOutputSerializer> SERIALIZER_CACHE =
             ThreadLocal.withInitial(() -> new DataOutputSerializer(64));
 
-    private static final int CURRENT_VERSION = VERSION_0;
+    private static final int CURRENT_VERSION = VERSION_1;
 
     @Override
     public int getVersion() {
@@ -100,6 +107,22 @@ public class TieringSplitSerializer implements SimpleVersionedSerializer<FlinkTi
             out.writeLong(tieringSnapshotSplit.getSnapshotId());
             // write log offset of snapshot
             out.writeLong(tieringSnapshotSplit.getLogOffsetOfSnapshot());
+        } else if (split.isTieringRowPosSplit()) {
+            // RowPos split — batch of files for the same bucket
+            TieringRowPosSplit rowPosSplit = split.asTieringRowPosSplit();
+            int[] fileIds = rowPosSplit.getFileIds();
+            byte[][] serializedLakeSplits = rowPosSplit.getSerializedLakeSplits();
+            out.writeInt(fileIds.length);
+            for (int i = 0; i < fileIds.length; i++) {
+                out.writeInt(fileIds[i]);
+                out.writeInt(serializedLakeSplits[i].length);
+                out.write(serializedLakeSplits[i]);
+            }
+            out.writeInt(rowPosSplit.getTotalExpectedResults());
+            out.writeLong(rowPosSplit.getCompactSnapshotId());
+            out.writeUTF(rowPosSplit.getRemoteUploadBasePath());
+            out.writeInt(rowPosSplit.getFlussColumnCount());
+            out.writeBoolean(rowPosSplit.isByPrimaryKey());
         } else {
             // Log split
             TieringLogSplit tieringLogSplit = split.asTieringLogSplit();
@@ -107,6 +130,15 @@ public class TieringSplitSerializer implements SimpleVersionedSerializer<FlinkTi
             out.writeLong(tieringLogSplit.getStartingOffset());
             // write stopping offset
             out.writeLong(tieringLogSplit.getStoppingOffset());
+            // write logDvBitmap
+            byte[] logDvBitmap = tieringLogSplit.getLogDvBitmap();
+            if (logDvBitmap != null) {
+                out.writeBoolean(true);
+                out.writeInt(logDvBitmap.length);
+                out.write(logDvBitmap);
+            } else {
+                out.writeBoolean(false);
+            }
         }
 
         final byte[] result = out.getCopyOfBuffer();
@@ -116,7 +148,7 @@ public class TieringSplitSerializer implements SimpleVersionedSerializer<FlinkTi
 
     @Override
     public FlinkTieringSplit deserialize(int version, byte[] serialized) throws IOException {
-        if (version != VERSION_0) {
+        if (version != VERSION_0 && version != VERSION_1) {
             throw new IOException("Unknown version " + version);
         }
         final DataInputDeserializer in = new DataInputDeserializer(serialized);
@@ -166,22 +198,59 @@ public class TieringSplitSerializer implements SimpleVersionedSerializer<FlinkTi
                             skipCurrentRound,
                             splitIndex,
                             tieringRoundTimestamp);
-        } else if (splitKind == TIERING_LOG_SPLIT_FLAG) {
-            // deserialize starting offset
-            long startingOffset = in.readLong();
-            // deserialize starting offset
-            long stoppingOffset = in.readLong();
+        } else if (splitKind == TIERING_ROW_POS_SPLIT_FLAG) {
+            int fileCount = in.readInt();
+            int[] fileIds = new int[fileCount];
+            byte[][] serializedLakeSplits = new byte[fileCount][];
+            for (int i = 0; i < fileCount; i++) {
+                fileIds[i] = in.readInt();
+                int lakeSplitLen = in.readInt();
+                serializedLakeSplits[i] = new byte[lakeSplitLen];
+                in.readFully(serializedLakeSplits[i]);
+            }
+            int totalExpectedResults = in.readInt();
+            long compactSnapshotId = in.readLong();
+            String remoteUploadBasePath = in.readUTF();
+            int flussColumnCount = in.readInt();
+            boolean byPrimaryKey = version >= VERSION_1 && in.readBoolean();
             tieringSplit =
-                    new TieringLogSplit(
+                    new TieringRowPosSplit(
                             tablePath,
                             tableBucket,
                             partitionName,
-                            startingOffset,
-                            stoppingOffset,
-                            numberOfSplits,
-                            skipCurrentRound,
+                            fileIds,
+                            serializedLakeSplits,
+                            totalExpectedResults,
+                            compactSnapshotId,
+                            remoteUploadBasePath,
+                            flussColumnCount,
+                            byPrimaryKey,
                             splitIndex,
                             tieringRoundTimestamp);
+        } else if (splitKind == TIERING_LOG_SPLIT_FLAG) {
+            // deserialize starting offset
+            long startingOffset = in.readLong();
+            // deserialize stopping offset
+            long stoppingOffset = in.readLong();
+            // deserialize logDvBitmap (only written since VERSION_1)
+            byte[] logDvBitmap = null;
+            if (version >= VERSION_1 && in.readBoolean()) {
+                int len = in.readInt();
+                logDvBitmap = new byte[len];
+                in.readFully(logDvBitmap);
+            }
+            tieringSplit =
+                    new TieringLogSplit(
+                                    tablePath,
+                                    tableBucket,
+                                    partitionName,
+                                    startingOffset,
+                                    stoppingOffset,
+                                    numberOfSplits,
+                                    skipCurrentRound,
+                                    splitIndex,
+                                    tieringRoundTimestamp)
+                            .withLogDvBitmap(logDvBitmap);
         } else {
             throw new IOException("Unknown split kind " + splitKind);
         }

@@ -18,6 +18,8 @@
 package org.apache.fluss.lake.iceberg;
 
 import org.apache.fluss.annotation.Internal;
+import org.apache.fluss.config.ConfigOptions;
+import org.apache.fluss.config.Configuration;
 import org.apache.fluss.metadata.TableDescriptor;
 
 import org.apache.iceberg.Schema;
@@ -55,23 +57,39 @@ public final class IcebergSchemaUtils {
         LEGACY_SYSTEM_COLUMNS = Collections.unmodifiableMap(systemColumns);
     }
 
+    /**
+     * Extra trailing system column of deletion-vector tables, carrying the RowId (= originating
+     * +I/+U log offset).
+     */
+    public static final String ROWID_COLUMN_NAME = "__rowid";
+
     private IcebergSchemaUtils() {}
 
+    /** Returns whether the Fluss table has deletion vectors enabled. */
+    public static boolean isDeletionVectorsEnabled(TableDescriptor tableDescriptor) {
+        return Configuration.fromMap(tableDescriptor.getProperties())
+                .get(ConfigOptions.TABLE_DELETION_VECTORS_ENABLED);
+    }
+
     /**
-     * Creates a clean Iceberg schema from a Fluss table descriptor.
+     * Creates the Iceberg schema of a newly created table from a Fluss table descriptor.
      *
      * <p>FIP-27: newly created tables contain only user columns; no system columns are appended.
+     * Deletion-vector tables are the exception: the DV tiering, compaction and RowId indexing rely
+     * on the system columns, so they keep the legacy layout followed by {@link #ROWID_COLUMN_NAME}.
      */
     public static Schema createIcebergSchema(
             TableDescriptor tableDescriptor, boolean isPrimaryKeyTable) {
-        return buildIcebergSchema(tableDescriptor, isPrimaryKeyTable, false);
+        return buildIcebergSchema(
+                tableDescriptor, isPrimaryKeyTable, isDeletionVectorsEnabled(tableDescriptor));
     }
 
     /**
      * Creates a legacy Iceberg schema from a Fluss table descriptor, appending the three system
      * columns (__bucket, __offset, __timestamp) after the user columns.
      *
-     * <p>Used only for compatibility checks against existing legacy tables (FIP-27 pre-existing).
+     * <p>Used only for compatibility checks against existing legacy tables (FIP-27 pre-existing)
+     * and deletion-vector tables, which also get {@link #ROWID_COLUMN_NAME} appended.
      */
     public static Schema createLegacyIcebergSchema(
             TableDescriptor tableDescriptor, boolean isPrimaryKeyTable) {
@@ -83,16 +101,19 @@ public final class IcebergSchemaUtils {
         List<Types.NestedField> fields = new ArrayList<>();
         int fieldId = 0;
 
+        boolean dvEnabled = isDeletionVectorsEnabled(tableDescriptor);
         int userColCount = tableDescriptor.getSchema().getColumns().size();
         int totalTopLevelFields =
-                includeSystemCols ? userColCount + LEGACY_SYSTEM_COLUMNS.size() : userColCount;
+                (includeSystemCols ? userColCount + LEGACY_SYSTEM_COLUMNS.size() : userColCount)
+                        + (dvEnabled ? 1 : 0);
         FlussDataTypeToIcebergDataType converter =
                 new FlussDataTypeToIcebergDataType(totalTopLevelFields);
 
         for (org.apache.fluss.metadata.Schema.Column column :
                 tableDescriptor.getSchema().getColumns()) {
             String columnName = column.getName();
-            if (LEGACY_SYSTEM_COLUMNS.containsKey(columnName)) {
+            if (LEGACY_SYSTEM_COLUMNS.containsKey(columnName)
+                    || ROWID_COLUMN_NAME.equals(columnName)) {
                 throw new IllegalArgumentException(
                         "Column '"
                                 + columnName
@@ -123,6 +144,12 @@ public final class IcebergSchemaUtils {
                         Types.NestedField.required(
                                 fieldId++, systemColumn.getKey(), systemColumn.getValue()));
             }
+        }
+
+        // DV tables carry an extra __rowid column (RowId = originating +I/+U log offset).
+        if (dvEnabled) {
+            fields.add(
+                    Types.NestedField.required(fieldId++, ROWID_COLUMN_NAME, Types.LongType.get()));
         }
 
         if (isPrimaryKeyTable) {

@@ -35,12 +35,14 @@ public class FlussRecordAsPaimonRow extends FlussRowAsPaimonRow {
 
     private final boolean paimonIncludingSystemColumns;
     private final int bucket;
+    private final boolean dvEnabled;
     private LogRecord logRecord;
     private int originRowFieldCount;
     private final int businessFieldCount;
     private final int bucketFieldIndex;
     private final int offsetFieldIndex;
     private final int timestampFieldIndex;
+    private final int rowidFieldIndex;
 
     public FlussRecordAsPaimonRow(int bucket, RowType tableRowType) {
         this(bucket, tableRowType, false);
@@ -48,16 +50,28 @@ public class FlussRecordAsPaimonRow extends FlussRowAsPaimonRow {
 
     public FlussRecordAsPaimonRow(
             int bucket, RowType tableRowType, boolean paimonIncludingSystemColumns) {
+        this(bucket, tableRowType, paimonIncludingSystemColumns, false);
+    }
+
+    public FlussRecordAsPaimonRow(
+            int bucket,
+            RowType tableRowType,
+            boolean paimonIncludingSystemColumns,
+            boolean dvEnabled) {
         super(tableRowType);
         this.bucket = bucket;
         this.paimonIncludingSystemColumns = paimonIncludingSystemColumns;
-        this.businessFieldCount =
-                tableRowType.getFieldCount()
-                        - (paimonIncludingSystemColumns ? LEGACY_SYSTEM_COLUMNS.size() : 0);
+        this.dvEnabled = dvEnabled;
+        // DV-enabled tables carry a trailing __rowid column after any (legacy) system columns
+        int systemColumnCount =
+                (paimonIncludingSystemColumns ? LEGACY_SYSTEM_COLUMNS.size() : 0)
+                        + (dvEnabled ? 1 : 0);
+        this.businessFieldCount = tableRowType.getFieldCount() - systemColumnCount;
         // only valid when paimon includes the system columns
         this.bucketFieldIndex = businessFieldCount;
         this.offsetFieldIndex = businessFieldCount + 1;
         this.timestampFieldIndex = businessFieldCount + 2;
+        this.rowidFieldIndex = dvEnabled ? tableRowType.getFieldCount() - 1 : -1;
     }
 
     public void setFlussRecord(LogRecord logRecord) {
@@ -132,6 +146,10 @@ public class FlussRecordAsPaimonRow extends FlussRowAsPaimonRow {
                 //  timestamp system column
                 return logRecord.timestamp();
             }
+        }
+        if (dvEnabled && pos == rowidFieldIndex) {
+            // __rowid system column = logOffset (RowId)
+            return logRecord.logOffset();
         }
         if (pos >= originRowFieldCount) {
             throw new IllegalStateException(

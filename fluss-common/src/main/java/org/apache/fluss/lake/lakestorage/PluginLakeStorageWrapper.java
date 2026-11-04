@@ -32,6 +32,7 @@ import org.apache.fluss.utils.WrappingProxy;
 import javax.annotation.Nullable;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -108,6 +109,13 @@ public class PluginLakeStorageWrapper implements LakeStoragePlugin {
                 throws TableNotExistException {
             try (TemporaryClassLoaderContext ignored = TemporaryClassLoaderContext.of(loader)) {
                 inner.alterTable(tablePath, tableChanges, context);
+            }
+        }
+
+        @Override
+        public Map<String, String> loadSnapshotProperties(TablePath tablePath) {
+            try (TemporaryClassLoaderContext ignored = TemporaryClassLoaderContext.of(loader)) {
+                return inner.loadSnapshotProperties(tablePath);
             }
         }
 

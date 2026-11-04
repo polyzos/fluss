@@ -44,6 +44,7 @@ public class LakeSnapshotSplitState extends SourceSplitState {
                 split.getPartitionName(),
                 split.getLakeSplit(),
                 split.getSplitIndex(),
-                recordsToSkip);
+                recordsToSkip,
+                split.getLakeDvMap());
     }
 }

@@ -50,6 +50,8 @@ import org.apache.fluss.rpc.messages.DeleteConsumerGroupsRequest;
 import org.apache.fluss.rpc.messages.DeleteConsumerGroupsResponse;
 import org.apache.fluss.rpc.messages.DeleteConsumerOffsetsRequest;
 import org.apache.fluss.rpc.messages.DeleteConsumerOffsetsResponse;
+import org.apache.fluss.rpc.messages.DvReadableSwitchRequest;
+import org.apache.fluss.rpc.messages.DvReadableSwitchResponse;
 import org.apache.fluss.rpc.messages.FetchLogRequest;
 import org.apache.fluss.rpc.messages.FetchLogResponse;
 import org.apache.fluss.rpc.messages.FindConsumerGroupOwnerRequest;
@@ -58,6 +60,8 @@ import org.apache.fluss.rpc.messages.GetClusterHealthRequest;
 import org.apache.fluss.rpc.messages.GetClusterHealthResponse;
 import org.apache.fluss.rpc.messages.GetConsumerOffsetsRequest;
 import org.apache.fluss.rpc.messages.GetConsumerOffsetsResponse;
+import org.apache.fluss.rpc.messages.GetDvSnapshotRequest;
+import org.apache.fluss.rpc.messages.GetDvSnapshotResponse;
 import org.apache.fluss.rpc.messages.GetTableStatsRequest;
 import org.apache.fluss.rpc.messages.GetTableStatsResponse;
 import org.apache.fluss.rpc.messages.InitWriterRequest;
@@ -877,6 +881,56 @@ public final class TabletService extends RpcServiceBase
         CompletableFuture<DeleteConsumerGroupsResponse> response = new CompletableFuture<>();
         response.completeExceptionally(
                 new UnsupportedOperationException("deleteConsumerGroups is not supported yet"));
+        return response;
+    }
+
+    @Override
+    public CompletableFuture<DvReadableSwitchResponse> dvReadableSwitch(
+            DvReadableSwitchRequest request) {
+        CompletableFuture<DvReadableSwitchResponse> response = new CompletableFuture<>();
+        replicaManager.dvReadableSwitch(
+                ServerRpcMessageUtils.getDvReadableSwitchData(request), response::complete);
+        return response;
+    }
+
+    @Override
+    public CompletableFuture<GetDvSnapshotResponse> getDvSnapshot(GetDvSnapshotRequest request) {
+        CompletableFuture<GetDvSnapshotResponse> response = new CompletableFuture<>();
+        try {
+            Long partitionId = request.hasPartitionId() ? request.getPartitionId() : null;
+            if (request.getLookupKeysCount() > 0) {
+                // Tiering resolves the positions of its base snapshot by key.
+                List<byte[]> keys = new ArrayList<>(request.getLookupKeysCount());
+                for (int i = 0; i < request.getLookupKeysCount(); i++) {
+                    keys.add(request.getLookupKeyAt(i));
+                }
+                response.complete(
+                        replicaManager.lookupDvPositions(
+                                request.getTableId(),
+                                partitionId,
+                                request.getBucketId(),
+                                request.getReadableSnapshotId(),
+                                keys));
+            } else if (request.hasLogDvFromOffset()) {
+                // LogDv-only mode for tiering: returns logEndOffset + logDvBitmap
+                response.complete(
+                        replicaManager.getLogDvSnapshot(
+                                request.getTableId(),
+                                partitionId,
+                                request.getBucketId(),
+                                request.getLogDvFromOffset()));
+            } else {
+                // Full DV snapshot for union read
+                response.complete(
+                        replicaManager.getDvSnapshot(
+                                request.getTableId(),
+                                partitionId,
+                                request.getBucketId(),
+                                request.getReadableSnapshotId()));
+            }
+        } catch (Exception e) {
+            response.completeExceptionally(e);
+        }
         return response;
     }
 

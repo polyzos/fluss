@@ -20,6 +20,7 @@ package org.apache.fluss.flink.tiering.source;
 import org.apache.fluss.client.tiering.TableBucketWriteResult;
 import org.apache.fluss.flink.tiering.TestingWriteResult;
 import org.apache.fluss.lake.serializer.SimpleVersionedSerializer;
+import org.apache.fluss.lake.source.RowPosResult;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TablePath;
 
@@ -31,7 +32,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -160,11 +165,127 @@ class TableBucketWriteResultSerializerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {0, 3})
+    @ValueSource(ints = {0, 4})
     void testDeserializeUnknownVersion(int version) {
         assertThatThrownBy(() -> tableBucketWriteResultSerializer.deserialize(version, new byte[0]))
                 .isInstanceOf(IOException.class)
                 .hasMessage("Unknown version " + version);
+    }
+
+    @Test
+    void testDeserializeVersionTwo() throws Exception {
+        VersionRecordingWriteResultSerializer lakeSerializer =
+                new VersionRecordingWriteResultSerializer(7);
+        TableBucketWriteResultSerializer<TestingWriteResult> serializer =
+                new TableBucketWriteResultSerializer<>(lakeSerializer);
+
+        // the layout of VERSION_2, which doesn't carry the RowPosResult
+        DataOutputSerializer out = new DataOutputSerializer(64);
+        out.writeUTF("db1");
+        out.writeUTF("tb1");
+        out.writeLong(1L);
+        out.writeBoolean(false);
+        out.writeInt(2);
+        byte[] writeResultBytes = lakeSerializer.serialize(new TestingWriteResult(5));
+        out.writeInt(writeResultBytes.length);
+        out.writeInt(7);
+        out.write(writeResultBytes);
+        out.writeLong(10L);
+        out.writeLong(30L);
+        out.writeInt(3);
+
+        TableBucketWriteResult<TestingWriteResult> deserialized =
+                serializer.deserialize(2, out.getCopyOfBuffer());
+
+        assertThat(deserialized.tableBucket()).isEqualTo(new TableBucket(1L, 2));
+        assertThat(lakeSerializer.deserializedVersions).containsExactly(7);
+        assertThat(deserialized.writeResult().getWriteResult()).isEqualTo(5);
+        assertThat(deserialized.logEndOffset()).isEqualTo(10L);
+        assertThat(deserialized.maxTimestamp()).isEqualTo(30L);
+        assertThat(deserialized.numberOfWriteResults()).isEqualTo(3);
+        assertThat(deserialized.isRowPosResult()).isFalse();
+    }
+
+    @Test
+    void testSerializeAndDeserializeWithRowPosResult() throws Exception {
+        TablePath tablePath = TablePath.of("db1", "tb1");
+        TableBucket tableBucket = new TableBucket(1, 100L, 2);
+
+        // RowPosResult with multiple SST files
+        Map<Integer, String> fileDictEntries = new HashMap<>();
+        fileDictEntries.put(10, "file1.parquet");
+        fileDictEntries.put(11, "file2.parquet");
+        RowPosResult rowPosResult =
+                new RowPosResult(
+                        2,
+                        100L,
+                        "partition1",
+                        fileDictEntries,
+                        Arrays.asList(
+                                new RowPosResult.SstMeta("sst_0.sst", 12345),
+                                new RowPosResult.SstMeta("sst_1.sst", 67890)));
+
+        TableBucketWriteResult<TestingWriteResult> tableBucketWriteResult =
+                new TableBucketWriteResult<>(
+                        tablePath, tableBucket, "partition1", null, -1, -1, 3, rowPosResult);
+
+        byte[] serialized = tableBucketWriteResultSerializer.serialize(tableBucketWriteResult);
+        TableBucketWriteResult<TestingWriteResult> deserialized =
+                tableBucketWriteResultSerializer.deserialize(
+                        tableBucketWriteResultSerializer.getVersion(), serialized);
+
+        assertThat(deserialized.isRowPosResult()).isTrue();
+        RowPosResult deserializedRowPos = deserialized.getRowPosResult();
+        assertThat(deserializedRowPos).isNotNull();
+        assertThat(deserializedRowPos.getBucketId()).isEqualTo(2);
+        assertThat(deserializedRowPos.getPartitionId()).isEqualTo(100L);
+        assertThat(deserializedRowPos.getPartitionName()).isEqualTo("partition1");
+        assertThat(deserializedRowPos.getNewFileDictEntries()).hasSize(2);
+        assertThat(deserializedRowPos.getNewFileDictEntries().get(10)).isEqualTo("file1.parquet");
+        assertThat(deserializedRowPos.getNewFileDictEntries().get(11)).isEqualTo("file2.parquet");
+        assertThat(deserializedRowPos.getSstMetas()).hasSize(2);
+        assertThat(deserializedRowPos.getSstMetas().get(0).getFileName()).isEqualTo("sst_0.sst");
+        assertThat(deserializedRowPos.getSstMetas().get(0).getFileSize()).isEqualTo(12345);
+        assertThat(deserializedRowPos.getSstMetas().get(1).getFileName()).isEqualTo("sst_1.sst");
+        assertThat(deserializedRowPos.getSstMetas().get(1).getFileSize()).isEqualTo(67890);
+    }
+
+    @Test
+    void testSerializeAndDeserializeWithSingleSstRowPosResult() throws Exception {
+        TablePath tablePath = TablePath.of("db1", "tb1");
+        TableBucket tableBucket = new TableBucket(1, 2);
+
+        // single-SST RowPosResult (non-partitioned)
+        Map<Integer, String> fileDictEntries = new HashMap<>();
+        fileDictEntries.put(5, "output.parquet");
+        RowPosResult rowPosResult =
+                new RowPosResult(
+                        2,
+                        null,
+                        null,
+                        fileDictEntries,
+                        Collections.singletonList(new RowPosResult.SstMeta("sst_0.sst", 1000)));
+
+        TableBucketWriteResult<TestingWriteResult> tableBucketWriteResult =
+                new TableBucketWriteResult<>(
+                        tablePath, tableBucket, null, null, -1, -1, 1, rowPosResult);
+
+        byte[] serialized = tableBucketWriteResultSerializer.serialize(tableBucketWriteResult);
+        TableBucketWriteResult<TestingWriteResult> deserialized =
+                tableBucketWriteResultSerializer.deserialize(
+                        tableBucketWriteResultSerializer.getVersion(), serialized);
+
+        assertThat(deserialized.isRowPosResult()).isTrue();
+        RowPosResult deserializedRowPos = deserialized.getRowPosResult();
+        assertThat(deserializedRowPos).isNotNull();
+        assertThat(deserializedRowPos.getBucketId()).isEqualTo(2);
+        assertThat(deserializedRowPos.getPartitionId()).isNull();
+        assertThat(deserializedRowPos.getPartitionName()).isNull();
+        assertThat(deserializedRowPos.getNewFileDictEntries()).hasSize(1);
+        assertThat(deserializedRowPos.getNewFileDictEntries().get(5)).isEqualTo("output.parquet");
+        assertThat(deserializedRowPos.getSstMetas()).hasSize(1);
+        assertThat(deserializedRowPos.getSstMetas().get(0).getFileName()).isEqualTo("sst_0.sst");
+        assertThat(deserializedRowPos.getSstMetas().get(0).getFileSize()).isEqualTo(1000);
     }
 
     /** A lake write result serializer which records the versions passed for deserialization. */

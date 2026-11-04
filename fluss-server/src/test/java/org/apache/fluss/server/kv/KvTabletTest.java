@@ -113,6 +113,7 @@ import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -613,6 +614,49 @@ class KvTabletTest {
 
         assertThatCode(kvTablet::drop).doesNotThrowAnyException();
         assertThat(kvTablet.getKvTabletDir()).doesNotExist();
+    }
+
+    @Test
+    void testDvEnabledInsertAndFlush() throws Exception {
+        PhysicalTablePath physicalTablePath = PhysicalTablePath.of(TablePath.of("db", "dv_kv"));
+        schemaGetter = new TestingSchemaGetter(new SchemaInfo(DATA1_SCHEMA_PK, schemaId));
+        logTablet = createLogTablet(tempLogDir, 0L, physicalTablePath);
+        TableBucket tableBucket = logTablet.getTableBucket();
+        Map<String, String> dvTableConfig = new HashMap<>();
+        dvTableConfig.put(ConfigOptions.TABLE_DELETION_VECTORS_ENABLED.key(), "true");
+        kvTablet =
+                createKvTablet(
+                        physicalTablePath,
+                        tableBucket,
+                        logTablet,
+                        tmpKvDir,
+                        schemaGetter,
+                        dvTableConfig);
+        assertThat(kvTablet.isDvEnabled()).isTrue();
+
+        KvRecordTestUtils.KvRecordFactory factory =
+                KvRecordTestUtils.KvRecordFactory.of(DATA1_SCHEMA_PK.getRowType());
+        KvRecordBatch batch =
+                kvRecordBatchFactory.ofRecords(
+                        factory.ofRecord("k1".getBytes(), new Object[] {1, "v1"}));
+
+        // a DV-enabled insert must append and then flush without blocking or fatal error
+        // (this is exactly the path Replica.maybeIncrementLeaderHW -> mayFlushKv drives).
+        kvTablet.putAsLeader(batch, null);
+        long endOffset = logTablet.localLogEndOffset();
+        assertThat(endOffset).isGreaterThan(0L);
+
+        flushAndWait(kvTablet, endOffset);
+
+        // closing a DV KvTablet (which closes DvRocksDB) must not hang - this is the
+        // cluster-teardown path that also hangs for DV tables.
+        Future<?> closeFuture =
+                executor.submit(
+                        () -> {
+                            kvTablet.close();
+                            return null;
+                        });
+        assertThatCode(() -> closeFuture.get(15, TimeUnit.SECONDS)).doesNotThrowAnyException();
     }
 
     @Test

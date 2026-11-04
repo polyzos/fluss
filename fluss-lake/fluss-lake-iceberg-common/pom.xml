@@ -95,6 +95,15 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- RoaringBitmap to decode the LogDv bitmap for DV-mode tiering writes. 'provided' like
+             Iceberg: each plugin module bundles the version of its iceberg-core (runtime dep). -->
+        <dependency>
+            <groupId>org.roaringbitmap</groupId>
+            <artifactId>RoaringBitmap</artifactId>
+            <version>${roaringbitmap.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- test dependency -->
         <dependency>
             <groupId>org.apache.fluss</groupId>

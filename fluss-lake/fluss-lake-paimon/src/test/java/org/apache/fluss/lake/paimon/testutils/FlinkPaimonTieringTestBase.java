@@ -131,6 +131,8 @@ public abstract class FlinkPaimonTieringTestBase {
             StreamExecutionEnvironment execEnv, Configuration lakeTieringConfig) throws Exception {
         Configuration flussConfig = new Configuration(clientConf);
         flussConfig.set(POLL_TIERING_TABLE_INTERVAL, Duration.ofMillis(500L));
+        flussConfig.set(
+                ConfigOptions.REMOTE_DATA_DIR, getFlussClusterExtension().getRemoteDataDir());
         return LakeTieringJobBuilder.newBuilder(
                         execEnv,
                         flussConfig,

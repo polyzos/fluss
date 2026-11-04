@@ -22,6 +22,8 @@ import org.apache.fluss.lake.iceberg.maintenance.IcebergRewriteDataFiles;
 import org.apache.fluss.lake.iceberg.maintenance.RewriteDataFileResult;
 import org.apache.fluss.lake.iceberg.tiering.writer.AppendOnlyTaskWriter;
 import org.apache.fluss.lake.iceberg.tiering.writer.DeltaTaskWriter;
+import org.apache.fluss.lake.iceberg.tiering.writer.DerivedDvRecordWriter;
+import org.apache.fluss.lake.iceberg.tiering.writer.DvRecordWriter;
 import org.apache.fluss.lake.iceberg.tiering.writer.TaskWriterFactory;
 import org.apache.fluss.lake.iceberg.utils.IcebergUtils;
 import org.apache.fluss.lake.writer.LakeWriter;
@@ -79,7 +81,8 @@ public class IcebergLakeWriter implements LakeWriter<IcebergWriteResult> {
         // an exclusive file set. Clean tables have no __bucket column, so different buckets'
         // compaction jobs would plan overlapping files and race on rewrite/commit. Only schedule
         // compaction for legacy tables until a bucket-scoped ownership model for clean tables
-        // exists.
+        // exists. (Deletion-vector tables keep the legacy system columns, so they are compacted.)
+        // With derived DVs a rewrite commits as its own snapshot and the next round re-indexes it.
         boolean autoCompaction =
                 writerInitContext.tableInfo().getTableConfig().isDataLakeAutoCompaction();
         boolean isLegacyTable = IcebergUtils.isLegacyTable(icebergTable.schema());
@@ -106,14 +109,20 @@ public class IcebergLakeWriter implements LakeWriter<IcebergWriteResult> {
     }
 
     private RecordWriter createRecordWriter(WriterInitContext writerInitContext) {
+        boolean dvEnabled = writerInitContext.tableInfo().isDeletionVectorsEnabled();
         List<Integer> equalityFieldIds =
                 new ArrayList<>(icebergTable.schema().identifierFieldIds());
         TaskWriter<Record> taskWriter =
                 TaskWriterFactory.createTaskWriter(
                         icebergTable,
                         writerInitContext.partition(),
-                        writerInitContext.tableBucket().getBucket());
-        if (equalityFieldIds.isEmpty()) {
+                        writerInitContext.tableBucket().getBucket(),
+                        dvEnabled);
+        if (dvEnabled && writerInitContext.tableInfo().isDeletionVectorsDerived()) {
+            return new DerivedDvRecordWriter(icebergTable, writerInitContext, taskWriter);
+        } else if (dvEnabled) {
+            return new DvRecordWriter(icebergTable, writerInitContext, taskWriter);
+        } else if (equalityFieldIds.isEmpty()) {
             return new AppendOnlyTaskWriter(icebergTable, writerInitContext, taskWriter);
         } else {
             return new DeltaTaskWriter(icebergTable, writerInitContext, taskWriter);
@@ -137,6 +146,13 @@ public class IcebergLakeWriter implements LakeWriter<IcebergWriteResult> {
             RewriteDataFileResult rewriteDataFileResult = null;
             if (compactionFuture != null) {
                 rewriteDataFileResult = compactionFuture.get();
+            }
+            if (recordWriter instanceof DerivedDvRecordWriter) {
+                return new IcebergWriteResult(
+                        writeResult,
+                        icebergTable.specs(),
+                        rewriteDataFileResult,
+                        ((DerivedDvRecordWriter) recordWriter).positionIndexDelta());
             }
             return new IcebergWriteResult(writeResult, icebergTable.specs(), rewriteDataFileResult);
         } catch (Exception e) {

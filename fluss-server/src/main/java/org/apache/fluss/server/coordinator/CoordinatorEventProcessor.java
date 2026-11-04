@@ -41,6 +41,7 @@ import org.apache.fluss.exception.TableNotExistException;
 import org.apache.fluss.exception.TabletServerNotAvailableException;
 import org.apache.fluss.exception.UnknownServerException;
 import org.apache.fluss.exception.UnknownTableOrBucketException;
+import org.apache.fluss.fs.FsPath;
 import org.apache.fluss.metadata.PartitionInfo;
 import org.apache.fluss.metadata.PhysicalTablePath;
 import org.apache.fluss.metadata.ResolvedPartitionSpec;
@@ -58,8 +59,11 @@ import org.apache.fluss.rpc.messages.CommitKvSnapshotResponse;
 import org.apache.fluss.rpc.messages.CommitLakeTableSnapshotResponse;
 import org.apache.fluss.rpc.messages.CommitRemoteLogManifestResponse;
 import org.apache.fluss.rpc.messages.ControlledShutdownResponse;
+import org.apache.fluss.rpc.messages.DvReadableSwitchRequest;
 import org.apache.fluss.rpc.messages.ListRebalanceProgressResponse;
+import org.apache.fluss.rpc.messages.NotifyLakeTableOffsetRequest;
 import org.apache.fluss.rpc.messages.PbCommitLakeTableSnapshotRespForTable;
+import org.apache.fluss.rpc.messages.PbNotifyLakeTableOffsetReqForBucket;
 import org.apache.fluss.rpc.messages.RebalanceResponse;
 import org.apache.fluss.rpc.messages.RemoveServerTagByRackResponse;
 import org.apache.fluss.rpc.messages.RemoveServerTagResponse;
@@ -82,6 +86,8 @@ import org.apache.fluss.server.coordinator.event.DeadTabletServerEvent;
 import org.apache.fluss.server.coordinator.event.DeleteReplicaResponseReceivedEvent;
 import org.apache.fluss.server.coordinator.event.DropPartitionEvent;
 import org.apache.fluss.server.coordinator.event.DropTableEvent;
+import org.apache.fluss.server.coordinator.event.DvPrepareEvent;
+import org.apache.fluss.server.coordinator.event.DvSwitchEvent;
 import org.apache.fluss.server.coordinator.event.EventProcessor;
 import org.apache.fluss.server.coordinator.event.FencedCoordinatorEvent;
 import org.apache.fluss.server.coordinator.event.ListRebalanceProgressEvent;
@@ -113,6 +119,8 @@ import org.apache.fluss.server.entity.AdjustIsrResultForBucket;
 import org.apache.fluss.server.entity.CommitLakeTableSnapshotsData;
 import org.apache.fluss.server.entity.CommitRemoteLogManifestData;
 import org.apache.fluss.server.entity.DeleteReplicaResultForBucket;
+import org.apache.fluss.server.entity.DvPositionReportData;
+import org.apache.fluss.server.entity.DvPrepareData;
 import org.apache.fluss.server.entity.NotifyLeaderAndIsrResultForBucket;
 import org.apache.fluss.server.kv.snapshot.CompletedSnapshot;
 import org.apache.fluss.server.kv.snapshot.CompletedSnapshotStore;
@@ -133,11 +141,13 @@ import org.apache.fluss.server.zk.data.TableAssignment;
 import org.apache.fluss.server.zk.data.TabletServerRegistration;
 import org.apache.fluss.server.zk.data.ZkData.PartitionIdsZNode;
 import org.apache.fluss.server.zk.data.ZkData.TableIdsZNode;
+import org.apache.fluss.server.zk.data.lake.LakeTable;
 import org.apache.fluss.server.zk.data.lake.LakeTableHelper;
 import org.apache.fluss.server.zk.data.lake.LakeTableSnapshot;
 import org.apache.fluss.utils.AutoPartitionStrategy;
 import org.apache.fluss.utils.clock.Clock;
 import org.apache.fluss.utils.clock.SystemClock;
+import org.apache.fluss.utils.concurrent.FutureUtils;
 import org.apache.fluss.utils.concurrent.Scheduler;
 import org.apache.fluss.utils.types.Tuple2;
 
@@ -173,6 +183,7 @@ import static org.apache.fluss.server.coordinator.statemachine.ReplicaState.Repl
 import static org.apache.fluss.server.coordinator.statemachine.ReplicaState.ReplicaMigrationStarted;
 import static org.apache.fluss.server.utils.ServerRpcMessageUtils.makeAdjustIsrResponse;
 import static org.apache.fluss.server.utils.ServerRpcMessageUtils.makeListRebalanceProgressResponse;
+import static org.apache.fluss.server.utils.ServerRpcMessageUtils.makeNotifyLakeTableOffsetForBucket;
 import static org.apache.fluss.server.utils.ServerRpcMessageUtils.makeRebalanceResponse;
 import static org.apache.fluss.utils.concurrent.FutureUtils.completeFromCallable;
 
@@ -208,6 +219,13 @@ public class CoordinatorEventProcessor implements EventProcessor {
     private final CompletedSnapshotStoreManager completedSnapshotStoreManager;
     private final LakeTableHelper lakeTableHelper;
     private ScheduledFuture<?> offlineLeaderRetryTask;
+
+    // Tables with an in-progress DV orchestration (Prepare -> Mark Readable -> Switch).
+    // A new tiering commit for a table in this set is rejected so that the tiering service
+    // retries after the current DV round completes. This avoids out-of-order incremental
+    // DV metadata application.
+    // Only accessed from the event processor thread — no concurrent access needed.
+    private final Set<Long> pendingDvTables = new HashSet<>();
 
     public CoordinatorEventProcessor(
             ZooKeeperClient zooKeeperClient,
@@ -745,6 +763,10 @@ public class CoordinatorEventProcessor implements EventProcessor {
             processNotifyKvSnapshotOffsetEvent((NotifyKvSnapshotOffsetEvent) event);
         } else if (event instanceof NotifyLakeTableOffsetEvent) {
             processNotifyLakeTableOffsetEvent((NotifyLakeTableOffsetEvent) event);
+        } else if (event instanceof DvPrepareEvent) {
+            processDvPrepareEvent((DvPrepareEvent) event);
+        } else if (event instanceof DvSwitchEvent) {
+            processDvSwitchEvent((DvSwitchEvent) event);
         } else if (event instanceof CommitRemoteLogManifestEvent) {
             CommitRemoteLogManifestEvent commitRemoteLogManifestEvent =
                     (CommitRemoteLogManifestEvent) event;
@@ -2303,28 +2325,202 @@ public class CoordinatorEventProcessor implements EventProcessor {
         Map<Long, LakeTableSnapshot> lakeTableSnapshots = event.getLakeTableSnapshots();
         Map<Long, Map<TableBucket, Long>> tableMaxTieredTimestamps =
                 event.getTableMaxTieredTimestamps();
+        Map<Long, DvPrepareEvent> dvPrepareEvents = event.getDvPrepareEvents();
+
+        // For DV tables, build combined requests (bucket offsets + DvPrepare) per server
+        // with ACK tracking. For non-DV tables, use the existing CoordinatorRequestBatch
+        // fire-and-forget pattern.
         coordinatorRequestBatch.newBatch();
         for (Map.Entry<Long, LakeTableSnapshot> lakeTableSnapshotEntry :
                 lakeTableSnapshots.entrySet()) {
+            long tableId = lakeTableSnapshotEntry.getKey();
             LakeTableSnapshot lakeTableSnapshot = lakeTableSnapshotEntry.getValue();
             Map<TableBucket, Long> tableBucketMaxTieredTimestamps =
-                    tableMaxTieredTimestamps.getOrDefault(
-                            lakeTableSnapshotEntry.getKey(), Collections.emptyMap());
-            for (TableBucket tb : lakeTableSnapshot.getBucketLogEndOffset().keySet()) {
-                coordinatorContext
-                        .getBucketLeaderAndIsr(tb)
-                        .ifPresent(
-                                leaderAndIsr ->
-                                        coordinatorRequestBatch
-                                                .addNotifyLakeTableOffsetRequestForTableServers(
-                                                        coordinatorContext.getAssignment(tb),
-                                                        tb,
-                                                        lakeTableSnapshot,
-                                                        tableBucketMaxTieredTimestamps.get(tb)));
+                    tableMaxTieredTimestamps.getOrDefault(tableId, Collections.emptyMap());
+
+            if (dvPrepareEvents.containsKey(tableId)) {
+                // DV table: build combined request manually, skip CoordinatorRequestBatch.
+                sendCombinedNotifyWithDvPrepare(
+                        tableId,
+                        lakeTableSnapshot,
+                        tableBucketMaxTieredTimestamps,
+                        dvPrepareEvents.get(tableId));
+            } else {
+                // Non-DV table: use existing batch pattern.
+                for (TableBucket tb : lakeTableSnapshot.getBucketLogEndOffset().keySet()) {
+                    coordinatorContext
+                            .getBucketLeaderAndIsr(tb)
+                            .ifPresent(
+                                    leaderAndIsr ->
+                                            coordinatorRequestBatch
+                                                    .addNotifyLakeTableOffsetRequestForTableServers(
+                                                            coordinatorContext.getAssignment(tb),
+                                                            tb,
+                                                            lakeTableSnapshot,
+                                                            tableBucketMaxTieredTimestamps.get(
+                                                                    tb)));
+                }
             }
         }
         coordinatorRequestBatch.sendNotifyLakeTableOffsetRequest(
                 coordinatorContext.getCoordinatorEpoch());
+
+        // Handle DV tables that are in dvPrepareEvents but NOT in lakeTableSnapshots.
+        // This happens when a compaction (readable) snapshot is committed with empty
+        // logEndOffsets — no V1 LakeTableSnapshot is produced, but DV Prepare still
+        // needs to be delivered to tablet servers.
+        for (Map.Entry<Long, DvPrepareEvent> dvEntry : dvPrepareEvents.entrySet()) {
+            if (!lakeTableSnapshots.containsKey(dvEntry.getKey())) {
+                processDvPrepareEvent(dvEntry.getValue());
+            }
+        }
+    }
+
+    /**
+     * Builds a combined {@link NotifyLakeTableOffsetRequest} per server that carries both bucket
+     * offsets and DvPrepare, sends to each server, and tracks ACKs. After all servers ACK, marks
+     * the snapshot readable in ZK and enqueues a {@link DvSwitchEvent}.
+     */
+    private void sendCombinedNotifyWithDvPrepare(
+            long tableId,
+            LakeTableSnapshot lakeTableSnapshot,
+            Map<TableBucket, Long> tableBucketMaxTieredTimestamps,
+            DvPrepareEvent dvPrepareEvent) {
+        DvPrepareData dvPrepare = dvPrepareEvent.getDvPrepare();
+        int coordinatorEpoch = coordinatorContext.getCoordinatorEpoch();
+
+        // Collect per-server bucket offset requests and per-server TableBuckets for
+        // DvPrepare filtering — each server only receives DvPrepare for buckets it hosts.
+        Map<Integer, List<PbNotifyLakeTableOffsetReqForBucket>> serverBucketReqs = new HashMap<>();
+        Map<Integer, Set<TableBucket>> serverTableBuckets = new HashMap<>();
+        for (TableBucket tb : lakeTableSnapshot.getBucketLogEndOffset().keySet()) {
+            coordinatorContext
+                    .getBucketLeaderAndIsr(tb)
+                    .ifPresent(
+                            leaderAndIsr -> {
+                                List<Integer> assignment = coordinatorContext.getAssignment(tb);
+                                PbNotifyLakeTableOffsetReqForBucket bucketReq =
+                                        makeNotifyLakeTableOffsetForBucket(
+                                                tb,
+                                                lakeTableSnapshot,
+                                                tableBucketMaxTieredTimestamps.get(tb));
+                                for (Integer serverId : assignment) {
+                                    if (serverId >= 0) {
+                                        serverBucketReqs
+                                                .computeIfAbsent(serverId, k -> new ArrayList<>())
+                                                .add(bucketReq);
+                                        serverTableBuckets
+                                                .computeIfAbsent(serverId, k -> new HashSet<>())
+                                                .add(tb);
+                                    }
+                                }
+                            });
+        }
+        // DvPrepare buckets with no new offsets this round still need their Prepare (RowPos SSTs),
+        // otherwise they switch without it and their deletes never resolve.
+        for (TableBucket tb : dvPrepare.getBucketOffsets().keySet()) {
+            if (coordinatorContext.getBucketLeaderAndIsr(tb).isPresent()) {
+                for (Integer serverId : coordinatorContext.getAssignment(tb)) {
+                    if (serverId >= 0) {
+                        serverBucketReqs.computeIfAbsent(serverId, k -> new ArrayList<>());
+                        serverTableBuckets.computeIfAbsent(serverId, k -> new HashSet<>()).add(tb);
+                    }
+                }
+            }
+        }
+
+        if (serverBucketReqs.isEmpty()) {
+            LOG.warn(
+                    "No target servers for DV notify+prepare of table {}, snapshot {}."
+                            + " Re-enqueueing DvPrepare.",
+                    tableId,
+                    dvPrepare.getReadableSnapshotId());
+            coordinatorEventManager.put(
+                    new DvPrepareEvent(
+                            dvPrepareEvent.getTableId(),
+                            dvPrepareEvent.getDvPrepare(),
+                            dvPrepareEvent.getLakeSnapshotMetadata(),
+                            dvPrepareEvent.getEarliestSnapshotIDToKeep(),
+                            dvPrepareEvent.getRetryCount() + 1));
+            return;
+        }
+
+        // Send combined request (bucket offsets + filtered DvPrepare) to each server
+        List<CompletableFuture<Void>> prepareFutures = new ArrayList<>();
+        for (Map.Entry<Integer, List<PbNotifyLakeTableOffsetReqForBucket>> entry :
+                serverBucketReqs.entrySet()) {
+            int serverId = entry.getKey();
+            NotifyLakeTableOffsetRequest request =
+                    new NotifyLakeTableOffsetRequest()
+                            .setCoordinatorEpoch(coordinatorEpoch)
+                            .addAllNotifyBucketsReqs(entry.getValue());
+            // Build per-server DvPrepare with only this server's bucket offsets
+            DvPrepareData perServerDvPrepare =
+                    dvPrepare.filterByBuckets(serverTableBuckets.get(serverId));
+            request.setDvPrepare(ServerRpcMessageUtils.buildDvPrepareMessage(perServerDvPrepare));
+
+            CompletableFuture<Void> f = new CompletableFuture<>();
+            coordinatorChannelManager.sendNotifyLakeTableOffsetRequest(
+                    serverId,
+                    request,
+                    (resp, throwable) -> {
+                        if (throwable != null) {
+                            f.completeExceptionally(throwable);
+                        } else {
+                            f.complete(null);
+                        }
+                    });
+            prepareFutures.add(f);
+        }
+
+        // After all ACKs: mark readable in ZK, then enqueue Switch
+        long snapshotId = dvPrepare.getReadableSnapshotId();
+        FutureUtils.completeAll(prepareFutures)
+                .thenRun(
+                        () -> {
+                            try {
+                                LakeTable.LakeSnapshotMetadata metadata =
+                                        dvPrepareEvent.getLakeSnapshotMetadata();
+                                FsPath readablePath =
+                                        metadata.getReadableOffsetsFilePath() != null
+                                                ? metadata.getReadableOffsetsFilePath()
+                                                : metadata.getTieredOffsetsFilePath();
+                                lakeTableHelper.markLakeTableSnapshotReadable(
+                                        tableId, snapshotId, readablePath);
+                            } catch (Exception e) {
+                                LOG.error(
+                                        "Failed to mark snapshot readable for table {},"
+                                                + " snapshot {}",
+                                        tableId,
+                                        snapshotId,
+                                        e);
+                                return;
+                            }
+                            coordinatorEventManager.put(
+                                    new DvSwitchEvent(
+                                            tableId,
+                                            snapshotId,
+                                            dvPrepare.getBucketOffsets().keySet()));
+                        })
+                .exceptionally(
+                        throwable -> {
+                            int retryCount = dvPrepareEvent.getRetryCount() + 1;
+                            LOG.warn(
+                                    "DV Prepare failed for table {}, snapshot {},"
+                                            + " retry {}. Re-enqueueing.",
+                                    tableId,
+                                    snapshotId,
+                                    retryCount,
+                                    throwable);
+                            coordinatorEventManager.put(
+                                    new DvPrepareEvent(
+                                            dvPrepareEvent.getTableId(),
+                                            dvPrepareEvent.getDvPrepare(),
+                                            dvPrepareEvent.getLakeSnapshotMetadata(),
+                                            dvPrepareEvent.getEarliestSnapshotIDToKeep(),
+                                            retryCount));
+                            return null;
+                        });
     }
 
     private CommitRemoteLogManifestResponse tryProcessCommitRemoteLogManifest(
@@ -2385,7 +2581,64 @@ public class CoordinatorEventProcessor implements EventProcessor {
         if (commitLakeTableSnapshotsData.getLakeTableSnapshotMetadatas().isEmpty()) {
             handleCommitLakeTableSnapshotV1(commitLakeTableSnapshotEvent, callback);
         } else {
-            handleCommitLakeTableSnapshotV2(commitLakeTableSnapshotEvent, callback);
+            // Pre-check DV tables in the event loop thread (single-threaded, no
+            // concurrent access) and collect the DV events to enqueue after the
+            // ioExecutor finishes the ZK registration.
+            Map<Long, DvPrepareEvent> dvPrepareEvents = new HashMap<>();
+            for (Map.Entry<Long, CommitLakeTableSnapshotsData.CommitLakeTableSnapshot> entry :
+                    commitLakeTableSnapshotsData.getCommitLakeTableSnapshotByTableId().entrySet()) {
+                long tableId = entry.getKey();
+                CommitLakeTableSnapshotsData.CommitLakeTableSnapshot snapshot = entry.getValue();
+                TableInfo dvTableInfo = coordinatorContext.getTableInfoById(tableId);
+                if (snapshot.getDvPositionReport() != null
+                        && dvTableInfo != null
+                        && dvTableInfo.isDeletionVectorsDerived()) {
+                    // No prepare/switch round: the index change is published before the lake
+                    // commit, so the snapshot is readable as soon as it is registered.
+                    continue;
+                }
+                if (snapshot.getDvPositionReport() != null) {
+                    if (pendingDvTables.contains(tableId)) {
+                        // Fail immediately in the event loop thread — no need to go to
+                        // ioExecutor.
+                        CommitLakeTableSnapshotResponse response =
+                                new CommitLakeTableSnapshotResponse();
+                        PbCommitLakeTableSnapshotRespForTable tableResp = response.addTableResp();
+                        tableResp.setTableId(tableId);
+                        ApiError error =
+                                ApiError.fromThrowable(
+                                        new FlussRuntimeException(
+                                                "DV orchestration already in progress"
+                                                        + " for table "
+                                                        + tableId
+                                                        + ". Retry later."));
+                        tableResp.setError(error.error().code(), error.message());
+                        callback.complete(response);
+                        return;
+                    }
+                    pendingDvTables.add(tableId);
+                    LakeTable.LakeSnapshotMetadata originalMetadata =
+                            snapshot.getLakeSnapshotMetadata();
+                    DvPositionReportData dvReport = snapshot.getDvPositionReport();
+                    long snapshotId = originalMetadata.getSnapshotId();
+                    // readable snapshot = committed; index snapshot may differ (e.g. Iceberg).
+                    DvPrepareData dvPrepare =
+                            new DvPrepareData(
+                                    tableId,
+                                    snapshotId,
+                                    dvReport.getIndexSnapshotId(),
+                                    dvReport.getBucketOffsets());
+                    dvPrepareEvents.put(
+                            tableId,
+                            new DvPrepareEvent(
+                                    tableId,
+                                    dvPrepare,
+                                    originalMetadata,
+                                    snapshot.getEarliestSnapshotIDToKeep()));
+                }
+            }
+            handleCommitLakeTableSnapshotV2(
+                    commitLakeTableSnapshotEvent, callback, dvPrepareEvents);
         }
     }
 
@@ -2455,18 +2708,36 @@ public class CoordinatorEventProcessor implements EventProcessor {
             Map<Long, LakeTableSnapshot> committedLakeTableSnapshots,
             Map<Long, Map<TableBucket, Long>> tableMaxTieredTimestamps,
             Set<Long> failedTableIds) {
+        notifyLakeTableOffsets(
+                committedLakeTableSnapshots,
+                tableMaxTieredTimestamps,
+                failedTableIds,
+                Collections.emptyMap());
+    }
+
+    private void notifyLakeTableOffsets(
+            Map<Long, LakeTableSnapshot> committedLakeTableSnapshots,
+            Map<Long, Map<TableBucket, Long>> tableMaxTieredTimestamps,
+            Set<Long> failedTableIds,
+            Map<Long, DvPrepareEvent> dvPrepareEvents) {
         committedLakeTableSnapshots.keySet().removeAll(failedTableIds);
         tableMaxTieredTimestamps.keySet().removeAll(failedTableIds);
-        if (!committedLakeTableSnapshots.isEmpty()) {
+        // Remove failed DV tables
+        Map<Long, DvPrepareEvent> effectiveDvEvents = new HashMap<>(dvPrepareEvents);
+        effectiveDvEvents.keySet().removeAll(failedTableIds);
+        if (!committedLakeTableSnapshots.isEmpty() || !effectiveDvEvents.isEmpty()) {
             coordinatorEventManager.put(
                     new NotifyLakeTableOffsetEvent(
-                            committedLakeTableSnapshots, tableMaxTieredTimestamps));
+                            committedLakeTableSnapshots,
+                            tableMaxTieredTimestamps,
+                            effectiveDvEvents));
         }
     }
 
     private void handleCommitLakeTableSnapshotV2(
             CommitLakeTableSnapshotEvent commitLakeTableSnapshotEvent,
-            CompletableFuture<CommitLakeTableSnapshotResponse> callback) {
+            CompletableFuture<CommitLakeTableSnapshotResponse> callback,
+            Map<Long, DvPrepareEvent> dvPrepareEvents) {
         CommitLakeTableSnapshotsData commitLakeTableSnapshotsData =
                 commitLakeTableSnapshotEvent.getCommitLakeTableSnapshotsData();
         Map<Long, CommitLakeTableSnapshotsData.CommitLakeTableSnapshot>
@@ -2504,25 +2775,292 @@ public class CoordinatorEventProcessor implements EventProcessor {
                                                     + tableId
                                                     + " not found or queued for deletion in coordinator context.");
                                 }
-                                lakeTableHelper.registerLakeTableSnapshotV2(
-                                        tableId,
-                                        snapshot.getLakeSnapshotMetadata(),
-                                        snapshot.getEarliestSnapshotIDToKeep());
+                                if (snapshot.getDvPositionReport() != null
+                                        && dvPrepareEvents.containsKey(tableId)) {
+                                    // DV table: register snapshot as non-readable. Data is
+                                    // committed (tiered) but not readable until tablet
+                                    // servers complete the DV Prepare phase.
+                                    LakeTable.LakeSnapshotMetadata originalMetadata =
+                                            snapshot.getLakeSnapshotMetadata();
+                                    LakeTable.LakeSnapshotMetadata nonReadableMetadata =
+                                            new LakeTable.LakeSnapshotMetadata(
+                                                    originalMetadata.getSnapshotId(),
+                                                    originalMetadata.getTieredOffsetsFilePath(),
+                                                    null);
+                                    lakeTableHelper.registerLakeTableSnapshotV2(
+                                            tableId,
+                                            nonReadableMetadata,
+                                            snapshot.getEarliestSnapshotIDToKeep());
+                                } else {
+                                    // A derived DV commit carries its deletes, so its snapshot
+                                    // is readable at its tiered offsets. Other tables keep the
+                                    // committer's choice: no readable offsets means tiered only.
+                                    LakeTable.LakeSnapshotMetadata m =
+                                            snapshot.getLakeSnapshotMetadata();
+                                    boolean derived =
+                                            coordinatorContext
+                                                    .getTableInfoById(tableId)
+                                                    .isDeletionVectorsDerived();
+                                    lakeTableHelper.registerLakeTableSnapshotV2(
+                                            tableId,
+                                            !derived || m.getReadableOffsetsFilePath() != null
+                                                    ? m
+                                                    : new LakeTable.LakeSnapshotMetadata(
+                                                            m.getSnapshotId(),
+                                                            m.getTieredOffsetsFilePath(),
+                                                            m.getTieredOffsetsFilePath()),
+                                            snapshot.getEarliestSnapshotIDToKeep());
+                                }
                             } catch (Exception e) {
                                 failedTableIds.add(tableId);
                                 ApiError error = ApiError.fromThrowable(e);
                                 tableResp.setError(error.error().code(), error.message());
                             }
                         }
+                        // Notify tiered offsets for all tables (including DV tables).
+                        // DV Prepare events are piggybacked on the same notify request.
                         notifyLakeTableOffsets(
                                 commitLakeTableSnapshotsData.getLakeTableSnapshot(),
                                 commitLakeTableSnapshotsData.getTableMaxTieredTimestamps(),
-                                failedTableIds);
+                                failedTableIds,
+                                dvPrepareEvents);
                         callback.complete(response);
                     } catch (Exception e) {
                         callback.completeExceptionally(e);
                     }
                 });
+    }
+
+    /**
+     * Retries DV Prepare: finds bucket leaders, sends DvPrepare to target servers. After all
+     * servers ACK, marks the snapshot as readable in ZK and enqueues a {@link DvSwitchEvent}.
+     *
+     * <p>On the first attempt, DvPrepare is piggybacked on the normal notify-offset request via
+     * {@link #sendCombinedNotifyWithDvPrepare}. This method handles subsequent retries where only
+     * the DvPrepare payload is sent (bucket offsets were already delivered).
+     *
+     * <p>This runs in the event loop thread so that leader lookups are consistent.
+     */
+    private void processDvPrepareEvent(DvPrepareEvent event) {
+        long tableId = event.getTableId();
+        DvPrepareData dvPrepare = event.getDvPrepare();
+        long snapshotId = dvPrepare.getReadableSnapshotId();
+        int coordinatorEpoch = coordinatorContext.getCoordinatorEpoch();
+
+        // Group buckets by server: each server only receives DvPrepare for its own buckets
+        Map<Integer, Set<TableBucket>> serverTableBuckets = new HashMap<>();
+        for (TableBucket tb : dvPrepare.getBucketOffsets().keySet()) {
+            coordinatorContext
+                    .getBucketLeaderAndIsr(tb)
+                    .ifPresent(
+                            leaderAndIsr -> {
+                                List<Integer> assignment = coordinatorContext.getAssignment(tb);
+                                for (Integer serverId : assignment) {
+                                    if (serverId >= 0) {
+                                        serverTableBuckets
+                                                .computeIfAbsent(serverId, k -> new HashSet<>())
+                                                .add(tb);
+                                    }
+                                }
+                            });
+        }
+
+        if (serverTableBuckets.isEmpty()) {
+            LOG.warn(
+                    "No target servers for DV Prepare of table {}, snapshot {}."
+                            + " Re-enqueueing.",
+                    tableId,
+                    snapshotId);
+            coordinatorEventManager.put(
+                    new DvPrepareEvent(
+                            event.getTableId(),
+                            event.getDvPrepare(),
+                            event.getLakeSnapshotMetadata(),
+                            event.getEarliestSnapshotIDToKeep(),
+                            event.getRetryCount() + 1));
+            return;
+        }
+
+        // Send per-server filtered DvPrepare
+        List<CompletableFuture<Void>> prepareFutures = new ArrayList<>();
+        for (Map.Entry<Integer, Set<TableBucket>> entry : serverTableBuckets.entrySet()) {
+            int serverId = entry.getKey();
+            DvPrepareData perServerDvPrepare = dvPrepare.filterByBuckets(entry.getValue());
+            NotifyLakeTableOffsetRequest request =
+                    buildDvPrepareRequest(coordinatorEpoch, perServerDvPrepare);
+
+            CompletableFuture<Void> f = new CompletableFuture<>();
+            coordinatorChannelManager.sendNotifyLakeTableOffsetRequest(
+                    serverId,
+                    request,
+                    (resp, throwable) -> {
+                        if (throwable != null) {
+                            f.completeExceptionally(throwable);
+                        } else {
+                            f.complete(null);
+                        }
+                    });
+            prepareFutures.add(f);
+        }
+
+        // After all Prepare ACKs: mark readable in ZK, then enqueue Switch
+        FutureUtils.completeAll(prepareFutures)
+                .thenRun(
+                        () -> {
+                            try {
+                                LakeTable.LakeSnapshotMetadata metadata =
+                                        event.getLakeSnapshotMetadata();
+                                FsPath readablePath =
+                                        metadata.getReadableOffsetsFilePath() != null
+                                                ? metadata.getReadableOffsetsFilePath()
+                                                : metadata.getTieredOffsetsFilePath();
+                                lakeTableHelper.markLakeTableSnapshotReadable(
+                                        tableId, snapshotId, readablePath);
+                            } catch (Exception e) {
+                                LOG.error(
+                                        "Failed to mark snapshot readable for table {}, snapshot {}",
+                                        tableId,
+                                        snapshotId,
+                                        e);
+                                return;
+                            }
+                            coordinatorEventManager.put(
+                                    new DvSwitchEvent(
+                                            tableId,
+                                            snapshotId,
+                                            dvPrepare.getBucketOffsets().keySet()));
+                        })
+                .exceptionally(
+                        throwable -> {
+                            int retryCount = event.getRetryCount() + 1;
+                            LOG.warn(
+                                    "DV Prepare failed for table {}, snapshot {},"
+                                            + " retry {}. Re-enqueueing.",
+                                    tableId,
+                                    snapshotId,
+                                    retryCount,
+                                    throwable);
+                            coordinatorEventManager.put(
+                                    new DvPrepareEvent(
+                                            event.getTableId(),
+                                            event.getDvPrepare(),
+                                            event.getLakeSnapshotMetadata(),
+                                            event.getEarliestSnapshotIDToKeep(),
+                                            retryCount));
+                            return null;
+                        });
+    }
+
+    /**
+     * Processes DV Switch: finds bucket leaders, sends DvReadableSwitch to target servers so they
+     * update their readable offset.
+     *
+     * <p>This runs in the event loop thread so that leader lookups are consistent.
+     */
+    private void processDvSwitchEvent(DvSwitchEvent event) {
+        long tableId = event.getTableId();
+        long snapshotId = event.getSnapshotId();
+        int coordinatorEpoch = coordinatorContext.getCoordinatorEpoch();
+
+        // Build serverId -> TableBuckets mapping
+        Map<Integer, Set<TableBucket>> serverBucketMap = new HashMap<>();
+        for (TableBucket tb : event.getTableBuckets()) {
+            coordinatorContext
+                    .getBucketLeaderAndIsr(tb)
+                    .ifPresent(
+                            leaderAndIsr -> {
+                                List<Integer> assignment = coordinatorContext.getAssignment(tb);
+                                for (Integer serverId : assignment) {
+                                    if (serverId >= 0) {
+                                        serverBucketMap
+                                                .computeIfAbsent(serverId, k -> new HashSet<>())
+                                                .add(tb);
+                                    }
+                                }
+                            });
+        }
+
+        if (serverBucketMap.isEmpty()) {
+            LOG.warn(
+                    "No target servers for DV Switch of table {}, snapshot {}. Re-enqueueing.",
+                    tableId,
+                    snapshotId);
+            coordinatorEventManager.put(
+                    new DvSwitchEvent(
+                            tableId,
+                            snapshotId,
+                            event.getTableBuckets(),
+                            event.getRetryCount() + 1));
+            return;
+        }
+
+        List<CompletableFuture<Void>> switchFutures = new ArrayList<>();
+        for (Map.Entry<Integer, Set<TableBucket>> entry : serverBucketMap.entrySet()) {
+            int serverId = entry.getKey();
+            DvReadableSwitchRequest switchRequest =
+                    new DvReadableSwitchRequest()
+                            .setCoordinatorEpoch(coordinatorEpoch)
+                            .setTableId(tableId)
+                            .setReadableSnapshotId(snapshotId);
+            for (TableBucket tb : entry.getValue()) {
+                switchRequest.addBucketId(tb.getBucket());
+                if (tb.getPartitionId() != null) {
+                    switchRequest.addPartitionId(tb.getPartitionId());
+                }
+            }
+
+            CompletableFuture<Void> f = new CompletableFuture<>();
+            coordinatorChannelManager.sendDvReadableSwitchRequest(
+                    serverId,
+                    switchRequest,
+                    (resp, throwable) -> {
+                        if (throwable != null) {
+                            f.completeExceptionally(throwable);
+                        } else {
+                            f.complete(null);
+                        }
+                    });
+            switchFutures.add(f);
+        }
+
+        FutureUtils.completeAll(switchFutures)
+                .thenRun(
+                        () -> {
+                            pendingDvTables.remove(tableId);
+                            LOG.info(
+                                    "DV orchestration completed for table {}, snapshot {}",
+                                    tableId,
+                                    snapshotId);
+                        })
+                .exceptionally(
+                        throwable -> {
+                            int retryCount = event.getRetryCount() + 1;
+                            LOG.warn(
+                                    "DV Switch failed for table {}, snapshot {},"
+                                            + " retry {}. Re-enqueueing.",
+                                    tableId,
+                                    snapshotId,
+                                    retryCount,
+                                    throwable);
+                            coordinatorEventManager.put(
+                                    new DvSwitchEvent(
+                                            tableId,
+                                            snapshotId,
+                                            event.getTableBuckets(),
+                                            retryCount));
+                            return null;
+                        });
+    }
+
+    /**
+     * Builds a {@link NotifyLakeTableOffsetRequest} with DvPrepare attached for the Prepare phase.
+     */
+    private NotifyLakeTableOffsetRequest buildDvPrepareRequest(
+            int coordinatorEpoch, DvPrepareData dvPrepare) {
+        NotifyLakeTableOffsetRequest request = new NotifyLakeTableOffsetRequest();
+        request.setCoordinatorEpoch(coordinatorEpoch);
+        request.setDvPrepare(ServerRpcMessageUtils.buildDvPrepareMessage(dvPrepare));
+        return request;
     }
 
     private ControlledShutdownResponse tryProcessControlledShutdown(

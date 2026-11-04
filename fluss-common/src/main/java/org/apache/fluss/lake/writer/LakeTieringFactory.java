@@ -22,6 +22,10 @@ import org.apache.fluss.lake.committer.CommitterInitContext;
 import org.apache.fluss.lake.committer.LakeCommitter;
 import org.apache.fluss.lake.committer.PartitionMarkDoneCommitter;
 import org.apache.fluss.lake.serializer.SimpleVersionedSerializer;
+import org.apache.fluss.lake.source.LakeSource;
+import org.apache.fluss.metadata.TablePath;
+
+import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -82,4 +86,31 @@ public interface LakeTieringFactory<WriteResult, CommittableT> extends Serializa
      * @return the serializer for committable objects
      */
     SimpleVersionedSerializer<CommittableT> getCommittableSerializer();
+
+    /**
+     * Creates a {@link LakeSource} for delta planning. The returned LakeSource can be used by the
+     * Committer to detect compaction deltas via {@link LakeSource#planDelta}.
+     *
+     * @param committerInitContext the context for initializing the committer
+     * @return the lake source for delta planning, or null if not supported
+     * @throws IOException if an I/O error occurs
+     */
+    @Nullable
+    default LakeSource<?> createLakeSource(CommitterInitContext committerInitContext)
+            throws IOException {
+        return null;
+    }
+
+    /**
+     * Creates a {@link LakeSource} using the factory's stored configuration. This overload is used
+     * by the Reader to create a LakeSource for reading row positions without a
+     * CommitterInitContext.
+     *
+     * @param tablePath the table path to create the lake source for
+     * @return the lake source, or null if not supported
+     */
+    @Nullable
+    default LakeSource<?> createLakeSource(TablePath tablePath) {
+        return null;
+    }
 }

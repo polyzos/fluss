@@ -125,7 +125,11 @@ public enum ApiKeys {
     LIST_CONSUMER_GROUPS(1072, 0, 0, PUBLIC),
     DELETE_CONSUMER_GROUPS(1073, 0, 0, PUBLIC),
     CREATE_TABLE_FROM_LAKE(1074, 0, 0, PUBLIC),
-    DESCRIBE_CLUSTER(1075, 0, 0, PUBLIC);
+    DESCRIBE_CLUSTER(1075, 0, 0, PUBLIC),
+
+    // Deletion vectors (tablet server internal).
+    DV_READABLE_SWITCH(1076, 0, 0, PRIVATE),
+    GET_DV_SNAPSHOT(1077, 0, 0, PRIVATE);
 
     private static final Map<Integer, ApiKeys> ID_TO_TYPE =
             Arrays.stream(ApiKeys.values())

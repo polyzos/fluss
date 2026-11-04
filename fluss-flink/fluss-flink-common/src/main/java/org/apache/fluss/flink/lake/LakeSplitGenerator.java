@@ -18,9 +18,13 @@
 package org.apache.fluss.flink.lake;
 
 import org.apache.fluss.client.admin.Admin;
+import org.apache.fluss.client.initializer.NoStoppingOffsetsInitializer;
 import org.apache.fluss.client.initializer.OffsetsInitializer;
 import org.apache.fluss.client.metadata.LakeSnapshot;
+import org.apache.fluss.exception.FlussException;
+import org.apache.fluss.exception.InvalidMetadataException;
 import org.apache.fluss.exception.LakeTableSnapshotNotExistException;
+import org.apache.fluss.exception.StaleSnapshotException;
 import org.apache.fluss.flink.lake.split.LakeSnapshotAndFlussLogSplit;
 import org.apache.fluss.flink.lake.split.LakeSnapshotSplit;
 import org.apache.fluss.flink.source.split.LogSplit;
@@ -30,12 +34,20 @@ import org.apache.fluss.lake.source.LakeSplit;
 import org.apache.fluss.metadata.PartitionInfo;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableInfo;
+import org.apache.fluss.metadata.TablePath;
+import org.apache.fluss.rpc.messages.GetDvSnapshotResponse;
+import org.apache.fluss.rpc.messages.PbLakeDvEntry;
 import org.apache.fluss.utils.ExceptionUtils;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,12 +63,27 @@ import static org.apache.fluss.metadata.ResolvedPartitionSpec.PARTITION_SPEC_SEP
 /** A generator for lake splits. */
 public class LakeSplitGenerator {
 
+    private static final Logger LOG = LoggerFactory.getLogger(LakeSplitGenerator.class);
+
+    // Retry budget is intentionally short: DV unavailability during a Readable-Switch is a
+    // ~1s transient, so a few quick retries cover it. A longer budget would turn a not-yet-readable
+    // table (bootstrap / tiering down) into a multi-minute hang instead of a fast, clear failure.
+    private static final int MAX_OUTER_RETRIES = 3;
+    private static final int MAX_DV_FETCH_RETRIES = 3;
+    private static final long OUTER_BACKOFF_MS = 400;
+    private static final long INITIAL_BACKOFF_MS = 300;
+    private static final long MAX_BACKOFF_MS = 800;
+    // A leader election after a tablet-server failure takes seconds; this allows about 20s.
+    private static final int MAX_LEADER_RETRIES = 8;
+    private static final long MAX_LEADER_BACKOFF_MS = 4000;
+
     private final TableInfo tableInfo;
     private final Admin flussAdmin;
     private final OffsetsInitializer.BucketOffsetsRetriever bucketOffsetsRetriever;
     private final OffsetsInitializer stoppingOffsetInitializer;
     private final int bucketCount;
     private final Supplier<Set<PartitionInfo>> listPartitionSupplier;
+    private final boolean dvEnabled;
 
     private final LakeSource<LakeSplit> lakeSource;
 
@@ -75,48 +102,184 @@ public class LakeSplitGenerator {
         this.stoppingOffsetInitializer = stoppingOffsetInitializer;
         this.bucketCount = bucketCount;
         this.listPartitionSupplier = listPartitionSupplier;
+        this.dvEnabled = tableInfo.getTableConfig().isDeletionVectorsEnabled();
     }
 
     /**
      * Return A list of hybrid lake snapshot {@link LakeSnapshotSplit}, {@link
      * LakeSnapshotAndFlussLogSplit} and the corresponding Fluss {@link LogSplit} based on the lake
      * snapshot. Return null if no lake snapshot exists.
+     *
+     * <p>If DV is enabled, fetches DV snapshots from TabletServers with retry:
+     *
+     * <ul>
+     *   <li>Inner retry: per-bucket backoff for "not ready" (server hasn't completed Switch yet)
+     *   <li>Outer retry: refresh LakeSnapshot when snapshot has been superseded
+     * </ul>
      */
     @Nullable
     public List<SourceSplitBase> generateHybridLakeFlussSplits() throws Exception {
-        LakeSnapshot lakeSnapshotInfo;
-        try {
-            lakeSnapshotInfo = flussAdmin.getReadableLakeSnapshot(tableInfo.getTablePath()).get();
-        } catch (Exception exception) {
-            if (ExceptionUtils.stripExecutionException(exception)
-                    instanceof LakeTableSnapshotNotExistException) {
-                return null;
+        if (dvEnabled
+                && tableInfo.hasPrimaryKey()
+                && stoppingOffsetInitializer instanceof NoStoppingOffsetsInitializer) {
+            // Masked log splits stop at the masks' cut, so only bounded reads can use them; a
+            // streaming read needs the ordered changelog of the KV snapshot and log splits.
+            LOG.info(
+                    "Streaming read of deletion-vector table {}: reading Fluss KV snapshot and"
+                            + " changelog instead of lake splits with masks.",
+                    tableInfo.getTablePath());
+            return null;
+        }
+        // Snapshot id to pin lake planning + DV fetch to. Null means "use the coordinator's
+        // readable lake snapshot"; on a stale-snapshot error we re-sync to the id the TabletServer
+        // reports as its current readable, so the two readable pointers converge instead of failing
+        // the read while tiering advances the ZK pointer during ingestion.
+        Long overrideSnapshotId = null;
+        for (int outerRetry = 0; outerRetry < MAX_OUTER_RETRIES; outerRetry++) {
+            LakeSnapshot lakeSnapshotInfo;
+            boolean emptyLake = false;
+            try {
+                lakeSnapshotInfo =
+                        (overrideSnapshotId == null
+                                        ? flussAdmin.getReadableLakeSnapshot(
+                                                tableInfo.getTablePath())
+                                        : flussAdmin.getLakeSnapshot(
+                                                tableInfo.getTablePath(), overrideSnapshotId))
+                                .get();
+            } catch (Exception exception) {
+                if (!(ExceptionUtils.stripExecutionException(exception)
+                        instanceof LakeTableSnapshotNotExistException)) {
+                    throw exception;
+                }
+                if (!isDerivedBatchRead()) {
+                    return null;
+                }
+                // Nothing tiered yet reads as an empty lake at offset 0, with the whole log masked.
+                lakeSnapshotInfo = null;
+                emptyLake = true;
             }
-            throw exception;
+
+            long snapshotId = emptyLake ? -1L : lakeSnapshotInfo.getSnapshotId();
+
+            boolean isLogTable = !tableInfo.hasPrimaryKey();
+            boolean isPartitioned = tableInfo.isPartitioned();
+
+            Map<String, Map<Integer, List<LakeSplit>>> lakeSplits =
+                    emptyLake
+                            ? Collections.emptyMap()
+                            : groupLakeSplits(
+                                    lakeSource
+                                            .createPlanner(
+                                                    (LakeSource.PlannerContext) () -> snapshotId)
+                                            .plan());
+
+            Map<TableBucket, Long> tableBucketsOffset =
+                    emptyLake ? Collections.emptyMap() : lakeSnapshotInfo.getTableBucketsOffset();
+
+            // Pre-compute stopping offsets and partition info
+            Set<PartitionInfo> partitionInfos = null;
+            Map<TableBucket, Long> allStoppingOffsets = new HashMap<>();
+
+            if (isPartitioned) {
+                partitionInfos = listPartitionSupplier.get();
+                for (PartitionInfo partitionInfo : partitionInfos) {
+                    // partitions may have their own bucket count
+                    Map<Integer, Long> offsets =
+                            stoppingOffsetInitializer.getBucketOffsets(
+                                    partitionInfo.getPartitionName(),
+                                    IntStream.range(0, partitionInfo.getBucketCount())
+                                            .boxed()
+                                            .collect(Collectors.toList()),
+                                    bucketOffsetsRetriever);
+                    for (Map.Entry<Integer, Long> offsetEntry : offsets.entrySet()) {
+                        allStoppingOffsets.put(
+                                new TableBucket(
+                                        tableInfo.getTableId(),
+                                        partitionInfo.getPartitionId(),
+                                        offsetEntry.getKey()),
+                                offsetEntry.getValue());
+                    }
+                }
+            } else {
+                Map<Integer, Long> offsets =
+                        stoppingOffsetInitializer.getBucketOffsets(
+                                null,
+                                IntStream.range(0, bucketCount)
+                                        .boxed()
+                                        .collect(Collectors.toList()),
+                                bucketOffsetsRetriever);
+                for (Map.Entry<Integer, Long> offsetEntry : offsets.entrySet()) {
+                    allStoppingOffsets.put(
+                            new TableBucket(tableInfo.getTableId(), null, offsetEntry.getKey()),
+                            offsetEntry.getValue());
+                }
+            }
+
+            // Fetch DV data if enabled, only for buckets with data gap
+            Map<TableBucket, DvSnapshotInfo> bucketDvSnapshots = null;
+            if (dvEnabled) {
+                Set<TableBucket> bucketsNeedingDv =
+                        findBucketsNeedingDv(tableBucketsOffset, allStoppingOffsets);
+                if (!bucketsNeedingDv.isEmpty()) {
+                    try {
+                        bucketDvSnapshots = fetchDvForAllBuckets(snapshotId, bucketsNeedingDv);
+                    } catch (Exception e) {
+                        // DV not ready for some bucket: a Readable-Switch is in progress, or a
+                        // bucket just went empty->data during ingestion and hasn't completed its
+                        // first switch (readableSnapshotId == -1). The error arrives wrapped
+                        // (StaleSnapshotException inside a FlussRuntimeException surfaced as an
+                        // UnknownServerException), so detect it by message. Re-fetch the
+                        // coordinator's readable snapshot and retry; this converges once the
+                        // bucket's switch completes. Bounded by MAX_OUTER_RETRIES (the "hold").
+                        if (!isDvTransientlyUnavailable(e)) {
+                            throw e;
+                        }
+                        StaleSnapshotException stale =
+                                ExceptionUtils.findThrowable(e, StaleSnapshotException.class)
+                                        .orElse(null);
+                        // Iceberg snapshot ids are random, so a positive server-readable id lets us
+                        // re-plan against it directly; otherwise just refresh the coordinator's
+                        // readable snapshot on the next round.
+                        overrideSnapshotId =
+                                (stale != null && stale.getCurrentSnapshotId() > 0)
+                                        ? Long.valueOf(stale.getCurrentSnapshotId())
+                                        : null;
+                        LOG.info(
+                                "DV snapshot {} not ready, refreshing readable snapshot and retrying"
+                                        + " (outer {}/{}).",
+                                snapshotId,
+                                outerRetry + 1,
+                                MAX_OUTER_RETRIES);
+                        Thread.sleep(OUTER_BACKOFF_MS);
+                        continue;
+                    }
+                }
+            }
+
+            if (isPartitioned) {
+                return generatePartitionTableSplit(
+                        lakeSplits,
+                        isLogTable,
+                        tableBucketsOffset,
+                        partitionInfos,
+                        allStoppingOffsets,
+                        bucketDvSnapshots);
+            } else {
+                Map<Integer, List<LakeSplit>> nonPartitionLakeSplits =
+                        lakeSplits.isEmpty() ? null : lakeSplits.values().iterator().next();
+                // non-partitioned table
+                return generateNoPartitionedTableSplit(
+                        nonPartitionLakeSplits,
+                        isLogTable,
+                        tableBucketsOffset,
+                        allStoppingOffsets,
+                        bucketDvSnapshots);
+            }
         }
-
-        boolean isLogTable = !tableInfo.hasPrimaryKey();
-        boolean isPartitioned = tableInfo.isPartitioned();
-
-        Map<String, Map<Integer, List<LakeSplit>>> lakeSplits =
-                groupLakeSplits(
-                        lakeSource
-                                .createPlanner(
-                                        (LakeSource.PlannerContext) lakeSnapshotInfo::getSnapshotId)
-                                .plan());
-
-        Map<TableBucket, Long> tableBucketsOffset = lakeSnapshotInfo.getTableBucketsOffset();
-        if (isPartitioned) {
-            Set<PartitionInfo> partitionInfos = listPartitionSupplier.get();
-            return generatePartitionTableSplit(
-                    lakeSplits, isLogTable, tableBucketsOffset, partitionInfos);
-        } else {
-            Map<Integer, List<LakeSplit>> nonPartitionLakeSplits =
-                    lakeSplits.isEmpty() ? null : lakeSplits.values().iterator().next();
-            // non-partitioned table
-            return generateNoPartitionedTableSplit(
-                    nonPartitionLakeSplits, isLogTable, tableBucketsOffset);
-        }
+        throw new FlussException(
+                "Failed to fetch DV snapshots after "
+                        + MAX_OUTER_RETRIES
+                        + " retries due to snapshot superseding");
     }
 
     private Map<String, Map<Integer, List<LakeSplit>>> groupLakeSplits(List<LakeSplit> lakeSplits) {
@@ -133,11 +296,44 @@ public class LakeSplitGenerator {
         return result;
     }
 
+    /**
+     * Returns only the bitmaps of the split's own data file; Flink silently drops an assignment
+     * larger than the RPC frame size.
+     */
+    private static Map<String, byte[]> dvOfSplit(LakeSplit split, Map<String, byte[]> bucketDv) {
+        if (bucketDv == null || bucketDv.isEmpty()) {
+            return bucketDv;
+        }
+        String file = split.fileName();
+        if (file == null) {
+            return bucketDv; // a multi-file split needs all of them
+        }
+        // Bitmaps are keyed by data-file path, but the split names its file by basename.
+        Map<String, byte[]> own = new HashMap<>(2);
+        for (Map.Entry<String, byte[]> e : bucketDv.entrySet()) {
+            String key = e.getKey();
+            if (key.equals(file) || key.endsWith("/" + file)) {
+                own.put(key, e.getValue());
+            }
+        }
+        return own;
+    }
+
+    /** Returns whether this is a bounded read of a derived-DV primary-key table. */
+    private boolean isDerivedBatchRead() {
+        return dvEnabled
+                && tableInfo.hasPrimaryKey()
+                && tableInfo.isDeletionVectorsDerived()
+                && !(stoppingOffsetInitializer instanceof NoStoppingOffsetsInitializer);
+    }
+
     private List<SourceSplitBase> generatePartitionTableSplit(
             Map<String, Map<Integer, List<LakeSplit>>> lakeSplits,
             boolean isLogTable,
             Map<TableBucket, Long> tableBucketSnapshotLogOffset,
-            Set<PartitionInfo> partitionInfos) {
+            Set<PartitionInfo> partitionInfos,
+            Map<TableBucket, Long> allStoppingOffsets,
+            @Nullable Map<TableBucket, DvSnapshotInfo> bucketDvSnapshots) {
         List<SourceSplitBase> splits = new ArrayList<>();
         Map<String, PartitionInfo> flussPartitionByName =
                 partitionInfos.stream()
@@ -157,23 +353,16 @@ public class LakeSplitGenerator {
             PartitionInfo flussPartition = flussPartitionByName.remove(partitionName);
             if (flussPartition != null) {
                 // mean the partition also exist in fluss partition
-                int partitionBucketCount = flussPartition.getBucketCount();
-                Map<Integer, Long> bucketEndOffset =
-                        stoppingOffsetInitializer.getBucketOffsets(
-                                partitionName,
-                                IntStream.range(0, partitionBucketCount)
-                                        .boxed()
-                                        .collect(Collectors.toList()),
-                                bucketOffsetsRetriever);
                 splits.addAll(
                         generateSplit(
                                 lakeSplitsOfPartition,
                                 flussPartition.getPartitionId(),
                                 partitionName,
-                                partitionBucketCount,
+                                flussPartition.getBucketCount(),
                                 isLogTable,
                                 tableBucketSnapshotLogOffset,
-                                bucketEndOffset));
+                                allStoppingOffsets,
+                                bucketDvSnapshots));
 
             } else {
                 // only lake data
@@ -192,26 +381,18 @@ public class LakeSplitGenerator {
 
         // iterate remain fluss splits
         for (PartitionInfo flussPartition : flussPartitionByName.values()) {
-            String partitionName = flussPartition.getPartitionName();
-            int partitionBucketCount = flussPartition.getBucketCount();
-            Map<Integer, Long> bucketEndOffset =
-                    stoppingOffsetInitializer.getBucketOffsets(
-                            partitionName,
-                            IntStream.range(0, partitionBucketCount)
-                                    .boxed()
-                                    .collect(Collectors.toList()),
-                            bucketOffsetsRetriever);
             splits.addAll(
                     generateSplit(
                             null,
                             flussPartition.getPartitionId(),
-                            partitionName,
-                            partitionBucketCount,
+                            flussPartition.getPartitionName(),
+                            flussPartition.getBucketCount(),
                             isLogTable,
                             // Lake splits may be pruned while the partition still has tiered
                             // offsets.
                             tableBucketSnapshotLogOffset,
-                            bucketEndOffset));
+                            allStoppingOffsets,
+                            bucketDvSnapshots));
         }
         return splits;
     }
@@ -223,7 +404,8 @@ public class LakeSplitGenerator {
             int numBuckets,
             boolean isLogTable,
             Map<TableBucket, Long> tableBucketSnapshotLogOffset,
-            Map<Integer, Long> bucketEndOffset) {
+            Map<TableBucket, Long> allStoppingOffsets,
+            @Nullable Map<TableBucket, DvSnapshotInfo> bucketDvSnapshots) {
         List<SourceSplitBase> splits = new ArrayList<>();
         if (isLogTable) {
             if (lakeSplits != null) {
@@ -233,7 +415,10 @@ public class LakeSplitGenerator {
                 TableBucket tableBucket =
                         new TableBucket(tableInfo.getTableId(), partitionId, bucket);
                 Long snapshotLogOffset = tableBucketSnapshotLogOffset.get(tableBucket);
-                Long stoppingOffset = bucketEndOffset.get(bucket);
+                Long stoppingOffset = allStoppingOffsets.get(tableBucket);
+                if (stoppingOffset == null) {
+                    stoppingOffset = NO_STOPPING_OFFSET;
+                }
                 if (snapshotLogOffset == null) {
                     // no data committed to lake for this bucket, scan from fluss log
                     if (stoppingOffset == NO_STOPPING_OFFSET || stoppingOffset > 0) {
@@ -284,14 +469,20 @@ public class LakeSplitGenerator {
                 TableBucket tableBucket =
                         new TableBucket(tableInfo.getTableId(), partitionId, bucket);
                 Long snapshotLogOffset = tableBucketSnapshotLogOffset.get(tableBucket);
-                Long stoppingOffset = bucketEndOffset.get(bucket);
-                splits.add(
+                Long stoppingOffset = allStoppingOffsets.get(tableBucket);
+                if (stoppingOffset == null) {
+                    stoppingOffset = NO_STOPPING_OFFSET;
+                }
+                DvSnapshotInfo dvSnapshot =
+                        bucketDvSnapshots != null ? bucketDvSnapshots.get(tableBucket) : null;
+                splits.addAll(
                         generateSplitForPrimaryKeyTableBucket(
                                 lakeSplits != null ? lakeSplits.get(bucket) : null,
                                 tableBucket,
                                 partitionName,
                                 snapshotLogOffset,
-                                stoppingOffset));
+                                stoppingOffset,
+                                dvSnapshot));
             }
         }
 
@@ -315,34 +506,175 @@ public class LakeSplitGenerator {
         return splits;
     }
 
-    private SourceSplitBase generateSplitForPrimaryKeyTableBucket(
+    private List<SourceSplitBase> generateSplitForPrimaryKeyTableBucket(
             @Nullable List<LakeSplit> lakeSplits,
             TableBucket tableBucket,
             @Nullable String partitionName,
             @Nullable Long snapshotLogOffset,
-            long stoppingOffset) {
+            long stoppingOffset,
+            @Nullable DvSnapshotInfo dvSnapshot) {
+        // DV-enabled tables (Paimon or Iceberg) must never use the sort-merge
+        // LakeSnapshotAndFlussLogSplit path: Iceberg's reader is not a SortedRecordReader and would
+        // NPE. Always emit DV-style splits (LakeSnapshotSplit + LogSplit); use empty DV maps when
+        // DV data is unavailable so the read still works.
+        if (dvEnabled) {
+            return generateDvSplitForBucket(
+                    lakeSplits,
+                    tableBucket,
+                    partitionName,
+                    snapshotLogOffset,
+                    stoppingOffset,
+                    dvSnapshot);
+        }
+
         // no snapshot data for this bucket or no a corresponding log offset in this bucket,
         // can only scan from change log
         if (snapshotLogOffset == null || snapshotLogOffset < 0) {
-            return new LakeSnapshotAndFlussLogSplit(
-                    tableBucket, partitionName, null, EARLIEST_OFFSET, stoppingOffset);
+            return Collections.singletonList(
+                    new LakeSnapshotAndFlussLogSplit(
+                            tableBucket, partitionName, null, EARLIEST_OFFSET, stoppingOffset));
         }
 
-        return new LakeSnapshotAndFlussLogSplit(
-                tableBucket, partitionName, lakeSplits, snapshotLogOffset, stoppingOffset);
+        // No DV available: fall back to sort-merge via LakeSnapshotAndFlussLogSplit
+        if (dvSnapshot == null) {
+            return Collections.singletonList(
+                    new LakeSnapshotAndFlussLogSplit(
+                            tableBucket,
+                            partitionName,
+                            lakeSplits,
+                            snapshotLogOffset,
+                            stoppingOffset,
+                            0,
+                            0,
+                            lakeSplits == null,
+                            null));
+        }
+
+        // DV available: split into independent lake + log splits with DV filtering
+        LOG.info(
+                "Using DV-based split for bucket {}: lakeDvSize={}, logDvPresent={}, "
+                        + "snapshotLogOffset={}, stoppingOffset={}, dvLogEndOffset={}",
+                tableBucket,
+                dvSnapshot.getLakeDv().size(),
+                dvSnapshot.getLogDvBitmap() != null,
+                snapshotLogOffset,
+                stoppingOffset,
+                dvSnapshot.getLogEndOffset());
+        List<SourceSplitBase> splits = new ArrayList<>();
+
+        // Truncate stoppingOffset to DV coverage range
+        if (stoppingOffset > 0) {
+            stoppingOffset = Math.min(stoppingOffset, dvSnapshot.getLogEndOffset());
+        }
+
+        // Generate LakeSnapshotSplit(s) with lakeDv map
+        if (lakeSplits != null) {
+            Map<String, byte[]> lakeDvMap = dvSnapshot.getLakeDv();
+            int index = 0;
+            for (LakeSplit lakeSplit : lakeSplits) {
+                splits.add(
+                        new LakeSnapshotSplit(
+                                tableBucket,
+                                partitionName,
+                                lakeSplit,
+                                index++,
+                                0,
+                                dvOfSplit(lakeSplit, lakeDvMap)));
+            }
+        }
+
+        // Generate LogSplit with logDv bitmap.
+        // Use empty byte[] when logDvBitmap is null to indicate DV batch read mode
+        // (enables DELETE/UPDATE_BEFORE filtering even when no specific offsets to skip).
+        if (stoppingOffset == NO_STOPPING_OFFSET || snapshotLogOffset < stoppingOffset) {
+            byte[] logDvBitmap = dvSnapshot.getLogDvBitmap();
+            if (logDvBitmap == null) {
+                logDvBitmap = new byte[0];
+            }
+            splits.add(
+                    new LogSplit(
+                            tableBucket,
+                            partitionName,
+                            snapshotLogOffset,
+                            stoppingOffset,
+                            logDvBitmap));
+        }
+
+        return splits;
+    }
+
+    /**
+     * Builds DV-style splits for one PK-table bucket: a {@link LakeSnapshotSplit} per tiered file
+     * (masked by lakeDv) plus a {@link LogSplit} for the hot tail (DV batch read mode). Used for
+     * all DV-enabled tables so we never take the sort-merge path. When {@code dvSnapshot} is null
+     * (DV momentarily unavailable / bucket not requiring DV), empty DV maps are used so the read
+     * still returns rows instead of failing.
+     */
+    private List<SourceSplitBase> generateDvSplitForBucket(
+            @Nullable List<LakeSplit> lakeSplits,
+            TableBucket tableBucket,
+            @Nullable String partitionName,
+            @Nullable Long snapshotLogOffset,
+            long stoppingOffset,
+            @Nullable DvSnapshotInfo dvSnapshot) {
+        List<SourceSplitBase> splits = new ArrayList<>();
+        Map<String, byte[]> lakeDvMap =
+                dvSnapshot != null ? dvSnapshot.getLakeDv() : Collections.emptyMap();
+        boolean hasTieredData = snapshotLogOffset != null && snapshotLogOffset >= 0;
+
+        // Lake side: one LakeSnapshotSplit per tiered file (masked by lakeDv). Skipped when this
+        // bucket has no tiered data in the readable snapshot (all its rows are still in the log).
+        if (hasTieredData && lakeSplits != null) {
+            int index = 0;
+            for (LakeSplit lakeSplit : lakeSplits) {
+                splits.add(
+                        new LakeSnapshotSplit(
+                                tableBucket,
+                                partitionName,
+                                lakeSplit,
+                                index++,
+                                0,
+                                dvOfSplit(lakeSplit, lakeDvMap)));
+            }
+        }
+
+        // Log side: read the hot tail from the tiered offset, or EARLIEST when nothing is tiered
+        // for this bucket yet. Truncate to the DV coverage end when known. An (empty) logDvBitmap
+        // enables DV batch read mode (filters DELETE/UPDATE_BEFORE).
+        long logStart = hasTieredData ? snapshotLogOffset : EARLIEST_OFFSET;
+        if (!hasTieredData && dvSnapshot != null && tableInfo.isDeletionVectorsDerived()) {
+            logStart = dvSnapshot.getSnapshotStartOffset(); // where the masks start, offset 0
+        }
+        long logStop = stoppingOffset;
+        if (dvSnapshot != null && tableInfo.isDeletionVectorsDerived()) {
+            // The masks cover exactly [snapshot offset, cut), so the read stops at the cut.
+            logStop = dvSnapshot.getLogEndOffset();
+        } else if (dvSnapshot != null && logStop > 0) {
+            logStop = Math.min(logStop, dvSnapshot.getLogEndOffset());
+        }
+        // An empty bucket (no tiered data, no lake files, and no bounded log to read) contributes
+        // nothing to a batch union read. Emitting a log split for it would subscribe the reader to
+        // a bucket with no records, and an empty bounded log split never reaches its record-driven
+        // stop condition, so the query would hang. Skip it.
+        // Lake splits exist only for tiered data, so they need no check here.
+        boolean bucketIsEmpty = !hasTieredData && (logStop == NO_STOPPING_OFFSET || logStop <= 0);
+        if (!bucketIsEmpty
+                && (logStop == NO_STOPPING_OFFSET || !hasTieredData || logStart < logStop)) {
+            byte[] logDvBitmap = dvSnapshot != null ? dvSnapshot.getLogDvBitmap() : null;
+            if (logDvBitmap == null) {
+                logDvBitmap = new byte[0];
+            }
+            splits.add(new LogSplit(tableBucket, partitionName, logStart, logStop, logDvBitmap));
+        }
+        return splits;
     }
 
     private List<SourceSplitBase> generateNoPartitionedTableSplit(
             @Nullable Map<Integer, List<LakeSplit>> lakeSplits,
             boolean isLogTable,
-            Map<TableBucket, Long> tableBucketSnapshotLogOffset) {
-        // iterate all bucket
-        // assume bucket is from 0 to bucket count
-        Map<Integer, Long> bucketEndOffset =
-                stoppingOffsetInitializer.getBucketOffsets(
-                        null,
-                        IntStream.range(0, bucketCount).boxed().collect(Collectors.toList()),
-                        bucketOffsetsRetriever);
+            Map<TableBucket, Long> tableBucketSnapshotLogOffset,
+            Map<TableBucket, Long> allStoppingOffsets,
+            @Nullable Map<TableBucket, DvSnapshotInfo> bucketDvSnapshots) {
         return generateSplit(
                 lakeSplits,
                 null,
@@ -350,6 +682,195 @@ public class LakeSplitGenerator {
                 bucketCount,
                 isLogTable,
                 tableBucketSnapshotLogOffset,
-                bucketEndOffset);
+                allStoppingOffsets,
+                bucketDvSnapshots);
+    }
+
+    // --------- DV fetch helpers ---------
+
+    /**
+     * Finds buckets that need DV data. A DV-enabled bucket needs its DV snapshot when either it has
+     * lake snapshot data (whose stale rows must be masked by LakeDv) or there is a hot-log gap
+     * (readable offset &lt; latest, needing LogDv). Buckets with lake data but no log gap must
+     * still be included; otherwise they fall back to the sort-merge path, which has no comparator
+     * for Iceberg (non-sorted lake reader) and throws.
+     */
+    private Set<TableBucket> findBucketsNeedingDv(
+            Map<TableBucket, Long> tableBucketsOffset, Map<TableBucket, Long> allStoppingOffsets) {
+        Set<TableBucket> result = new HashSet<>();
+        for (Map.Entry<TableBucket, Long> entry : tableBucketsOffset.entrySet()) {
+            TableBucket tb = entry.getKey();
+            long snapshotLogOffset = entry.getValue();
+            // Only buckets with tiered lake data need a DV fetch (LakeDv for their files + LogDv
+            // for the hot tail). A bucket with no tiered data (snapshotLogOffset < 0) has no lake
+            // files to mask and, being empty, may never have gone through a Readable-Switch
+            // (readableSnapshotId == -1) -> its DV fetch would fail and take down the whole read.
+            // Such buckets are handled by generateDvSplitForBucket (log-only / skipped) without a
+            // DV fetch.
+            if (snapshotLogOffset >= 0) {
+                result.add(tb);
+            }
+        }
+        if (tableInfo.isDeletionVectorsDerived()) {
+            // A bucket with nothing tiered still needs masks over its log from offset 0, or an
+            // updated key shows twice and a deleted one reappears.
+            for (Map.Entry<TableBucket, Long> e : allStoppingOffsets.entrySet()) {
+                Long tiered = tableBucketsOffset.get(e.getKey());
+                if ((tiered == null || tiered < 0) && e.getValue() != null && e.getValue() > 0) {
+                    result.add(e.getKey());
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Fetches DV snapshot for the specified table buckets. Per-bucket retry for "not ready" errors.
+     * Throws {@link StaleSnapshotException} (superseded) to caller for outer retry.
+     */
+    private Map<TableBucket, DvSnapshotInfo> fetchDvForAllBuckets(
+            long snapshotId, Set<TableBucket> tableBuckets) throws Exception {
+        TablePath tablePath = tableInfo.getTablePath();
+        Map<TableBucket, DvSnapshotInfo> results = new HashMap<>();
+        for (TableBucket tb : tableBuckets) {
+            DvSnapshotInfo dv = fetchDvForBucketWithRetry(tablePath, tb, snapshotId);
+            // null => this bucket has no readable DV yet; it falls back to the no-DV split path
+            // (lake + log, -D/-U filtered) rather than failing or holding the whole read.
+            if (dv != null) {
+                results.put(tb, dv);
+            }
+        }
+        return results;
+    }
+
+    @Nullable
+    private DvSnapshotInfo fetchDvForBucketWithRetry(
+            TablePath tablePath, TableBucket tableBucket, long snapshotId) throws Exception {
+        long backoffMs = INITIAL_BACKOFF_MS;
+        long leaderBackoffMs = INITIAL_BACKOFF_MS;
+        int leaderRetries = 0;
+        Exception last = null;
+        for (int attempt = 0; attempt < MAX_DV_FETCH_RETRIES; ) {
+            try {
+                GetDvSnapshotResponse resp =
+                        flussAdmin
+                                .getDvSnapshot(
+                                        tablePath,
+                                        tableBucket.getTableId(),
+                                        tableBucket.getPartitionId(),
+                                        tableBucket.getBucket(),
+                                        snapshotId)
+                                .get();
+                return toDvSnapshotInfo(resp);
+            } catch (Exception e) {
+                last = e;
+                if (ExceptionUtils.findThrowable(e, InvalidMetadataException.class).isPresent()
+                        && leaderRetries < MAX_LEADER_RETRIES) {
+                    // The admin has dropped the stale leader, so the retry reaches the new one; an
+                    // election takes seconds, hence a separate, longer budget.
+                    leaderRetries++;
+                    LOG.info(
+                            "Leader of bucket {} moved while fetching its DV snapshot ({}), "
+                                    + "retry {}/{}.",
+                            tableBucket,
+                            e.getMessage(),
+                            leaderRetries,
+                            MAX_LEADER_RETRIES);
+                    Thread.sleep(leaderBackoffMs);
+                    leaderBackoffMs = Math.min(leaderBackoffMs * 2, MAX_LEADER_BACKOFF_MS);
+                    continue;
+                }
+                attempt++;
+                if (!isDvTransientlyUnavailable(e)) {
+                    throw e;
+                }
+                if (tableInfo.isDeletionVectorsDerived()) {
+                    // Never read without masks: a stale answer naming another snapshot re-plans
+                    // against it in the outer loop, and -1 (not caught up yet) is retried here.
+                    StaleSnapshotException stale =
+                            ExceptionUtils.findThrowable(e, StaleSnapshotException.class)
+                                    .orElse(null);
+                    if (stale != null
+                            && stale.getCurrentSnapshotId() >= 0
+                            && stale.getCurrentSnapshotId() != snapshotId) {
+                        throw e;
+                    }
+                } else if (isDvNotEstablished(e)) {
+                    // current == -1: this bucket has no readable DV snapshot yet (newly populated /
+                    // bootstrapping). Its lake data has no server-side DV. Rather than hold or
+                    // fail, read it WITHOUT DV (empty maps) via the DV split path -- Iceberg cannot
+                    // sort-merge, but generateDvSplitForBucket emits plain lake + log splits with
+                    // -D/-U filtered. Correct for the normal insert case; a key updated within the
+                    // bucket's very first tiered batch may show twice for ~one round until its DV
+                    // materializes, then self-corrects. This keeps the read instant.
+                    LOG.info(
+                            "Bucket {} has no readable DV snapshot yet (current -1); "
+                                    + "reading without DV.",
+                            tableBucket);
+                    return null;
+                }
+                // current > 0: the server's readable is a different valid snapshot (a
+                // Readable-Switch just moved it). Brief backoff; the outer loop re-fetches the
+                // readable snapshot and re-plans against it.
+                LOG.info(
+                        "DV snapshot not ready for bucket {} (snapshot {}), retry {}/{}.",
+                        tableBucket,
+                        snapshotId,
+                        attempt,
+                        MAX_DV_FETCH_RETRIES);
+                Thread.sleep(backoffMs);
+                backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
+            }
+        }
+        throw last;
+    }
+
+    /**
+     * Whether the DV-unavailable error is specifically the "no readable snapshot yet" (current -1)
+     * case, as opposed to a moved-but-valid readable snapshot (current > 0).
+     */
+    private static boolean isDvNotEstablished(Throwable e) {
+        Throwable t = e;
+        while (t != null) {
+            String msg = t.getMessage();
+            if (msg != null && msg.contains("current -1")) {
+                return true;
+            }
+            t = t.getCause();
+        }
+        return false;
+    }
+
+    /**
+     * Whether the exception indicates a transiently unavailable DV snapshot (Readable-Switch in
+     * progress or bootstrap). Handles both a direct {@link StaleSnapshotException} and the wrapped
+     * form the RPC delivers (message contains the server's DV-fetch or stale-snapshot text).
+     */
+    private static boolean isDvTransientlyUnavailable(Throwable e) {
+        if (ExceptionUtils.findThrowable(e, StaleSnapshotException.class).isPresent()) {
+            return true;
+        }
+        Throwable t = e;
+        while (t != null) {
+            String msg = t.getMessage();
+            if (msg != null
+                    && (msg.contains("Stale snapshot")
+                            || msg.contains("Failed to get DV snapshot"))) {
+                return true;
+            }
+            t = t.getCause();
+        }
+        return false;
+    }
+
+    private static DvSnapshotInfo toDvSnapshotInfo(GetDvSnapshotResponse resp) {
+        Map<String, byte[]> lakeDv = new HashMap<>();
+        for (int i = 0; i < resp.getLakeDvEntriesCount(); i++) {
+            PbLakeDvEntry entry = resp.getLakeDvEntryAt(i);
+            lakeDv.put(entry.getFilePath(), entry.getDeletedPositionsBitmap());
+        }
+        byte[] logDvBitmap = resp.hasLogDvBitmap() ? resp.getLogDvBitmap() : null;
+        return new DvSnapshotInfo(
+                lakeDv, logDvBitmap, resp.getLogEndOffset(), resp.getSnapshotStartOffset());
     }
 }

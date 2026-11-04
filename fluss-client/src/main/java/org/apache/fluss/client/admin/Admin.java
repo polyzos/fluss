@@ -71,6 +71,7 @@ import org.apache.fluss.metadata.TableDescriptor;
 import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.metadata.TableStats;
+import org.apache.fluss.rpc.messages.GetDvSnapshotResponse;
 import org.apache.fluss.security.acl.AclBinding;
 import org.apache.fluss.security.acl.AclBindingFilter;
 
@@ -979,4 +980,56 @@ public interface Admin extends AutoCloseable {
      * @return per-bucket active snapshot ids grouped by bucket
      */
     CompletableFuture<ActiveKvSnapshots> listKvSnapshots(long tableId, @Nullable Long partitionId);
+
+    /**
+     * Gets a DV snapshot for a specific bucket. Routes the request to the bucket's leader
+     * TabletServer.
+     *
+     * @param tablePath the table path for leader discovery
+     * @param tableId the table ID
+     * @param partitionId the partition ID, null for non-partitioned tables
+     * @param bucketId the bucket ID
+     * @param readableSnapshotId the requested readable snapshot ID
+     * @return a CompletableFuture containing the DV snapshot response
+     */
+    CompletableFuture<GetDvSnapshotResponse> getDvSnapshot(
+            TablePath tablePath,
+            long tableId,
+            @Nullable Long partitionId,
+            int bucketId,
+            long readableSnapshotId);
+
+    /**
+     * Looks up the live data file and row position of each encoded primary key at readable snapshot
+     * {@code snapshotId}. Fails with a stale-snapshot error unless the leader's position index is
+     * at exactly that snapshot.
+     */
+    default CompletableFuture<GetDvSnapshotResponse> lookupDvPositions(
+            TablePath tablePath,
+            long tableId,
+            @Nullable Long partitionId,
+            int bucketId,
+            long snapshotId,
+            List<byte[]> keys) {
+        throw new UnsupportedOperationException("lookupDvPositions");
+    }
+
+    /**
+     * Gets LogDv bitmap and logEndOffset for a specific bucket. Used by tiering to get both the
+     * stoppingOffset and LogDv bitmap in a single RPC. The server computes LogDv bitmap for
+     * [fromOffset, logEndOffset) and returns both.
+     *
+     * @param tablePath the table path for leader discovery
+     * @param tableId the table ID
+     * @param partitionId the partition ID, null for non-partitioned tables
+     * @param bucketId the bucket ID
+     * @param fromOffset the start offset (inclusive), typically the last committed tiering offset
+     * @return a CompletableFuture containing logEndOffset and LogDv bitmap
+     */
+    CompletableFuture<GetDvSnapshotResponse> getLogDvBitmap(
+            TablePath tablePath,
+            long tableId,
+            @Nullable Long partitionId,
+            int bucketId,
+            long fromOffset);
 }

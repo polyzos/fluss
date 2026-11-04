@@ -29,6 +29,8 @@ import org.apache.fluss.types.DataType;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.apache.fluss.utils.Preconditions.checkState;
+
 /** Decodes a schema id and {@link BinaryRow} from bytes described by a {@link KvValueLayout}. */
 public class ValueDecoder {
 
@@ -54,15 +56,7 @@ public class ValueDecoder {
         MemorySegment memorySegment = MemorySegment.wrap(valueBytes);
         short schemaId = kvValueLayout.readSchemaId(memorySegment);
 
-        RowDecoder rowDecoder =
-                rowDecoders.computeIfAbsent(
-                        schemaId,
-                        (id) -> {
-                            Schema schema = schemaGetter.getSchema(schemaId);
-                            return RowDecoder.create(
-                                    kvFormat,
-                                    schema.getRowType().getChildren().toArray(new DataType[0]));
-                        });
+        RowDecoder rowDecoder = getOrCreateRowDecoder(schemaId);
 
         BinaryRow row =
                 rowDecoder.decode(
@@ -70,5 +64,40 @@ public class ValueDecoder {
                         kvValueLayout.rowPayloadOffset(),
                         kvValueLayout.rowPayloadLength(valueBytes.length));
         return new BinaryValue(schemaId, row);
+    }
+
+    /**
+     * Decode the value bytes from a DV-enabled table, skipping the varint RowId prefix. The format
+     * is: {@code [RowId (varint)][SchemaId (2B)][BinaryRow (variable)]}.
+     */
+    public BinaryValue decodeValueSkippingRowId(byte[] valueBytes) {
+        // The RowId prefix is only written on top of the plain layout, see
+        // ValueEncoder#encodeValueWithRowId.
+        checkState(
+                !kvValueLayout.hasValueTag(),
+                "RowId-prefixed values are not supported for a tagged KV value layout.");
+        KvValueLayout layout = KvValueLayout.PLAIN;
+        int rowIdLen = ValueEncoder.rowIdVarIntSize(valueBytes);
+        MemorySegment memorySegment = MemorySegment.wrap(valueBytes);
+        short schemaId = layout.readSchemaId(memorySegment, rowIdLen);
+
+        RowDecoder rowDecoder = getOrCreateRowDecoder(schemaId);
+
+        BinaryRow row =
+                rowDecoder.decode(
+                        memorySegment,
+                        rowIdLen + layout.rowPayloadOffset(),
+                        layout.rowPayloadLength(valueBytes.length - rowIdLen));
+        return new BinaryValue(schemaId, row);
+    }
+
+    private RowDecoder getOrCreateRowDecoder(short schemaId) {
+        return rowDecoders.computeIfAbsent(
+                schemaId,
+                (id) -> {
+                    Schema schema = schemaGetter.getSchema(schemaId);
+                    return RowDecoder.create(
+                            kvFormat, schema.getRowType().getChildren().toArray(new DataType[0]));
+                });
     }
 }

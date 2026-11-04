@@ -86,6 +86,8 @@ public class LogRecordReadContext
     @Nullable private volatile AutoCloseable unshadedBufferAllocator;
     private final boolean projectionPushDowned;
     private final SchemaGetter schemaGetter;
+    // whether deletion vectors are enabled for the table
+    private final boolean dvEnabled;
     private final ConcurrentHashMap<Integer, VectorSchemaRoot> vectorSchemaRootMap =
             new ConcurrentHashMap<>();
     private final Object unshadedArrowResourceLock = new Object();
@@ -121,6 +123,7 @@ public class LogRecordReadContext
         boolean readAsTargetSchema = schemaResolution == SchemaResolution.TARGET;
         RowType rowType = tableInfo.getRowType();
         LogFormat logFormat = tableInfo.getTableConfig().getLogFormat();
+        boolean dvEnabled = tableInfo.isRowIdEncoded();
         // only for arrow log format, the projection can be push downed to the server side
         boolean projectionPushDowned =
                 logFormat == LogFormat.ARROW && !readFromRemote && projection != null;
@@ -153,11 +156,14 @@ public class LogRecordReadContext
                     target,
                     projectionPushDowned,
                     schemaGetter,
-                    allocationManagerFactory);
+                    allocationManagerFactory,
+                    dvEnabled);
         } else if (logFormat == LogFormat.INDEXED) {
-            return createIndexedReadContext(tableInfo.getTableId(), target, schemaGetter);
+            return createIndexedReadContext(
+                    tableInfo.getTableId(), target, schemaGetter, dvEnabled);
         } else if (logFormat == LogFormat.COMPACTED) {
-            return createCompactedRowReadContext(tableInfo.getTableId(), target, schemaGetter);
+            return createCompactedRowReadContext(
+                    tableInfo.getTableId(), target, schemaGetter, dvEnabled);
         } else {
             throw new IllegalArgumentException("Unsupported log format: " + logFormat);
         }
@@ -172,26 +178,41 @@ public class LogRecordReadContext
             @Nullable ReadTarget target,
             boolean projectionPushDowned,
             SchemaGetter schemaGetter,
-            @Nullable AllocationManager.Factory allocationManagerFactory) {
+            @Nullable AllocationManager.Factory allocationManagerFactory,
+            boolean dvEnabled) {
         // TODO: use a more reasonable memory limit
         // When allocationManagerFactory is null, the RootAllocator falls back to Arrow's default
         // Netty-based allocator, so the context owns nothing beyond the allocator it closes.
         BufferAllocator allocator =
                 BufferAllocatorUtil.createBufferAllocator(allocationManagerFactory);
         return new LogRecordReadContext(
-                tableId, LogFormat.ARROW, target, allocator, projectionPushDowned, schemaGetter);
+                tableId,
+                LogFormat.ARROW,
+                target,
+                allocator,
+                projectionPushDowned,
+                schemaGetter,
+                dvEnabled);
     }
 
     private static LogRecordReadContext createIndexedReadContext(
-            long tableId, @Nullable ReadTarget target, SchemaGetter schemaGetter) {
+            long tableId,
+            @Nullable ReadTarget target,
+            SchemaGetter schemaGetter,
+            boolean dvEnabled) {
+        // for INDEXED log format, the projection is NEVER push downed to the server side
         return new LogRecordReadContext(
-                tableId, LogFormat.INDEXED, target, null, false, schemaGetter);
+                tableId, LogFormat.INDEXED, target, null, false, schemaGetter, dvEnabled);
     }
 
     private static LogRecordReadContext createCompactedRowReadContext(
-            long tableId, @Nullable ReadTarget target, @Nullable SchemaGetter schemaGetter) {
+            long tableId,
+            @Nullable ReadTarget target,
+            @Nullable SchemaGetter schemaGetter,
+            boolean dvEnabled) {
+        // for COMPACTED log format, the projection is NEVER push downed to the server side
         return new LogRecordReadContext(
-                tableId, LogFormat.COMPACTED, target, null, false, schemaGetter);
+                tableId, LogFormat.COMPACTED, target, null, false, schemaGetter, dvEnabled);
     }
 
     // -------------------------------------------------------------------------
@@ -212,7 +233,7 @@ public class LogRecordReadContext
             RowType rowType, int schemaId, SchemaGetter schemaGetter) {
         int[] selectedFields = IntStream.range(0, rowType.getFieldCount()).toArray();
         ReadTarget target = new ReadTarget(schemaId, rowType, selectedFields, LogFormat.ARROW);
-        return createArrowReadContext(-1L, target, false, schemaGetter, null);
+        return createArrowReadContext(-1L, target, false, schemaGetter, null, false);
     }
 
     @VisibleForTesting
@@ -223,7 +244,7 @@ public class LogRecordReadContext
             boolean projectionPushDowned) {
         int[] selectedFields = IntStream.range(0, rowType.getFieldCount()).toArray();
         ReadTarget target = new ReadTarget(schemaId, rowType, selectedFields, LogFormat.ARROW);
-        return createArrowReadContext(-1L, target, projectionPushDowned, schemaGetter, null);
+        return createArrowReadContext(-1L, target, projectionPushDowned, schemaGetter, null, false);
     }
 
     /**
@@ -238,7 +259,7 @@ public class LogRecordReadContext
             RowType rowType, int schemaId, SchemaGetter schemaGetter) {
         int[] selectedFields = IntStream.range(0, rowType.getFieldCount()).toArray();
         ReadTarget target = new ReadTarget(schemaId, rowType, selectedFields, LogFormat.INDEXED);
-        return createIndexedReadContext(-1L, target, schemaGetter);
+        return createIndexedReadContext(-1L, target, schemaGetter, false);
     }
 
     /** Creates a LogRecordReadContext for COMPACTED log format. */
@@ -246,7 +267,7 @@ public class LogRecordReadContext
             RowType rowType, int schemaId, SchemaGetter schemaGetter) {
         int[] selectedFields = IntStream.range(0, rowType.getFieldCount()).toArray();
         ReadTarget target = new ReadTarget(schemaId, rowType, selectedFields, LogFormat.COMPACTED);
-        return createCompactedRowReadContext(-1L, target, schemaGetter);
+        return createCompactedRowReadContext(-1L, target, schemaGetter, false);
     }
 
     // -------------------------------------------------------------------------
@@ -259,13 +280,15 @@ public class LogRecordReadContext
             @Nullable ReadTarget target,
             @Nullable BufferAllocator bufferAllocator,
             boolean projectionPushDowned,
-            SchemaGetter schemaGetter) {
+            SchemaGetter schemaGetter,
+            boolean dvEnabled) {
         this.tableId = tableId;
         this.logFormat = logFormat;
         this.target = target;
         this.bufferAllocator = bufferAllocator;
         this.projectionPushDowned = projectionPushDowned;
         this.schemaGetter = schemaGetter;
+        this.dvEnabled = dvEnabled;
     }
 
     // -------------------------------------------------------------------------
@@ -275,6 +298,11 @@ public class LogRecordReadContext
     @Override
     public LogFormat getLogFormat() {
         return logFormat;
+    }
+
+    @Override
+    public boolean isDvEnabled() {
+        return dvEnabled;
     }
 
     @Override

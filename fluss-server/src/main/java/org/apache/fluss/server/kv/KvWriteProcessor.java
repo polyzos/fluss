@@ -36,14 +36,19 @@ import org.apache.fluss.record.ChangeType;
 import org.apache.fluss.record.KvRecord;
 import org.apache.fluss.record.KvRecordBatch;
 import org.apache.fluss.record.KvRecordReadContext;
+import org.apache.fluss.record.LogRecord;
 import org.apache.fluss.row.BinaryRow;
 import org.apache.fluss.row.PaddingRow;
 import org.apache.fluss.row.arrow.ArrowWriterProvider;
 import org.apache.fluss.row.encode.KvValueLayout;
 import org.apache.fluss.row.encode.ValueDecoder;
+import org.apache.fluss.row.encode.ValueEncoder;
 import org.apache.fluss.rpc.protocol.MergeMode;
 import org.apache.fluss.server.kv.autoinc.AutoIncrementManager;
 import org.apache.fluss.server.kv.autoinc.AutoIncrementUpdater;
+import org.apache.fluss.server.kv.dv.DerivedDvManager;
+import org.apache.fluss.server.kv.dv.DvEntry;
+import org.apache.fluss.server.kv.dv.DvManager;
 import org.apache.fluss.server.kv.historical.HistoricalValueLookup;
 import org.apache.fluss.server.kv.historical.LocalValueLookupResult;
 import org.apache.fluss.server.kv.prewrite.KvPreWriteBuffer;
@@ -67,8 +72,13 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+
+import static org.apache.fluss.utils.Preconditions.checkState;
 
 /**
  * Processes a KV record batch into local state mutations and the corresponding WAL records.
@@ -114,6 +124,13 @@ public final class KvWriteProcessor {
     private final Clock clock;
     private final boolean skipUnchangedUpsert;
 
+    // whether values and changelog records carry a RowId (deletion vectors, non-derived mode)
+    private final boolean dvEnabled;
+    // whether deletion vectors are enabled in the derived mode
+    private final boolean dvDerived;
+    // DV manager for processing deletion vector writes (null when deletion vectors are disabled)
+    @Nullable private final DvManager dvManager;
+
     /** Creates a KV write processor. */
     public KvWriteProcessor(
             TableBucket tableBucket,
@@ -130,7 +147,9 @@ public final class KvWriteProcessor {
             ValueDecoder valueDecoder,
             @Nullable RowTtlTimestampProvider rowTtlTimestampProvider,
             Clock clock,
-            boolean skipUnchangedUpsert) {
+            boolean skipUnchangedUpsert,
+            boolean dvEnabled,
+            @Nullable DvManager dvManager) {
         this.tableBucket = tableBucket;
         this.logTablet = logTablet;
         this.arrowWriterProvider = arrowWriterProvider;
@@ -151,6 +170,9 @@ public final class KvWriteProcessor {
         this.rowTtlTimestampProvider = rowTtlTimestampProvider;
         this.clock = clock;
         this.skipUnchangedUpsert = skipUnchangedUpsert;
+        this.dvEnabled = dvEnabled;
+        this.dvDerived = dvManager instanceof DerivedDvManager;
+        this.dvManager = dvManager;
     }
 
     /** Processes a KV batch against the supplied state and appends its WAL. */
@@ -177,17 +199,18 @@ public final class KvWriteProcessor {
             if (rowTtlTimestampProvider != null) {
                 rowTtlTimestampProvider.prepareForBatch(clock.milliseconds());
             }
-            processKvRecords(
-                    kvRecords,
-                    kvRecords.schemaId(),
-                    writeContext.rowMerger,
-                    writeContext.autoIncrementUpdater,
-                    walBuilder,
-                    latestSchemaRow,
-                    logEndOffsetOfPrevBatch,
-                    stateAccessor,
-                    originalPartitionName,
-                    historicalValueLookup);
+            List<DvEntry> dvEntries =
+                    processKvRecords(
+                            kvRecords,
+                            kvRecords.schemaId(),
+                            writeContext.rowMerger,
+                            writeContext.autoIncrementUpdater,
+                            walBuilder,
+                            latestSchemaRow,
+                            logEndOffsetOfPrevBatch,
+                            stateAccessor,
+                            originalPartitionName,
+                            historicalValueLookup);
 
             // There will be a situation that these batches of kvRecordBatch have not
             // generated any CDC logs, for example, when client attempts to delete
@@ -205,6 +228,8 @@ public final class KvWriteProcessor {
             // buffer already written.
             if (logAppendInfo.duplicated()) {
                 stateAccessor.truncateTo(logEndOffsetOfPrevBatch, TruncateReason.DUPLICATED);
+            } else if (dvManager != null && !dvEntries.isEmpty()) {
+                dvManager.handleChangelogSynced(dvEntries);
             }
             return logAppendInfo;
         } catch (Throwable t) {
@@ -306,7 +331,7 @@ public final class KvWriteProcessor {
         }
     }
 
-    private void processKvRecords(
+    private List<DvEntry> processKvRecords(
             KvRecordBatch kvRecords,
             short schemaIdOfNewData,
             RowMerger currentMerger,
@@ -319,6 +344,8 @@ public final class KvWriteProcessor {
             @Nullable HistoricalValueLookup historicalValueLookup)
             throws Exception {
         long logOffset = startLogOffset;
+        List<DvEntry> dvEntries =
+                (dvEnabled || dvDerived) ? new ArrayList<>() : Collections.emptyList();
 
         // TODO: reuse the read context
         KvRecordBatch.ReadContext readContext =
@@ -340,7 +367,8 @@ public final class KvWriteProcessor {
                                 logOffset,
                                 stateAccessor,
                                 keyBytes,
-                                historicalValueLookup);
+                                historicalValueLookup,
+                                dvEntries);
             } else {
                 logOffset =
                         processUpsert(
@@ -353,9 +381,11 @@ public final class KvWriteProcessor {
                                 logOffset,
                                 stateAccessor,
                                 keyBytes,
-                                historicalValueLookup);
+                                historicalValueLookup,
+                                dvEntries);
             }
         }
+        return dvEntries;
     }
 
     private long processDeletion(
@@ -366,14 +396,27 @@ public final class KvWriteProcessor {
             long logOffset,
             KvStateAccessor stateAccessor,
             byte[] primaryKey,
-            @Nullable HistoricalValueLookup historicalValueLookup)
+            @Nullable HistoricalValueLookup historicalValueLookup,
+            List<DvEntry> dvEntries)
             throws Exception {
         if (shouldIgnoreDeletion(currentMerger)) {
             return logOffset;
         }
 
-        BinaryValue oldValue =
-                getPreviousValue(key, primaryKey, stateAccessor, historicalValueLookup);
+        BinaryValue oldValue;
+        long oldRowId = LogRecord.NO_ROW_ID;
+        if (dvEnabled) {
+            byte[] oldValueBytes = getPreviousValueBytes(key, stateAccessor, historicalValueLookup);
+            oldValue =
+                    oldValueBytes == null
+                            ? null
+                            : valueDecoder.decodeValueSkippingRowId(oldValueBytes);
+            if (oldValueBytes != null) {
+                oldRowId = ValueEncoder.extractRowId(oldValueBytes);
+            }
+        } else {
+            oldValue = getPreviousValue(key, primaryKey, stateAccessor, historicalValueLookup);
+        }
         if (oldValue == null) {
             LOG.debug(
                     "The specific key can't be found in kv tablet although the kv record is for deletion, "
@@ -393,11 +436,39 @@ public final class KvWriteProcessor {
 
         // if newValue is null, it means the row should be deleted
         if (newValue == null) {
-            return applyDelete(
-                    key, oldValue, walBuilder, latestSchemaRow, logOffset, stateAccessor);
+            long nextOffset =
+                    applyDelete(
+                            key,
+                            oldValue,
+                            walBuilder,
+                            latestSchemaRow,
+                            logOffset,
+                            stateAccessor,
+                            oldRowId);
+            if (dvDerived) {
+                dvEntries.add(DvEntry.derived(key.get(), logOffset, -1));
+            } else if (dvEnabled && oldRowId != LogRecord.NO_ROW_ID) {
+                dvEntries.add(new DvEntry(oldRowId));
+            }
+            return nextOffset;
         } else {
-            return applyUpdate(
-                    key, oldValue, newValue, walBuilder, latestSchemaRow, logOffset, stateAccessor);
+            long nextOffset =
+                    applyUpdate(
+                            key,
+                            oldValue,
+                            newValue,
+                            walBuilder,
+                            latestSchemaRow,
+                            logOffset,
+                            stateAccessor,
+                            oldRowId);
+            if (dvDerived) {
+                long v = nextOffset - 1;
+                dvEntries.add(DvEntry.derived(key.get(), v, v));
+            } else if (dvEnabled && oldRowId != LogRecord.NO_ROW_ID) {
+                dvEntries.add(new DvEntry(oldRowId));
+            }
+            return nextOffset;
         }
     }
 
@@ -411,25 +482,50 @@ public final class KvWriteProcessor {
             long logOffset,
             KvStateAccessor stateAccessor,
             byte[] primaryKey,
-            @Nullable HistoricalValueLookup historicalValueLookup)
+            @Nullable HistoricalValueLookup historicalValueLookup,
+            List<DvEntry> dvEntries)
             throws Exception {
         if (canSkipOldValueLookup(currentMerger, autoIncrementUpdater)) {
             return applyUpdate(
-                    key, null, currentValue, walBuilder, latestSchemaRow, logOffset, stateAccessor);
-        }
-
-        BinaryValue oldValue =
-                getPreviousValue(key, primaryKey, stateAccessor, historicalValueLookup);
-        if (oldValue == null) {
-            BinaryValue valueToInsert = currentMerger.merge(null, currentValue);
-            return applyInsert(
                     key,
-                    valueToInsert,
+                    null,
+                    currentValue,
                     walBuilder,
                     latestSchemaRow,
                     logOffset,
-                    autoIncrementUpdater,
-                    stateAccessor);
+                    stateAccessor,
+                    LogRecord.NO_ROW_ID);
+        }
+
+        BinaryValue oldValue;
+        long oldRowId = LogRecord.NO_ROW_ID;
+        if (dvEnabled) {
+            byte[] oldValueBytes = getPreviousValueBytes(key, stateAccessor, historicalValueLookup);
+            oldValue =
+                    oldValueBytes == null
+                            ? null
+                            : valueDecoder.decodeValueSkippingRowId(oldValueBytes);
+            if (oldValueBytes != null) {
+                oldRowId = ValueEncoder.extractRowId(oldValueBytes);
+            }
+        } else {
+            oldValue = getPreviousValue(key, primaryKey, stateAccessor, historicalValueLookup);
+        }
+        if (oldValue == null) {
+            BinaryValue valueToInsert = currentMerger.merge(null, currentValue);
+            long next =
+                    applyInsert(
+                            key,
+                            valueToInsert,
+                            walBuilder,
+                            latestSchemaRow,
+                            logOffset,
+                            autoIncrementUpdater,
+                            stateAccessor);
+            if (dvDerived) {
+                dvEntries.add(DvEntry.derived(key.get(), logOffset, logOffset));
+            }
+            return next;
         }
 
         BinaryValue newValue = currentMerger.merge(oldValue, currentValue);
@@ -443,8 +539,23 @@ public final class KvWriteProcessor {
             return logOffset;
         }
 
-        return applyUpdate(
-                key, oldValue, newValue, walBuilder, latestSchemaRow, logOffset, stateAccessor);
+        long nextOffset =
+                applyUpdate(
+                        key,
+                        oldValue,
+                        newValue,
+                        walBuilder,
+                        latestSchemaRow,
+                        logOffset,
+                        stateAccessor,
+                        oldRowId);
+        if (dvDerived) {
+            long v = nextOffset - 1; // the +U is the last record applyUpdate writes
+            dvEntries.add(DvEntry.derived(key.get(), v, v));
+        } else if (dvEnabled && oldRowId != LogRecord.NO_ROW_ID) {
+            dvEntries.add(new DvEntry(oldRowId));
+        }
+        return nextOffset;
     }
 
     private long applyDelete(
@@ -453,9 +564,15 @@ public final class KvWriteProcessor {
             WalBuilder walBuilder,
             PaddingRow latestSchemaRow,
             long logOffset,
-            KvStateAccessor stateAccessor)
+            KvStateAccessor stateAccessor,
+            long oldRowId)
             throws Exception {
-        walBuilder.append(ChangeType.DELETE, latestSchemaRow.replaceRow(oldValue.row));
+        if (dvEnabled) {
+            walBuilder.append(
+                    ChangeType.DELETE, latestSchemaRow.replaceRow(oldValue.row), oldRowId);
+        } else {
+            walBuilder.append(ChangeType.DELETE, latestSchemaRow.replaceRow(oldValue.row));
+        }
         stateAccessor.delete(key, logOffset);
         return logOffset + 1;
     }
@@ -470,7 +587,13 @@ public final class KvWriteProcessor {
             KvStateAccessor stateAccessor)
             throws Exception {
         BinaryValue newValue = autoIncrementUpdater.updateAutoIncrementColumns(currentValue);
-        walBuilder.append(ChangeType.INSERT, latestSchemaRow.replaceRow(newValue.row));
+        if (dvEnabled) {
+            // the RowId of the inserted row is the log offset of its +I record
+            walBuilder.append(
+                    ChangeType.INSERT, latestSchemaRow.replaceRow(newValue.row), logOffset);
+        } else {
+            walBuilder.append(ChangeType.INSERT, latestSchemaRow.replaceRow(newValue.row));
+        }
         stateAccessor.insert(key, stateValueEncoder.encodeValue(newValue, logOffset), logOffset);
         return logOffset + 1;
     }
@@ -482,17 +605,39 @@ public final class KvWriteProcessor {
             WalBuilder walBuilder,
             PaddingRow latestSchemaRow,
             long logOffset,
-            KvStateAccessor stateAccessor)
+            KvStateAccessor stateAccessor,
+            long oldRowId)
             throws Exception {
         if (changelogImage == ChangelogImage.WAL) {
-            walBuilder.append(ChangeType.UPDATE_AFTER, latestSchemaRow.replaceRow(newValue.row));
+            if (dvEnabled) {
+                walBuilder.append(
+                        ChangeType.UPDATE_AFTER,
+                        latestSchemaRow.replaceRow(newValue.row),
+                        logOffset);
+            } else {
+                walBuilder.append(
+                        ChangeType.UPDATE_AFTER, latestSchemaRow.replaceRow(newValue.row));
+            }
             stateAccessor.update(
                     key, stateValueEncoder.encodeValue(newValue, logOffset), logOffset);
             return logOffset + 1;
         } else {
-            walBuilder.append(ChangeType.UPDATE_BEFORE, latestSchemaRow.replaceRow(oldValue.row));
-            walBuilder.append(ChangeType.UPDATE_AFTER, latestSchemaRow.replaceRow(newValue.row));
             long updateAfterOffset = logOffset + 1;
+            if (dvEnabled) {
+                walBuilder.append(
+                        ChangeType.UPDATE_BEFORE,
+                        latestSchemaRow.replaceRow(oldValue.row),
+                        oldRowId);
+                walBuilder.append(
+                        ChangeType.UPDATE_AFTER,
+                        latestSchemaRow.replaceRow(newValue.row),
+                        updateAfterOffset);
+            } else {
+                walBuilder.append(
+                        ChangeType.UPDATE_BEFORE, latestSchemaRow.replaceRow(oldValue.row));
+                walBuilder.append(
+                        ChangeType.UPDATE_AFTER, latestSchemaRow.replaceRow(newValue.row));
+            }
             stateAccessor.update(
                     key,
                     stateValueEncoder.encodeValue(newValue, updateAfterOffset),
@@ -526,12 +671,33 @@ public final class KvWriteProcessor {
                         : () -> historicalValueLookup.lookup(primaryKey));
     }
 
+    /**
+     * Returns the raw previous value bytes from local state for a RowId-encoded (DV-enabled) table,
+     * whose values are prefixed by the RowId and can't be decoded by the layout-aware decoder.
+     *
+     * @return the raw previous value, or null if the key is absent or locally marked as deleted
+     */
+    @Nullable
+    private byte[] getPreviousValueBytes(
+            KvPreWriteBuffer.Key localStateKey,
+            KvStateAccessor stateAccessor,
+            @Nullable HistoricalValueLookup historicalValueLookup)
+            throws Exception {
+        checkState(
+                historicalValueLookup == null,
+                "Deletion vectors are not supported for historical KV writes of %s.",
+                tableBucket);
+        return stateAccessor.lookupLocal(localStateKey).value();
+    }
+
     private boolean canSkipOldValueLookup(
             RowMerger currentMerger, AutoIncrementUpdater autoIncrementUpdater) {
         // A full-row WAL upsert does not need the old value: its result is always the incoming row,
         // and WAL mode emits only UPDATE_AFTER. Partial updates and auto-increment writes still
         // need the old value to construct the final row or distinguish an insert from an update.
+        // When dvEnabled, we MUST fetch the old value to get the oldRowId for DV processing.
         return changelogImage == ChangelogImage.WAL
+                && !dvEnabled
                 && !autoIncrementUpdater.hasAutoIncrement()
                 && currentMerger instanceof DefaultRowMerger;
     }

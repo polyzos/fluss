@@ -37,6 +37,7 @@ public class TieringWriterInitContext implements WriterInitContext {
     private final long tieringRoundTimestamp;
     private final int bucketCount;
     @Nullable private final String[] ioTmpDirs;
+    @Nullable private final byte[] logDvBitmap;
 
     public TieringWriterInitContext(
             TablePath tablePath,
@@ -47,6 +48,28 @@ public class TieringWriterInitContext implements WriterInitContext {
             long tieringRoundTimestamp,
             @Nullable Integer bucketCount,
             @Nullable String[] ioTmpDirs) {
+        this(
+                tablePath,
+                tableBucket,
+                partition,
+                tableInfo,
+                splitIndex,
+                tieringRoundTimestamp,
+                bucketCount,
+                ioTmpDirs,
+                null);
+    }
+
+    public TieringWriterInitContext(
+            TablePath tablePath,
+            TableBucket tableBucket,
+            @Nullable String partition,
+            TableInfo tableInfo,
+            int splitIndex,
+            long tieringRoundTimestamp,
+            @Nullable Integer bucketCount,
+            @Nullable String[] ioTmpDirs,
+            @Nullable byte[] logDvBitmap) {
         this.tablePath = tablePath;
         this.tableBucket = tableBucket;
         this.partition = partition;
@@ -54,6 +77,7 @@ public class TieringWriterInitContext implements WriterInitContext {
         this.splitIndex = splitIndex;
         this.tieringRoundTimestamp = tieringRoundTimestamp;
         this.ioTmpDirs = ioTmpDirs;
+        this.logDvBitmap = logDvBitmap;
         if (tableBucket.getPartitionId() == null) {
             this.bucketCount = tableInfo.getNumBuckets();
         } else {
@@ -109,5 +133,11 @@ public class TieringWriterInitContext implements WriterInitContext {
     @Override
     public int bucketCount() {
         return bucketCount;
+    }
+
+    @Nullable
+    @Override
+    public byte[] logDvBitmap() {
+        return logDvBitmap;
     }
 }

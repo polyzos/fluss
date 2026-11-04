@@ -24,12 +24,16 @@ import org.apache.fluss.rpc.messages.DeleteConsumerGroupsRequest;
 import org.apache.fluss.rpc.messages.DeleteConsumerGroupsResponse;
 import org.apache.fluss.rpc.messages.DeleteConsumerOffsetsRequest;
 import org.apache.fluss.rpc.messages.DeleteConsumerOffsetsResponse;
+import org.apache.fluss.rpc.messages.DvReadableSwitchRequest;
+import org.apache.fluss.rpc.messages.DvReadableSwitchResponse;
 import org.apache.fluss.rpc.messages.FetchLogRequest;
 import org.apache.fluss.rpc.messages.FetchLogResponse;
 import org.apache.fluss.rpc.messages.FindConsumerGroupOwnerRequest;
 import org.apache.fluss.rpc.messages.FindConsumerGroupOwnerResponse;
 import org.apache.fluss.rpc.messages.GetConsumerOffsetsRequest;
 import org.apache.fluss.rpc.messages.GetConsumerOffsetsResponse;
+import org.apache.fluss.rpc.messages.GetDvSnapshotRequest;
+import org.apache.fluss.rpc.messages.GetDvSnapshotResponse;
 import org.apache.fluss.rpc.messages.GetTableStatsRequest;
 import org.apache.fluss.rpc.messages.GetTableStatsResponse;
 import org.apache.fluss.rpc.messages.InitWriterRequest;
@@ -241,4 +245,20 @@ public interface TabletServerGateway extends RpcGateway, AdminReadOnlyGateway {
      */
     @RPC(api = ApiKeys.SCAN_KV)
     CompletableFuture<ScanKvResponse> scanKv(ScanKvRequest request);
+
+    /**
+     * Notify a tablet server to switch DV readable offset.
+     *
+     * @return the DV readable switch response
+     */
+    @RPC(api = ApiKeys.DV_READABLE_SWITCH)
+    CompletableFuture<DvReadableSwitchResponse> dvReadableSwitch(DvReadableSwitchRequest request);
+
+    /**
+     * Get DV snapshot for union read from a tablet server.
+     *
+     * @return the DV snapshot response containing LakeDv, LogDv, and offsets
+     */
+    @RPC(api = ApiKeys.GET_DV_SNAPSHOT)
+    CompletableFuture<GetDvSnapshotResponse> getDvSnapshot(GetDvSnapshotRequest request);
 }

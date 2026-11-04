@@ -20,10 +20,13 @@ package org.apache.fluss.lake.paimon.tiering;
 import org.apache.fluss.config.Configuration;
 import org.apache.fluss.lake.committer.CommitterInitContext;
 import org.apache.fluss.lake.committer.PartitionMarkDoneCommitter;
+import org.apache.fluss.lake.paimon.source.PaimonLakeSource;
 import org.apache.fluss.lake.serializer.SimpleVersionedSerializer;
+import org.apache.fluss.lake.source.LakeSource;
 import org.apache.fluss.lake.writer.LakeTieringFactory;
 import org.apache.fluss.lake.writer.LakeWriter;
 import org.apache.fluss.lake.writer.WriterInitContext;
+import org.apache.fluss.metadata.TablePath;
 
 import java.io.IOException;
 
@@ -33,9 +36,11 @@ public class PaimonLakeTieringFactory
 
     private static final long serialVersionUID = 1L;
 
+    private final Configuration paimonConfig;
     private final PaimonCatalogProvider paimonCatalogProvider;
 
     public PaimonLakeTieringFactory(Configuration paimonConfig) {
+        this.paimonConfig = paimonConfig;
         this.paimonCatalogProvider = new PaimonCatalogProvider(paimonConfig);
     }
 
@@ -64,5 +69,17 @@ public class PaimonLakeTieringFactory
     @Override
     public SimpleVersionedSerializer<PaimonCommittable> getCommittableSerializer() {
         return new PaimonCommittableSerializer();
+    }
+
+    @Override
+    public LakeSource<?> createLakeSource(CommitterInitContext committerInitContext) {
+        return new PaimonLakeSource(
+                committerInitContext.lakeTieringConfig(),
+                committerInitContext.tableInfo().getLakeTablePath());
+    }
+
+    @Override
+    public LakeSource<?> createLakeSource(TablePath tablePath) {
+        return new PaimonLakeSource(paimonConfig, tablePath);
     }
 }

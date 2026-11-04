@@ -18,6 +18,8 @@
 
 package org.apache.fluss.lake.iceberg.tiering;
 
+import org.apache.fluss.lake.dv.index.KeyPosition;
+import org.apache.fluss.lake.dv.index.PositionIndexDelta;
 import org.apache.fluss.lake.iceberg.maintenance.RewriteDataFileResult;
 import org.apache.fluss.lake.iceberg.utils.TestingGoldenFiles;
 import org.apache.fluss.utils.InstantiationUtils;
@@ -39,6 +41,7 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 
@@ -97,6 +100,44 @@ class IcebergWriteResultSerializerTest {
         serializedData = serializer.serialize(originalResult);
         deserializedResult = serializer.deserialize(serializer.getVersion(), serializedData);
         assertThat(deserializedResult.toString()).isEqualTo(originalResult.toString());
+    }
+
+    @Test
+    void testSerializeAndDeserializeWithPositionIndexDelta() throws IOException {
+        IcebergWriteResult withoutDelta = goldenWriteResult();
+        PositionIndexDelta delta =
+                new PositionIndexDelta(
+                        Arrays.asList(new byte[] {1, 2}, new byte[] {3}),
+                        Collections.singletonList(
+                                new KeyPosition(new byte[] {4, 5, 6}, "file-1.parquet", 42L)),
+                        Collections.singletonList(new byte[0]));
+        IcebergWriteResult original =
+                new IcebergWriteResult(
+                        withoutDelta.getWriteResult(),
+                        withoutDelta.specs(),
+                        withoutDelta.rewriteDataFileResult(),
+                        delta);
+
+        IcebergWriteResult deserialized =
+                serializer.deserialize(serializer.getVersion(), serializer.serialize(original));
+
+        assertWriteResultEquals(deserialized, withoutDelta);
+        PositionIndexDelta actual = deserialized.positionIndexDelta();
+        assertThat(actual).isNotNull();
+        assertThat(actual.changedKeys()).containsExactly(new byte[] {1, 2}, new byte[] {3});
+        assertThat(actual.puts()).hasSize(1);
+        assertThat(actual.puts().get(0).key()).isEqualTo(new byte[] {4, 5, 6});
+        assertThat(actual.puts().get(0).file()).isEqualTo("file-1.parquet");
+        assertThat(actual.puts().get(0).pos()).isEqualTo(42L);
+        assertThat(actual.deletes()).containsExactly(new byte[0]);
+
+        // a write result without a delta keeps the golden format and reads back without one
+        assertThat(
+                        serializer
+                                .deserialize(
+                                        serializer.getVersion(), serializer.serialize(withoutDelta))
+                                .positionIndexDelta())
+                .isNull();
     }
 
     @Test

@@ -97,7 +97,9 @@ class TieringCommitOperatorTest extends FlinkTestBase {
                         parameters,
                         FLUSS_CLUSTER_EXTENSION.getClientConfig(),
                         new org.apache.fluss.config.Configuration(),
-                        new TestingLakeTieringFactory());
+                        new TestingLakeTieringFactory(),
+                        new org.apache.fluss.config.Configuration(),
+                        "lance");
         committerOperator.open();
     }
 
@@ -375,7 +377,9 @@ class TieringCommitOperatorTest extends FlinkTestBase {
                         parameters,
                         FLUSS_CLUSTER_EXTENSION.getClientConfig(),
                         tieringConfig,
-                        new TestingLakeTieringFactory(testingLakeCommitter));
+                        new TestingLakeTieringFactory(testingLakeCommitter),
+                        new org.apache.fluss.config.Configuration(),
+                        "lance");
         committerOperator.open();
 
         for (int bucket = 0; bucket < numberOfWriteResults; bucket++) {
@@ -457,7 +461,9 @@ class TieringCommitOperatorTest extends FlinkTestBase {
                         parameters,
                         FLUSS_CLUSTER_EXTENSION.getClientConfig(),
                         new org.apache.fluss.config.Configuration(),
-                        new TestingLakeTieringFactory(lakeCommitter));
+                        new TestingLakeTieringFactory(lakeCommitter),
+                        new org.apache.fluss.config.Configuration(),
+                        "lance");
         committerOperator.open();
 
         // An empty round must not attach the previous table's snapshot to the new table.
@@ -516,7 +522,9 @@ class TieringCommitOperatorTest extends FlinkTestBase {
                         parameters,
                         FLUSS_CLUSTER_EXTENSION.getClientConfig(),
                         new org.apache.fluss.config.Configuration(),
-                        new TestingLakeTieringFactory(testingLakeCommitter));
+                        new TestingLakeTieringFactory(testingLakeCommitter),
+                        new org.apache.fluss.config.Configuration(),
+                        "lance");
         committerOperator.open();
 
         int numberOfWriteResults = 6;
@@ -649,7 +657,9 @@ class TieringCommitOperatorTest extends FlinkTestBase {
                             parameters,
                             FLUSS_CLUSTER_EXTENSION.getClientConfig(),
                             tieringConfig,
-                            new TestingLakeTieringFactory());
+                            new TestingLakeTieringFactory(),
+                            new org.apache.fluss.config.Configuration(),
+                            "lance");
             committerOperator.open();
         }
         TablePath tablePath = TablePath.of("fluss", "test_commit_fails_when_table_recreated");
@@ -740,7 +750,9 @@ class TieringCommitOperatorTest extends FlinkTestBase {
                         parameters,
                         FLUSS_CLUSTER_EXTENSION.getClientConfig(),
                         lakeTieringConfig,
-                        lakeTieringFactory);
+                        lakeTieringFactory,
+                        new org.apache.fluss.config.Configuration(),
+                        "lance");
         committerOperator.open();
 
         committerOperator.processElement(
@@ -795,7 +807,9 @@ class TieringCommitOperatorTest extends FlinkTestBase {
                         parameters,
                         FLUSS_CLUSTER_EXTENSION.getClientConfig(),
                         tieringConfig,
-                        factory);
+                        factory,
+                        new org.apache.fluss.config.Configuration(),
+                        "lance");
         committerOperator.open();
         committerOperator.processElement(
                 createTableBucketWriteResultStreamRecord(tablePath, bucket, null, null, -1, -1, 1));

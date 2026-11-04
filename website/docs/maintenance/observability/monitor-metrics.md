@@ -463,8 +463,8 @@ Some metrics might not be exposed when using other JVM implementations (e.g. IBM
   </thead>
   <tbody>
     <tr>
-      <th rowspan="39"><strong>tabletserver</strong></th>
-      <td style={{textAlign: 'center', verticalAlign: 'middle' }} rowspan="27">-</td>
+      <th rowspan="46"><strong>tabletserver</strong></th>
+      <td style={{textAlign: 'center', verticalAlign: 'middle' }} rowspan="34">-</td>
       <td>messagesInPerSecond</td>
       <td>The number of messages written per second to this server.</td>
       <td>Meter</td>
@@ -598,6 +598,41 @@ Some metrics might not be exposed when using other JVM implementations (e.g. IBM
       <td>kvWalMemoryPoolCapacity</td>
       <td>Total capacity of the server-wide WAL memory pool for primary key tables in this server (in bytes).</td>
       <td>Gauge</td>
+    </tr>
+    <tr>
+      <td>dvCatchUpPerSecond</td>
+      <td>Buckets with derived deletion vectors moving to a newer lake snapshot by applying the index changes after their own, per second.</td>
+      <td>Meter</td>
+    </tr>
+    <tr>
+      <td>dvCatchUpLatencyMs</td>
+      <td>The time of such a move in ms.</td>
+      <td>Histogram</td>
+    </tr>
+    <tr>
+      <td>dvRebuildPerSecond</td>
+      <td>Buckets with derived deletion vectors rebuilding their index from a checkpoint, the later index changes and the log, per second.</td>
+      <td>Meter</td>
+    </tr>
+    <tr>
+      <td>dvRebuildLatencyMs</td>
+      <td>The time of a rebuild in ms.</td>
+      <td>Histogram</td>
+    </tr>
+    <tr>
+      <td>dvCheckpointPerSecond</td>
+      <td>Checkpoints of a bucket position index written per second.</td>
+      <td>Meter</td>
+    </tr>
+    <tr>
+      <td>dvCheckpointLatencyMs</td>
+      <td>The time to write a checkpoint in ms.</td>
+      <td>Histogram</td>
+    </tr>
+    <tr>
+      <td>dvStaleSnapshotPerSecond</td>
+      <td>Requests for a lake snapshot a bucket no longer covers, per second. The client plans again on the newer snapshot.</td>
+      <td>Meter</td>
     </tr>
     <tr>
       <td rowspan="4">historical</td>
@@ -1362,5 +1397,27 @@ All metrics are registered under the `fluss.tieringService` metric group, as a c
             <td>The current ratio (0–1) of readers tracked by the enumerator as waiting for a split to the source parallelism.</td>
             <td>Gauge</td>
         </tr>
+    </tbody>
+</table>
+
+For tables with `table.deletion-vectors.mode` = `derived`, the tiering committer also reports the following metrics under the `derivedDeletionVectors` group of its Flink operator.
+
+<table class="table table-bordered">
+    <thead>
+    <tr>
+      <th class="text-left" style={{width: '225pt'}}>Metrics Name</th>
+      <th class="text-left" style={{width: '300pt'}}>Description</th>
+      <th class="text-left" style={{width: '70pt'}}>Type</th>
+    </tr>
+    </thead>
+    <tbody>
+        <tr><td>rounds</td><td>Tiering rounds committed with deletes.</td><td>Counter</td></tr>
+        <tr><td>changedKeys</td><td>Primary keys changed in these rounds (each looked up once per round).</td><td>Counter</td></tr>
+        <tr><td>reindexes</td><td>Lake snapshots rewritten by other engines and indexed again.</td><td>Counter</td></tr>
+        <tr><td>chainEntriesTrimmed</td><td>Index changes removed after all buckets have a checkpoint past them.</td><td>Counter</td></tr>
+        <tr><td>orphanChangesRemoved</td><td>Index changes of failed rounds removed.</td><td>Counter</td></tr>
+        <tr><td>lastLookupMs</td><td>Time to look up the positions of the changed keys in the last round.</td><td>Gauge</td></tr>
+        <tr><td>lastLakeCommitMs</td><td>Time of the lake commit (data and deletes) in the last round.</td><td>Gauge</td></tr>
+        <tr><td>lastReindexMs</td><td>Time from detecting a rewrite to publishing its index in the last re-index.</td><td>Gauge</td></tr>
     </tbody>
 </table>

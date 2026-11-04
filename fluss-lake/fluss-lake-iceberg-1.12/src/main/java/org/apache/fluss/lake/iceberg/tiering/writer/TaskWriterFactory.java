@@ -41,6 +41,11 @@ public class TaskWriterFactory {
 
     public static TaskWriter<Record> createTaskWriter(
             Table table, @Nullable String partition, int bucket) {
+        return createTaskWriter(table, partition, bucket, false);
+    }
+
+    public static TaskWriter<Record> createTaskWriter(
+            Table table, @Nullable String partition, int bucket, boolean dvEnabled) {
         Schema schema = table.schema();
         int[] equalityFieldIds =
                 schema.identifierFieldIds().stream().mapToInt(Integer::intValue).toArray();
@@ -57,7 +62,8 @@ public class TaskWriterFactory {
                         .format(format)
                         .build();
 
-        if (equalityFieldIds.length == 0) {
+        // DV tables write data files only; deletes are materialized as Puffin DVs at commit.
+        if (dvEnabled || equalityFieldIds.length == 0) {
             GenericFileWriterFactory writerFactory =
                     new GenericFileWriterFactory.Builder(table)
                             .dataFileFormat(format)

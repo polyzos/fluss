@@ -34,6 +34,7 @@ import org.apache.fluss.cluster.rebalance.ServerTag;
 import org.apache.fluss.config.cluster.AlterConfig;
 import org.apache.fluss.config.cluster.ConfigEntry;
 import org.apache.fluss.exception.FlussRuntimeException;
+import org.apache.fluss.exception.InvalidMetadataException;
 import org.apache.fluss.exception.InvalidServerTypeException;
 import org.apache.fluss.exception.LeaderNotAvailableException;
 import org.apache.fluss.exception.NotCoordinatorLeaderException;
@@ -54,6 +55,7 @@ import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableChange;
 import org.apache.fluss.metadata.TableDescriptor;
 import org.apache.fluss.metadata.TableInfo;
+import org.apache.fluss.metadata.TablePartition;
 import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.metadata.TableStats;
 import org.apache.fluss.rpc.GatewayClientProxy;
@@ -84,6 +86,8 @@ import org.apache.fluss.rpc.messages.DropDatabaseRequest;
 import org.apache.fluss.rpc.messages.DropTableRequest;
 import org.apache.fluss.rpc.messages.GetClusterHealthRequest;
 import org.apache.fluss.rpc.messages.GetDatabaseInfoRequest;
+import org.apache.fluss.rpc.messages.GetDvSnapshotRequest;
+import org.apache.fluss.rpc.messages.GetDvSnapshotResponse;
 import org.apache.fluss.rpc.messages.GetKvSnapshotMetadataRequest;
 import org.apache.fluss.rpc.messages.GetLakeSnapshotRequest;
 import org.apache.fluss.rpc.messages.GetLatestKvSnapshotsRequest;
@@ -133,6 +137,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -804,6 +809,8 @@ public class FlussAdmin implements Admin {
             Collection<Integer> buckets,
             OffsetSpec offsetSpec) {
         Long partitionId = null;
+        // A plain refresh keeps a cached leader that went stale after a server restart.
+        metadataUpdater.invalidPhysicalTableBucketMeta(Collections.singleton(physicalTablePath));
         metadataUpdater.updateTableOrPartitionMetadata(physicalTablePath.getTablePath(), null);
         TableInfo tableInfo = getTableInfo(physicalTablePath.getTablePath()).join();
 
@@ -1219,6 +1226,124 @@ public class FlussAdmin implements Admin {
         return retryableCoordinatorGateway
                 .describeCluster(new DescribeClusterRequest())
                 .thenApply(ClientRpcMessageUtils::toClusterDescription);
+    }
+
+    @Override
+    public CompletableFuture<GetDvSnapshotResponse> getDvSnapshot(
+            TablePath tablePath,
+            long tableId,
+            @Nullable Long partitionId,
+            int bucketId,
+            long readableSnapshotId) {
+        TableBucket tb = new TableBucket(tableId, partitionId, bucketId);
+        if (partitionId != null) {
+            // Partition metadata can only be fetched once the table is cached.
+            metadataUpdater.checkAndUpdateTableMetadata(Collections.singleton(tablePath));
+        }
+        int leader = metadataUpdater.leaderFor(tablePath, tb);
+        TabletServerGateway tsGateway = metadataUpdater.newTabletServerClientForNode(leader);
+        if (tsGateway == null) {
+            throw new LeaderNotAvailableException(
+                    "Server " + leader + " is not found in metadata cache.");
+        }
+        GetDvSnapshotRequest request =
+                new GetDvSnapshotRequest()
+                        .setTableId(tableId)
+                        .setBucketId(bucketId)
+                        .setReadableSnapshotId(readableSnapshotId);
+        if (partitionId != null) {
+            request.setPartitionId(partitionId);
+        }
+        return refreshLeaderOnError(
+                tsGateway.getDvSnapshot(request), tablePath, tableId, partitionId);
+    }
+
+    @Override
+    public CompletableFuture<GetDvSnapshotResponse> lookupDvPositions(
+            TablePath tablePath,
+            long tableId,
+            @Nullable Long partitionId,
+            int bucketId,
+            long snapshotId,
+            List<byte[]> keys) {
+        TableBucket tb = new TableBucket(tableId, partitionId, bucketId);
+        if (partitionId != null) {
+            // Partition metadata can only be fetched once the table is cached.
+            metadataUpdater.checkAndUpdateTableMetadata(Collections.singleton(tablePath));
+        }
+        int leader = metadataUpdater.leaderFor(tablePath, tb);
+        TabletServerGateway tsGateway = metadataUpdater.newTabletServerClientForNode(leader);
+        if (tsGateway == null) {
+            throw new LeaderNotAvailableException(
+                    "Server " + leader + " is not found in metadata cache.");
+        }
+        GetDvSnapshotRequest request =
+                new GetDvSnapshotRequest()
+                        .setTableId(tableId)
+                        .setBucketId(bucketId)
+                        .setReadableSnapshotId(snapshotId);
+        if (partitionId != null) {
+            request.setPartitionId(partitionId);
+        }
+        for (byte[] key : keys) {
+            request.addLookupKey(key);
+        }
+        return refreshLeaderOnError(
+                tsGateway.getDvSnapshot(request), tablePath, tableId, partitionId);
+    }
+
+    @Override
+    public CompletableFuture<GetDvSnapshotResponse> getLogDvBitmap(
+            TablePath tablePath,
+            long tableId,
+            @Nullable Long partitionId,
+            int bucketId,
+            long fromOffset) {
+        TableBucket tb = new TableBucket(tableId, partitionId, bucketId);
+        if (partitionId != null) {
+            // Partition metadata can only be fetched once the table is cached.
+            metadataUpdater.checkAndUpdateTableMetadata(Collections.singleton(tablePath));
+        }
+        int leader = metadataUpdater.leaderFor(tablePath, tb);
+        TabletServerGateway tsGateway = metadataUpdater.newTabletServerClientForNode(leader);
+        if (tsGateway == null) {
+            throw new LeaderNotAvailableException(
+                    "Server " + leader + " is not found in metadata cache.");
+        }
+        GetDvSnapshotRequest request =
+                new GetDvSnapshotRequest()
+                        .setTableId(tableId)
+                        .setBucketId(bucketId)
+                        .setReadableSnapshotId(-1)
+                        .setLogDvFromOffset(fromOffset);
+        if (partitionId != null) {
+            request.setPartitionId(partitionId);
+        }
+        return refreshLeaderOnError(
+                tsGateway.getDvSnapshot(request), tablePath, tableId, partitionId);
+    }
+
+    /** Drops the cached bucket leaders on a metadata error so a retry resolves the new leader. */
+    private CompletableFuture<GetDvSnapshotResponse> refreshLeaderOnError(
+            CompletableFuture<GetDvSnapshotResponse> future,
+            TablePath tablePath,
+            long tableId,
+            @Nullable Long partitionId) {
+        return future.whenComplete(
+                (resp, t) -> {
+                    if (t != null
+                            && ExceptionUtils.findThrowable(t, InvalidMetadataException.class)
+                                    .isPresent()) {
+                        Set<PhysicalTablePath> paths =
+                                partitionId == null
+                                        ? Collections.singleton(PhysicalTablePath.of(tablePath))
+                                        : metadataUpdater.getPhysicalTablePathByIds(
+                                                null,
+                                                Collections.singleton(
+                                                        new TablePartition(tableId, partitionId)));
+                        metadataUpdater.invalidPhysicalTableBucketMeta(paths);
+                    }
+                });
     }
 
     @VisibleForTesting

@@ -33,7 +33,9 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.apache.fluss.flink.lake.split.LakeSnapshotAndFlussLogSplit.LAKE_SNAPSHOT_FLUSS_LOG_SPLIT_KIND;
 import static org.apache.fluss.flink.lake.split.LakeSnapshotSplit.LAKE_SNAPSHOT_SPLIT_KIND;
@@ -61,6 +63,19 @@ public class LakeSplitSerializer {
             out.writeInt(serializeBytes.length);
             out.write(serializeBytes);
             out.writeLong(lakeSplit.getRecordsToSkip());
+            // lakeDvMap, since VERSION_3 of the enclosing SourceSplitSerializer
+            Map<String, byte[]> lakeDvMap = lakeSplit.getLakeDvMap();
+            if (lakeDvMap == null) {
+                out.writeBoolean(false);
+            } else {
+                out.writeBoolean(true);
+                out.writeInt(lakeDvMap.size());
+                for (Map.Entry<String, byte[]> entry : lakeDvMap.entrySet()) {
+                    out.writeUTF(entry.getKey());
+                    out.writeInt(entry.getValue().length);
+                    out.write(entry.getValue());
+                }
+            }
         } else if (split instanceof LakeSnapshotAndFlussLogSplit) {
             // writing file store source split
             LakeSnapshotAndFlussLogSplit lakeSnapshotAndFlussLogSplit =
@@ -87,6 +102,33 @@ public class LakeSplitSerializer {
             out.writeLong(lakeSnapshotAndFlussLogSplit.getRecordsToSkip());
             out.writeInt(lakeSnapshotAndFlussLogSplit.getCurrentLakeSplitIndex());
             out.writeBoolean(lakeSnapshotAndFlussLogSplit.isLakeSplitFinished());
+            // DV snapshot data, since VERSION_3 of the enclosing SourceSplitSerializer
+            DvSnapshotInfo dvSnapshot = lakeSnapshotAndFlussLogSplit.getDvSnapshot();
+            if (dvSnapshot == null) {
+                out.writeBoolean(false);
+            } else {
+                out.writeBoolean(true);
+                // LakeDv: Map<String, byte[]>
+                Map<String, byte[]> lakeDv = dvSnapshot.getLakeDv();
+                out.writeInt(lakeDv.size());
+                for (Map.Entry<String, byte[]> entry : lakeDv.entrySet()) {
+                    out.writeUTF(entry.getKey());
+                    out.writeInt(entry.getValue().length);
+                    out.write(entry.getValue());
+                }
+                // LogDv: byte[]
+                byte[] logDvBitmap = dvSnapshot.getLogDvBitmap();
+                if (logDvBitmap == null) {
+                    out.writeBoolean(false);
+                } else {
+                    out.writeBoolean(true);
+                    out.writeInt(logDvBitmap.length);
+                    out.write(logDvBitmap);
+                }
+                // Offsets
+                out.writeLong(dvSnapshot.getLogEndOffset());
+                out.writeLong(dvSnapshot.getSnapshotStartOffset());
+            }
         } else {
             throw new UnsupportedOperationException(
                     "Unsupported split type: " + split.getClass().getName());
@@ -103,13 +145,17 @@ public class LakeSplitSerializer {
      * @param readRecordsToSkip whether the records to skip of a {@link LakeSnapshotSplit} are
      *     persisted, which depends on the version of the enclosing {@link SourceSplitSerializer}.
      *     If not, the split is read from the beginning.
+     * @param readDeletionVectors whether the deletion vectors of the split are persisted, which
+     *     depends on the version of the enclosing {@link SourceSplitSerializer}. If not, the split
+     *     carries no deletion vectors.
      */
     public SourceSplitBase deserialize(
             byte splitKind,
             TableBucket tableBucket,
             @Nullable String partition,
             DataInputDeserializer input,
-            boolean readRecordsToSkip)
+            boolean readRecordsToSkip,
+            boolean readDeletionVectors)
             throws IOException {
         int version = input.readInt();
         if (splitKind == LAKE_SNAPSHOT_SPLIT_KIND) {
@@ -118,8 +164,19 @@ public class LakeSplitSerializer {
             input.readFully(serializeBytes);
             LakeSplit lakeSplit = sourceSplitSerializer.deserialize(version, serializeBytes);
             long recordsToSkip = readRecordsToSkip ? input.readLong() : 0;
+            Map<String, byte[]> lakeDvMap = null;
+            if (readDeletionVectors && input.readBoolean()) {
+                int size = input.readInt();
+                lakeDvMap = new HashMap<>(size);
+                for (int i = 0; i < size; i++) {
+                    String fileName = input.readUTF();
+                    byte[] bitmap = new byte[input.readInt()];
+                    input.readFully(bitmap);
+                    lakeDvMap.put(fileName, bitmap);
+                }
+            }
             return new LakeSnapshotSplit(
-                    tableBucket, partition, lakeSplit, splitIndex, recordsToSkip);
+                    tableBucket, partition, lakeSplit, splitIndex, recordsToSkip, lakeDvMap);
         } else if (splitKind == LAKE_SNAPSHOT_FLUSS_LOG_SPLIT_KIND) {
             List<LakeSplit> lakeSplits = null;
             if (input.readBoolean()) {
@@ -136,6 +193,28 @@ public class LakeSplitSerializer {
             long recordsToSkip = input.readLong();
             int splitIndex = input.readInt();
             boolean isLakeSplitFinished = input.readBoolean();
+            DvSnapshotInfo dvSnapshot = null;
+            if (readDeletionVectors && input.readBoolean()) {
+                // LakeDv
+                int lakeDvSize = input.readInt();
+                Map<String, byte[]> lakeDv = new HashMap<>(lakeDvSize);
+                for (int i = 0; i < lakeDvSize; i++) {
+                    String filePath = input.readUTF();
+                    byte[] bitmap = new byte[input.readInt()];
+                    input.read(bitmap);
+                    lakeDv.put(filePath, bitmap);
+                }
+                // LogDv
+                byte[] logDvBitmap = null;
+                if (input.readBoolean()) {
+                    logDvBitmap = new byte[input.readInt()];
+                    input.readFully(logDvBitmap);
+                }
+                long logEndOffset = input.readLong();
+                long snapshotStartOffset = input.readLong();
+                dvSnapshot =
+                        new DvSnapshotInfo(lakeDv, logDvBitmap, logEndOffset, snapshotStartOffset);
+            }
             return new LakeSnapshotAndFlussLogSplit(
                     tableBucket,
                     partition,
@@ -144,7 +223,8 @@ public class LakeSplitSerializer {
                     stoppingOffset,
                     recordsToSkip,
                     splitIndex,
-                    isLakeSplitFinished);
+                    isLakeSplitFinished,
+                    dvSnapshot);
         } else {
             throw new UnsupportedOperationException("Unsupported split kind: " + splitKind);
         }

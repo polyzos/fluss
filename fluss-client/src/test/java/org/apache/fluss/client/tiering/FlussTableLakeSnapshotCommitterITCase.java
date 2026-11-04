@@ -97,7 +97,9 @@ class FlussTableLakeSnapshotCommitterITCase extends ClientToServerITCaseBase {
                 Collections.emptyMap(),
                 Collections.emptyMap(),
                 // test null which only keep one snapshot
-                null);
+                null,
+                null,
+                0L);
         LakeSnapshot lakeSnapshot = admin.getLatestLakeSnapshot(tablePath).get();
         assertThat(lakeSnapshot.getSnapshotId()).isEqualTo(snapshotId1);
         // get and check the offsets
@@ -125,7 +127,9 @@ class FlussTableLakeSnapshotCommitterITCase extends ClientToServerITCaseBase {
                 // don't care end offsets, maxTieredTimestamps
                 Collections.emptyMap(),
                 Collections.emptyMap(),
-                LakeCommitResult.KEEP_ALL_PREVIOUS);
+                LakeCommitResult.KEEP_ALL_PREVIOUS,
+                null,
+                0L);
 
         // test get readable snapshot
         LakeSnapshot readLakeSnapshot = admin.getLatestLakeSnapshot(tablePath).get();
@@ -151,7 +155,9 @@ class FlussTableLakeSnapshotCommitterITCase extends ClientToServerITCaseBase {
                 // don't care end offsets, maxTieredTimestamps
                 Collections.emptyMap(),
                 Collections.emptyMap(),
-                snapshotId2);
+                snapshotId2,
+                null,
+                0L);
 
         // now, verify we can't get snapshot 1
         assertThatThrownBy(() -> admin.getLakeSnapshot(tablePath, snapshotId1).get())

@@ -575,7 +575,13 @@ public class ReplicaTestBase {
 
     protected Replica makeKvReplica(PhysicalTablePath physicalTablePath, TableBucket tableBucket)
             throws Exception {
-        return makeReplica(physicalTablePath, tableBucket, true, null);
+        return makeReplica(physicalTablePath, tableBucket, true, null, DATA1_TABLE_INFO);
+    }
+
+    protected Replica makeKvReplica(
+            PhysicalTablePath physicalTablePath, TableBucket tableBucket, TableInfo tableInfo)
+            throws Exception {
+        return makeReplica(physicalTablePath, tableBucket, true, null, tableInfo);
     }
 
     private Replica makeReplica(
@@ -583,6 +589,17 @@ public class ReplicaTestBase {
             TableBucket tableBucket,
             boolean isPkTable,
             @Nullable SnapshotContext snapshotContext)
+            throws Exception {
+        return makeReplica(
+                physicalTablePath, tableBucket, isPkTable, snapshotContext, DATA1_TABLE_INFO);
+    }
+
+    private Replica makeReplica(
+            PhysicalTablePath physicalTablePath,
+            TableBucket tableBucket,
+            boolean isPkTable,
+            @Nullable SnapshotContext snapshotContext,
+            TableInfo tableInfo)
             throws Exception {
         if (snapshotContext == null) {
             snapshotContext =
@@ -613,7 +630,7 @@ public class ReplicaTestBase {
                 serverMetadataCache,
                 NOPErrorHandler.INSTANCE,
                 metricGroup,
-                DATA1_TABLE_INFO,
+                tableInfo,
                 remoteDataDir,
                 manualClock,
                 remoteLogManager,

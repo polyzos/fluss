@@ -27,6 +27,7 @@ import org.apache.fluss.metadata.TablePath;
 
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.Catalog;
@@ -69,28 +70,39 @@ public class IcebergSplitPlanner implements Planner<IcebergSplit> {
     @Override
     public List<IcebergSplit> plan() throws IOException {
         List<IcebergSplit> splits = new ArrayList<>();
+        // Close the catalog after planning, else each query leaks an S3FileIO connection pool.
         Catalog catalog = IcebergCatalogUtils.createIcebergCatalog(icebergConfig);
-        Table table = catalog.loadTable(toIceberg(tablePath));
-        Function<FileScanTask, List<String>> partitionExtract = createPartitionExtractor(table);
-        Function<FileScanTask, Integer> bucketExtractor = createBucketExtractor(table);
-        TableScan tableScan = table.newScan().useSnapshot(snapshotId);
-        if (filter != null) {
-            Set<String> filterColumns = referencedColumns(filter);
-            if (!filterColumns.isEmpty()) {
-                tableScan = tableScan.includeColumnStats(filterColumns);
+        try {
+            Table table = catalog.loadTable(toIceberg(tablePath));
+            Function<FileScanTask, List<String>> partitionExtract = createPartitionExtractor(table);
+            Function<FileScanTask, Integer> bucketExtractor = createBucketExtractor(table);
+            TableScan tableScan = table.newScan().useSnapshot(snapshotId);
+            if (filter != null) {
+                Set<String> filterColumns = referencedColumns(filter);
+                if (!filterColumns.isEmpty()) {
+                    tableScan = tableScan.includeColumnStats(filterColumns);
+                }
+                tableScan = tableScan.filter(filter);
             }
-            tableScan = tableScan.filter(filter);
+            try (CloseableIterable<FileScanTask> tasks = tableScan.planFiles()) {
+                tasks.forEach(
+                        task ->
+                                splits.add(
+                                        new IcebergSplit(
+                                                task,
+                                                bucketExtractor.apply(task),
+                                                partitionExtract.apply(task))));
+            }
+            return splits;
+        } finally {
+            if (catalog instanceof AutoCloseable) {
+                try {
+                    ((AutoCloseable) catalog).close();
+                } catch (Exception ignored) {
+                    // best-effort; a failed catalog close must not fail planning
+                }
+            }
         }
-        try (CloseableIterable<FileScanTask> tasks = tableScan.planFiles()) {
-            tasks.forEach(
-                    task ->
-                            splits.add(
-                                    new IcebergSplit(
-                                            task,
-                                            bucketExtractor.apply(task),
-                                            partitionExtract.apply(task))));
-        }
-        return splits;
     }
 
     @VisibleForTesting
@@ -141,10 +153,16 @@ public class IcebergSplitPlanner implements Planner<IcebergSplit> {
         return result;
     }
 
-    private Function<FileScanTask, Integer> createBucketExtractor(Table table) {
+    public static Function<FileScanTask, Integer> createBucketExtractor(Table table) {
+        Function<StructLike, Integer> fromPartition = createBucketExtractorFromPartition(table);
+        return task -> fromPartition.apply(task.file().partition());
+    }
+
+    /** Bucket extractor over a raw partition {@link StructLike} (e.g. from a {@code DataFile}). */
+    static Function<StructLike, Integer> createBucketExtractorFromPartition(Table table) {
         List<PartitionField> partitionFields = table.spec().fields();
         if (partitionFields.isEmpty()) {
-            return task -> -1;
+            return partition -> -1;
         }
 
         // Only a bucket(bucketKey) transform carries a physical bucket value in the partition
@@ -152,15 +170,24 @@ public class IcebergSplitPlanner implements Planner<IcebergSplit> {
         // A legacy identity(__bucket) partition or a bucket-unaware user partition has none.
         int bucketFieldIndex = partitionFields.size() - 1;
         if (!IcebergPartitionSpecUtils.isBucketTransform(partitionFields.get(bucketFieldIndex))) {
-            return task -> -1;
+            return partition -> -1;
         }
-        return task -> task.file().partition().get(bucketFieldIndex, Integer.class);
+        return partition -> partition.get(bucketFieldIndex, Integer.class);
     }
 
-    private Function<FileScanTask, List<String>> createPartitionExtractor(Table table) {
+    public static Function<FileScanTask, List<String>> createPartitionExtractor(Table table) {
+        Function<StructLike, List<String>> fromPartition =
+                createPartitionExtractorFromPartition(table);
+        return task -> fromPartition.apply(task.partition());
+    }
+
+    /**
+     * Partition-value extractor over a raw partition {@link StructLike} (e.g. a {@code DataFile}).
+     */
+    static Function<StructLike, List<String>> createPartitionExtractorFromPartition(Table table) {
         List<PartitionField> partitionFields = table.spec().fields();
         if (partitionFields.isEmpty()) {
-            return task -> Collections.emptyList();
+            return partition -> Collections.emptyList();
         }
 
         // The trailing field is the Fluss bucket (legacy identity(__bucket) or a bucket(bucketKey)
@@ -172,14 +199,14 @@ public class IcebergSplitPlanner implements Planner<IcebergSplit> {
                         : partitionFields.size();
 
         if (partitionColCount == 0) {
-            return task -> Collections.emptyList();
+            return partition -> Collections.emptyList();
         }
         List<Integer> partitionFieldIndices =
                 IntStream.range(0, partitionColCount).boxed().collect(Collectors.toList());
-        return task ->
+        return partition ->
                 partitionFieldIndices.stream()
                         // since currently, only string partition is supported
-                        .map(index -> task.partition().get(index, String.class))
+                        .map(index -> partition.get(index, String.class))
                         .collect(Collectors.toList());
     }
 }

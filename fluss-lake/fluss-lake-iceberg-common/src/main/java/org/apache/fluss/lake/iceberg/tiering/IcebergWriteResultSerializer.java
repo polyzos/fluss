@@ -41,7 +41,8 @@ import static org.apache.fluss.lake.iceberg.utils.IcebergJsonSerdeUtils.toJsonBy
  *       optional {@link RewriteDataFileResult}, which can only be read by the Iceberg version that
  *       wrote them.
  *   <li><b>Version 2 (Current):</b> A JSON document written by {@link IcebergWriteResultJsonSerde},
- *       so that the write result can be read across Iceberg versions.
+ *       so that the write result can be read across Iceberg versions. The document may carry an
+ *       optional position index delta, written only for tables with derived deletion vectors.
  * </ul>
  *
  * <p>This serializer can deserialize write results of all previous versions, but always produces

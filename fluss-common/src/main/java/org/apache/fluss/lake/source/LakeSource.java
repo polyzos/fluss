@@ -102,6 +102,34 @@ public interface LakeSource<Split extends LakeSplit> extends Serializable {
     LakeSource<Split> copy();
 
     /**
+     * Plans delta since the last committed snapshot. Detects compaction and returns splits to scan
+     * and deleted files to clean up.
+     *
+     * <p>Each split contains exactly one compaction output file. Reader uses {@link
+     * #createRecordReader} to read splits, scanning the {@code __rowid} column to build RowId to
+     * FilePos mappings.
+     *
+     * @param fromSnapshotId the last snapshot ID committed to Fluss (-1 if none)
+     * @return delta plan with splits and deleted files, or null if no compaction detected
+     */
+    @Nullable
+    default DataDeltaPlan<Split> planDelta(long fromSnapshotId) {
+        return null;
+    }
+
+    /**
+     * Plans the re-index of data files rewritten since {@code baseSnapshotId} by any engine,
+     * comparing the base's data files with the current snapshot's so expired snapshots in between
+     * cannot hide a rewrite. Returns null if no data file was removed; otherwise one split per new
+     * file (read with {@link RecordReader#readWithPos()}) and the removed files, or every current
+     * file if the base no longer exists.
+     */
+    @Nullable
+    default DataDeltaPlan<Split> planRewrite(long baseSnapshotId) {
+        return null;
+    }
+
+    /**
      * Context interface for planners, providing the snapshot id of the table in data-lake to plan
      * splits.
      */

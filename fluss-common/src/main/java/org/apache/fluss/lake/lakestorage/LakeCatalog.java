@@ -27,7 +27,9 @@ import org.apache.fluss.security.acl.FlussPrincipal;
 
 import javax.annotation.Nullable;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -90,6 +92,16 @@ public interface LakeCatalog extends AutoCloseable {
      */
     void alterTable(TablePath tablePath, List<TableChange> tableChanges, Context context)
             throws TableNotExistException;
+
+    /**
+     * Loads all snapshot properties from the lake table's latest snapshot.
+     *
+     * @param tablePath the table to read from
+     * @return the snapshot properties map, or an empty map if no snapshot exists
+     */
+    default Map<String, String> loadSnapshotProperties(TablePath tablePath) {
+        return Collections.emptyMap();
+    }
 
     @Override
     default void close() throws Exception {

@@ -65,6 +65,8 @@ import org.apache.fluss.server.kv.KvStateLookupResult;
 import org.apache.fluss.server.kv.KvTablet;
 import org.apache.fluss.server.kv.RemoteLogFetcher;
 import org.apache.fluss.server.kv.autoinc.AutoIncIDRange;
+import org.apache.fluss.server.kv.dv.DerivedDvManager;
+import org.apache.fluss.server.kv.dv.DerivedDvRecoverySource;
 import org.apache.fluss.server.kv.historical.HistoricalValueLookup;
 import org.apache.fluss.server.kv.historical.LocalValueLookupResult;
 import org.apache.fluss.server.kv.rocksdb.RocksDBKvBuilder;
@@ -976,6 +978,22 @@ public final class Replica {
                         .advanceHistoricalCleanupOffset(restoreStartOffset);
             }
             recoverKvTablet(restoreStartOffset, rowCount, autoIncIDRange);
+            // Rebuild the position index and the log tail before the replica serves.
+            if (kvTablet.getDvManager() instanceof DerivedDvManager) {
+                ((DerivedDvManager) kvTablet.getDvManager())
+                        .recover(
+                                new DerivedDvRecoverySource(
+                                        snapshotContext.getRemoteDataDir(),
+                                        tableInfo,
+                                        tableBucket,
+                                        logTablet,
+                                        remoteLogManager,
+                                        snapshotContext.getZooKeeperClient(),
+                                        schemaGetter,
+                                        new File(logTablet.getLogDir(), "derived-dv-recovery"),
+                                        snapshotContext.remoteLogPrefetchNumInRecoverKv(),
+                                        snapshotContext.remoteLogDownloadThreadsInRecoverKv()));
+            }
         } catch (Exception e) {
             throw new KvStorageException(
                     String.format(

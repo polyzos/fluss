@@ -18,6 +18,7 @@
 package org.apache.fluss.metadata;
 
 import org.apache.fluss.annotation.PublicEvolving;
+import org.apache.fluss.config.ConfigOptions;
 import org.apache.fluss.config.Configuration;
 import org.apache.fluss.config.StatisticsColumnsConfig;
 import org.apache.fluss.config.TableConfig;
@@ -285,6 +286,24 @@ public final class TableInfo {
      */
     public boolean isStatisticsEnabled() {
         return tableConfig.isStatisticsEnabled();
+    }
+
+    /** Returns true if deletion vectors is enabled for this table. */
+    public boolean isDeletionVectorsEnabled() {
+        return properties.get(ConfigOptions.TABLE_DELETION_VECTORS_ENABLED);
+    }
+
+    /** Whether KV values and changelog records carry a RowId, which the derived mode omits. */
+    public boolean isRowIdEncoded() {
+        return isDeletionVectorsEnabled() && !isDeletionVectorsDerived();
+    }
+
+    /** Whether deletion vectors are enabled in the 'derived' mode. */
+    public boolean isDeletionVectorsDerived() {
+        return isDeletionVectorsEnabled()
+                && "derived"
+                        .equalsIgnoreCase(
+                                properties.get(ConfigOptions.TABLE_DELETION_VECTORS_MODE));
     }
 
     /**

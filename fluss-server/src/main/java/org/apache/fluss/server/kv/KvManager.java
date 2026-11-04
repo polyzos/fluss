@@ -592,6 +592,11 @@ public final class KvManager extends TabletManagerBase implements ServerReconfig
                                     autoIncrementManager,
                                     clock,
                                     tableConfig);
+                    if (tablet.getDvManager() != null
+                            && "fip31-batched"
+                                    .equalsIgnoreCase(tableConfig.getDeletionVectorsMode())) {
+                        tablet.getDvManager().setBatched(true);
+                    }
                     currentKvs.put(tableBucket, tablet);
 
                     LOG.info(
@@ -766,6 +771,10 @@ public final class KvManager extends TabletManagerBase implements ServerReconfig
                         autoIncrementManager,
                         clock,
                         tableConfig);
+        if (kvTablet.getDvManager() != null
+                && "fip31-batched".equalsIgnoreCase(tableConfig.getDeletionVectorsMode())) {
+            kvTablet.getDvManager().setBatched(true);
+        }
         currentKvs.put(tableBucket, kvTablet);
 
         return kvTablet;

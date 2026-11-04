@@ -145,6 +145,7 @@ public class TableDescriptorValidation {
         validateStatisticsConfig(tableDescriptor);
         checkTableLakeFormatMatchesCluster(tableConf, clusterDataLakeFormat);
         checkCustomLakePathSupported(tableConf, clusterDataLakeFormat);
+        checkDeletionVectors(tableDescriptor, tableConf);
     }
 
     /** Validates the schema after altering table columns. */
@@ -259,6 +260,60 @@ public class TableDescriptorValidation {
         if (dataLakeFormat != DataLakeFormat.PAIMON && dataLakeFormat != DataLakeFormat.ICEBERG) {
             throw new InvalidConfigException(
                     "Custom lake table path is only supported for Paimon and Iceberg.");
+        }
+    }
+
+    private static void checkDeletionVectors(
+            TableDescriptor tableDescriptor, Configuration tableConf) {
+        if (!tableConf.get(ConfigOptions.TABLE_DELETION_VECTORS_ENABLED)) {
+            return;
+        }
+
+        if (!tableDescriptor.hasPrimaryKey()) {
+            throw new InvalidConfigException(
+                    "'table.deletion-vectors.enabled' can only be enabled on primary key tables.");
+        }
+
+        if (!tableConf.get(ConfigOptions.TABLE_DATALAKE_ENABLED)) {
+            throw new InvalidConfigException(
+                    "'table.deletion-vectors.enabled' requires 'table.datalake.enabled' = true.");
+        }
+
+        ChangelogImage changelogImage = tableConf.get(ConfigOptions.TABLE_CHANGELOG_IMAGE);
+        if (changelogImage != ChangelogImage.FULL) {
+            throw new InvalidConfigException(
+                    "'table.deletion-vectors.enabled' requires FULL changelog image mode. "
+                            + "Please set 'table.changelog.image' to 'FULL' or remove the setting "
+                            + "(FULL is the default).");
+        }
+
+        // The RowId-encoded modes prefix KV values with a varint RowId on top of the PLAIN value
+        // layout, which can't be combined with the TAGGED layout (row TTL, historical partitions)
+        // that keeps its value tag at byte 0. The derived mode keeps values unchanged.
+        String dvMode = tableConf.get(ConfigOptions.TABLE_DELETION_VECTORS_MODE);
+        boolean rowIdEncoded = !"derived".equalsIgnoreCase(dvMode);
+        if (rowIdEncoded) {
+            Optional<Integer> layoutVersion =
+                    tableConf.getOptional(ConfigOptions.TABLE_KV_VALUE_LAYOUT_VERSION);
+            if (layoutVersion.isPresent() && layoutVersion.get() != KvValueLayout.PLAIN.version()) {
+                throw new InvalidConfigException(
+                        String.format(
+                                "'table.deletion-vectors.enabled' requires the PLAIN KV value "
+                                        + "layout (version %d), but '%s' is %d. Note that '%s' "
+                                        + "requires a tagged value layout and is not supported "
+                                        + "with deletion vectors.",
+                                KvValueLayout.PLAIN.version(),
+                                ConfigOptions.TABLE_KV_VALUE_LAYOUT_VERSION.key(),
+                                layoutVersion.get(),
+                                ConfigOptions.TABLE_KV_TTL.key()));
+            }
+            if (tableConf.get(ConfigOptions.TABLE_DATALAKE_HISTORICAL_PARTITION_ENABLED)) {
+                throw new InvalidConfigException(
+                        String.format(
+                                "'table.deletion-vectors.enabled' is not supported together "
+                                        + "with '%s'.",
+                                ConfigOptions.TABLE_DATALAKE_HISTORICAL_PARTITION_ENABLED.key()));
+            }
         }
     }
 

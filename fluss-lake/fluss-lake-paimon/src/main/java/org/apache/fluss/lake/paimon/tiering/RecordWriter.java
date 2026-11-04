@@ -44,6 +44,7 @@ public abstract class RecordWriter<T> implements AutoCloseable {
     protected final boolean historicalPartition;
     // Null for historical writers, which derive the original partition from each record.
     protected final @Nullable BinaryRow fixedPartition;
+    protected final boolean dvEnabled;
     protected final FlussRecordAsPaimonRow flussRecordAsPaimonRow;
 
     public RecordWriter(
@@ -54,12 +55,14 @@ public abstract class RecordWriter<T> implements AutoCloseable {
             List<String> partitionKeys,
             org.apache.fluss.types.RowType flussRowType,
             boolean paimonIncludingSystemColumns,
-            boolean historicalPartition) {
+            boolean historicalPartition,
+            boolean dvEnabled) {
         this.tableWrite = tableWrite;
         this.tableRowType = tableRowType;
         this.bucket = tableBucket.getBucket();
         this.partitionKeys = partitionKeys;
         this.historicalPartition = historicalPartition;
+        this.dvEnabled = dvEnabled;
         if (historicalPartition) {
             this.fixedPartition = null;
         } else if (partition == null || partitionKeys.isEmpty()) {
@@ -71,7 +74,10 @@ public abstract class RecordWriter<T> implements AutoCloseable {
         }
         this.flussRecordAsPaimonRow =
                 new FlussRecordAsPaimonRow(
-                        tableBucket.getBucket(), tableRowType, paimonIncludingSystemColumns);
+                        tableBucket.getBucket(),
+                        tableRowType,
+                        paimonIncludingSystemColumns,
+                        dvEnabled);
     }
 
     public abstract void write(LogRecord record) throws Exception;

@@ -29,6 +29,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
 import static org.apache.fluss.lake.iceberg.IcebergSchemaUtils.LEGACY_SYSTEM_COLUMNS;
+import static org.apache.fluss.lake.iceberg.IcebergSchemaUtils.ROWID_COLUMN_NAME;
 import static org.apache.fluss.metadata.TableDescriptor.BUCKET_COLUMN_NAME;
 import static org.apache.fluss.metadata.TableDescriptor.OFFSET_COLUMN_NAME;
 import static org.apache.fluss.metadata.TableDescriptor.TIMESTAMP_COLUMN_NAME;
@@ -45,19 +46,33 @@ public class FlussRecordAsIcebergRecord extends FlussRowAsIcebergRecord {
     private LogRecord logRecord;
     private final int bucket;
     private final boolean isLegacy;
+    // DV tables append a trailing __rowid column (after the legacy system columns, if any)
+    private final boolean dvEnabled;
 
     // the count of user (business) columns; system columns (if any) start at this index
     private final int businessFieldCount;
+    // the position of the __rowid column, or -1 if the table has none
+    private final int rowIdPos;
 
     public FlussRecordAsIcebergRecord(
             int bucket, Types.StructType structType, RowType flussRowType, boolean isLegacy) {
+        this(bucket, structType, flussRowType, isLegacy, false);
+    }
+
+    public FlussRecordAsIcebergRecord(
+            int bucket,
+            Types.StructType structType,
+            RowType flussRowType,
+            boolean isLegacy,
+            boolean dvEnabled) {
         super(structType, flussRowType);
         this.bucket = bucket;
         this.isLegacy = isLegacy;
+        this.dvEnabled = dvEnabled;
+        int fieldCount = structType.fields().size();
+        this.rowIdPos = dvEnabled ? fieldCount - 1 : -1;
         this.businessFieldCount =
-                isLegacy
-                        ? structType.fields().size() - LEGACY_SYSTEM_COLUMNS.size()
-                        : structType.fields().size();
+                fieldCount - (isLegacy ? LEGACY_SYSTEM_COLUMNS.size() : 0) - (dvEnabled ? 1 : 0);
     }
 
     public void setFlussRecord(LogRecord logRecord) {
@@ -75,6 +90,9 @@ public class FlussRecordAsIcebergRecord extends FlussRowAsIcebergRecord {
 
     @Override
     public Object getField(String name) {
+        if (dvEnabled && ROWID_COLUMN_NAME.equals(name)) {
+            return logRecord.logOffset();
+        }
         if (isLegacy && LEGACY_SYSTEM_COLUMNS.containsKey(name)) {
             switch (name) {
                 case BUCKET_COLUMN_NAME:
@@ -92,6 +110,10 @@ public class FlussRecordAsIcebergRecord extends FlussRowAsIcebergRecord {
 
     @Override
     public Object get(int pos) {
+        if (dvEnabled && pos == rowIdPos) {
+            // __rowid column = RowId = originating +I/+U log offset
+            return logRecord.logOffset();
+        }
         if (isLegacy) {
             if (pos == businessFieldCount) {
                 return bucket;

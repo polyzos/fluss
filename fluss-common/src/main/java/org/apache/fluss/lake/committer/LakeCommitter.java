@@ -45,6 +45,9 @@ public interface LakeCommitter<WriteResult, CommittableT> extends AutoCloseable 
      */
     String FLUSS_LAKE_SNAP_BUCKET_OFFSET_PROPERTY = "fluss-offsets";
 
+    /** The property key for the next file ID counter used by DV FileDict. */
+    String FLUSS_LAKE_SNAP_NEXT_FILE_ID_PROPERTY = "fluss-next-file-id";
+
     /**
      * Converts a list of write results to a committable object.
      *
@@ -116,4 +119,47 @@ public interface LakeCommitter<WriteResult, CommittableT> extends AutoCloseable 
     @Nullable
     CommittedLakeSnapshot getMissingLakeSnapshot(@Nullable Long latestLakeSnapshotIdOfFluss)
             throws IOException;
+
+    /**
+     * Commits {@code committable} together with deletion vectors for the given row positions per
+     * data-file basename, atomically on top of {@code baseSnapshotId}. Fails if a referenced file
+     * is gone or a conflicting commit happened since the base.
+     */
+    default LakeCommitResult commitWithDeletes(
+            CommittableT committable,
+            Map<String, String> snapshotProperties,
+            Map<String, long[]> deletedPositionsByFile,
+            long baseSnapshotId)
+            throws IOException {
+        throw new UnsupportedOperationException("commitWithDeletes is not supported");
+    }
+
+    /**
+     * Commits this round's compaction rewrite, if any, before the round's deletes so that it
+     * validates against the files it read. Returns its snapshot id, or null if there is none or it
+     * was rejected because the replaced files changed; a rejected rewrite is safe to skip.
+     */
+    @Nullable
+    default Long commitPendingRewrite(CommittableT committable) throws IOException {
+        return null;
+    }
+
+    /**
+     * Materializes logical deletion vectors into physical delete files on top of {@code
+     * baseSnapshotId}. The map is keyed by lake data-file path; each value is a serialized
+     * RoaringBitmap of deleted row positions in that file. No-op by default; lakes that support
+     * deletion vectors (e.g. Iceberg v3 Puffin) override this.
+     *
+     * @param lakeDvByFilePath deleted row positions per lake data-file path (serialized bitmaps)
+     * @param baseSnapshotId the snapshot whose data files the positions reference
+     * @param snapshotProperties properties to attach to the produced snapshot
+     * @throws IOException if an I/O error occurs
+     */
+    default void materializeDeletionVectors(
+            Map<String, byte[]> lakeDvByFilePath,
+            long baseSnapshotId,
+            Map<String, String> snapshotProperties)
+            throws IOException {
+        // no-op by default
+    }
 }

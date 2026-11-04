@@ -20,12 +20,15 @@ package org.apache.fluss.lake.iceberg.tiering;
 import org.apache.fluss.config.Configuration;
 import org.apache.fluss.lake.committer.CommitterInitContext;
 import org.apache.fluss.lake.committer.LakeCommitter;
+import org.apache.fluss.lake.iceberg.source.IcebergLakeSource;
 import org.apache.fluss.lake.serializer.SimpleVersionedSerializer;
+import org.apache.fluss.lake.source.LakeSource;
 import org.apache.fluss.lake.writer.LakeTieringFactory;
 import org.apache.fluss.lake.writer.LakeWriter;
 import org.apache.fluss.lake.writer.TieringTableValidator;
 import org.apache.fluss.lake.writer.WriterInitContext;
 import org.apache.fluss.metadata.TableInfo;
+import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.utils.IOUtils;
 
 import org.apache.iceberg.Table;
@@ -42,9 +45,11 @@ public class IcebergLakeTieringFactory
 
     private static final long serialVersionUID = 1L;
 
+    private final Configuration icebergConfig;
     private final IcebergCatalogProvider icebergCatalogProvider;
 
     public IcebergLakeTieringFactory(Configuration icebergConfig) {
+        this.icebergConfig = icebergConfig;
         this.icebergCatalogProvider = new IcebergCatalogProvider(icebergConfig);
     }
 
@@ -83,5 +88,19 @@ public class IcebergLakeTieringFactory
     @Override
     public SimpleVersionedSerializer<IcebergCommittable> getCommittableSerializer() {
         return new IcebergCommittableSerializer();
+    }
+
+    @Override
+    public LakeSource<?> createLakeSource(CommitterInitContext committerInitContext) {
+        // The Iceberg table may live at a custom lake table path, like for the committer.
+        return new IcebergLakeSource(
+                committerInitContext.lakeTieringConfig(),
+                committerInitContext.tableInfo().getLakeTablePath());
+    }
+
+    /** Creates the lake source of the Iceberg table at the given lake table path. */
+    @Override
+    public LakeSource<?> createLakeSource(TablePath tablePath) {
+        return new IcebergLakeSource(icebergConfig, tablePath);
     }
 }

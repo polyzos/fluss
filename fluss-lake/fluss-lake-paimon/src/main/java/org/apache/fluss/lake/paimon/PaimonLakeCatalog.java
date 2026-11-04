@@ -54,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -75,6 +76,9 @@ public class PaimonLakeCatalog implements LakeCatalog {
     private static final String PAIMON_PATH_KEY = "paimon.path";
 
     private static final String BUCKET_NUM_PROPERTY = "bucket.num";
+
+    /** System column name for the RowId (logOffset) used in DV-enabled tables. */
+    public static final String ROWID_COLUMN_NAME = "__rowid";
 
     public static final LinkedHashMap<String, DataType> LEGACY_SYSTEM_COLUMNS =
             new LinkedHashMap<>();
@@ -307,6 +311,21 @@ public class PaimonLakeCatalog implements LakeCatalog {
         return new InvalidAlterTableException(
                 String.format(
                         "'%s' can only be altered before the Paimon table is created.", optionKey));
+    }
+
+    @Override
+    public Map<String, String> loadSnapshotProperties(TablePath tablePath) {
+        try {
+            Table table = paimonCatalog.getTable(toPaimon(tablePath));
+            FileStoreTable fileStoreTable = (FileStoreTable) table;
+            Snapshot snapshot = fileStoreTable.snapshotManager().latestSnapshot();
+            if (snapshot == null || snapshot.properties() == null) {
+                return Collections.emptyMap();
+            }
+            return snapshot.properties();
+        } catch (Catalog.TableNotExistException e) {
+            return Collections.emptyMap();
+        }
     }
 
     private void createTable(TablePath tablePath, Schema schema, Context context)

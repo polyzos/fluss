@@ -23,6 +23,7 @@ import org.apache.fluss.lake.source.TestingLakeSplit;
 import org.apache.fluss.metadata.TableBucket;
 
 import org.apache.flink.core.memory.DataOutputSerializer;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -210,8 +211,25 @@ class SourceSplitSerializerTest {
         assertLakeSnapshotSplit(deserializedSplit, split, 0L);
     }
 
+    @Test
+    void testDeserializeVersionTwoLogSplit() throws Exception {
+        // the layout of LogSplit before VERSION_3, which has no LogDv bitmap
+        DataOutputSerializer out = new DataOutputSerializer(64);
+        out.writeByte(SourceSplitBase.LOG_SPLIT_FLAG);
+        out.writeLong(tableBucket.getTableId());
+        out.writeBoolean(false);
+        out.writeInt(tableBucket.getBucket());
+        out.writeLong(10L);
+        out.writeLong(20L);
+
+        SourceSplitBase deserializedSplit = serializer.deserialize(2, out.getCopyOfBuffer());
+
+        assertThat(deserializedSplit).isEqualTo(new LogSplit(tableBucket, null, 10L, 20L));
+        assertThat(deserializedSplit.asLogSplit().getLogDvBitmap()).isNull();
+    }
+
     @ParameterizedTest
-    @ValueSource(ints = {-1, 3})
+    @ValueSource(ints = {-1, 4})
     void testDeserializeUnknownVersion(int version) {
         assertThatThrownBy(
                         () ->

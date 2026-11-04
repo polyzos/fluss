@@ -41,6 +41,7 @@ public class LogSplitState extends SourceSplitState {
                 logSplit.tableBucket,
                 logSplit.getPartitionName(),
                 nextOffset,
-                logSplit.getStoppingOffset().orElse(NO_STOPPING_OFFSET));
+                logSplit.getStoppingOffset().orElse(NO_STOPPING_OFFSET),
+                logSplit.getLogDvBitmap());
     }
 }

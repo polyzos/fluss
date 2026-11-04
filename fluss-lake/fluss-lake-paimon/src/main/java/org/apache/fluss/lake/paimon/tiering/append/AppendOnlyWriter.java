@@ -66,7 +66,8 @@ public class AppendOnlyWriter extends RecordWriter<InternalRow> {
                 partitionKeys,
                 flussRowType,
                 paimonIncludingSystemColumns,
-                historicalPartition);
+                historicalPartition,
+                false);
         this.fileStoreTable = fileStoreTable;
         this.paimonIncludingSystemColumns = paimonIncludingSystemColumns;
     }

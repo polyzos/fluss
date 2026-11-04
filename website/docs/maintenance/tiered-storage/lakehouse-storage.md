@@ -77,6 +77,9 @@ CREATE TABLE my_table (
 | `lake.tiering.auto-expire-snapshot` | Boolean | false | Auto-trigger snapshot expiration on commit, even if `table.datalake.auto-expire-snapshot` is false |
 | `lake.tiering.partition.mark-done.enabled` | Boolean | false | Enable [partition mark-done](../../streaming-lakehouse/tiering-service.md#partition-mark-done) using the actual lake table's options |
 | `lake.tiering.io.tmp.dirs` | String | Flink temporary directories | Local directories used for temporary I/O files. If not configured, a `fluss` child directory under each Flink temporary directory is used. Separate multiple directories with commas or the system path separator |
+| `lake.tiering.deletion-vectors.trim-interval` | Integer | 20 | For tables with `table.deletion-vectors.mode` = `derived`: every this many tiering rounds of a table, position index changes that all buckets with data have a checkpoint past are removed, together with index changes of failed rounds |
+| `lake.tiering.deletion-vectors.trim-retain` | Integer | 2 | The number of index changes kept before the oldest checkpoint when the index history of a table is trimmed |
+| `lake.tiering.deletion-vectors.orphan-min-age` | Duration | 6h | An index change that was never registered is removed once it is this old. Must be longer than the longest tiering round |
 
 ## Data Retention
 

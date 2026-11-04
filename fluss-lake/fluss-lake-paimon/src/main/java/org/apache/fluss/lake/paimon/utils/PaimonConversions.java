@@ -20,6 +20,7 @@ package org.apache.fluss.lake.paimon.utils;
 import org.apache.fluss.annotation.VisibleForTesting;
 import org.apache.fluss.config.AutoPartitionTimeUnit;
 import org.apache.fluss.config.ConfigOptions;
+import org.apache.fluss.config.Configuration;
 import org.apache.fluss.exception.InvalidConfigException;
 import org.apache.fluss.exception.InvalidTableException;
 import org.apache.fluss.lake.paimon.source.FlussRowAsPaimonRow;
@@ -49,6 +50,7 @@ import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.Table;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.RowKind;
 import org.apache.paimon.types.RowType;
 
@@ -66,6 +68,7 @@ import java.util.function.Function;
 
 import static org.apache.fluss.config.ConfigOptions.TABLE_DATALAKE_ENABLED;
 import static org.apache.fluss.lake.paimon.PaimonLakeCatalog.LEGACY_SYSTEM_COLUMNS;
+import static org.apache.fluss.lake.paimon.PaimonLakeCatalog.ROWID_COLUMN_NAME;
 import static org.apache.fluss.utils.Preconditions.checkState;
 
 /** Utils for conversion between Paimon and Fluss. */
@@ -251,7 +254,8 @@ public class PaimonConversions {
             } else if (tableChange instanceof TableChange.AddColumn) {
                 TableChange.AddColumn addColumn = (TableChange.AddColumn) tableChange;
 
-                if (LEGACY_SYSTEM_COLUMNS.containsKey(addColumn.getName())) {
+                if (LEGACY_SYSTEM_COLUMNS.containsKey(addColumn.getName())
+                        || ROWID_COLUMN_NAME.equals(addColumn.getName())) {
                     throw new InvalidTableException(
                             "Column "
                                     + addColumn.getName()
@@ -283,6 +287,16 @@ public class PaimonConversions {
                                     addColumn.getComment(),
                                     SchemaChange.Move.before(
                                             addColumn.getName(), firstSystemColumnName)));
+                } else if (paimonTable.rowType().containsField(ROWID_COLUMN_NAME)) {
+                    // Clean DV-enabled tables keep the __rowid column as the last physical column,
+                    // so a new business column must be inserted right before it.
+                    schemaChanges.add(
+                            SchemaChange.addColumn(
+                                    addColumn.getName(),
+                                    paimonDataType,
+                                    addColumn.getComment(),
+                                    SchemaChange.Move.before(
+                                            addColumn.getName(), ROWID_COLUMN_NAME)));
                 } else {
                     // Clean tables have no trailing system columns, so a new business column is
                     // simply appended at the end.
@@ -378,7 +392,8 @@ public class PaimonConversions {
         for (org.apache.fluss.metadata.Schema.Column column :
                 tableDescriptor.getSchema().getColumns()) {
             String columnName = column.getName();
-            if (LEGACY_SYSTEM_COLUMNS.containsKey(columnName)) {
+            if (LEGACY_SYSTEM_COLUMNS.containsKey(columnName)
+                    || columnName.equals(ROWID_COLUMN_NAME)) {
                 throw new InvalidTableException(
                         "Column "
                                 + columnName
@@ -389,6 +404,8 @@ public class PaimonConversions {
                     column.getDataType().accept(FlussDataTypeToPaimonDataType.INSTANCE),
                     column.getComment().orElse(null));
         }
+
+        // Note: __rowid column is added later after DV options are resolved (see below)
 
         // set pk
         if (tableDescriptor.hasPrimaryKey()) {
@@ -414,6 +431,18 @@ public class PaimonConversions {
             options.set(LAKESTREAM_ENABLED_OPTION_KEY, Boolean.TRUE.toString());
         }
 
+        // Fluss DV doesn't support toggle after creation, so Paimon DV must be consistent
+        Configuration flussConf = Configuration.fromMap(tableDescriptor.getProperties());
+        boolean flussDvEnabled = flussConf.get(ConfigOptions.TABLE_DELETION_VECTORS_ENABLED);
+        boolean paimonDvEnabled = options.get(CoreOptions.DELETION_VECTORS_ENABLED);
+        if (flussDvEnabled && !paimonDvEnabled) {
+            options.set(CoreOptions.DELETION_VECTORS_ENABLED, true);
+        } else if (!flussDvEnabled && paimonDvEnabled) {
+            throw new InvalidConfigException(
+                    "'paimon.deletion-vectors.enabled' requires 'table.deletion-vectors.enabled' = true. "
+                            + "Fluss must maintain the three-layer DV architecture for Paimon DV to work.");
+        }
+
         schemaBuilder.options(options.toMap());
 
         // currently we only support string type, todo
@@ -433,6 +462,11 @@ public class PaimonConversions {
                                 "Only support String type as partitioned key when 'deletion-vectors.enabled' is set to true for paimon, found '%s' is not String type.",
                                 invalidKey.get()));
             }
+        }
+
+        // Add __rowid system column for DV-enabled tables
+        if (options.get(CoreOptions.DELETION_VECTORS_ENABLED)) {
+            schemaBuilder.column(ROWID_COLUMN_NAME, DataTypes.BIGINT());
         }
 
         // set comment
