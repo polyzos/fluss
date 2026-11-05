@@ -370,7 +370,9 @@ public class TieringCommitOperator<WriteResult, Committable>
 
         // all buckets were empty — nothing to commit to the lake
         if (nonEmptyResults.isEmpty()) {
-            if (hasRowPosResults) {
+            if (currentTableInfo.isDeletionVectorsDerived()) {
+                reindexIdleDerivedTable(tableId, tablePath, currentTableInfo);
+            } else if (hasRowPosResults) {
                 // DV index-only round (idle table): index the latest snapshot's files and make it
                 // readable without a lake commit, else its last writes stay unmasked until new data
                 commitDvIndexOnly(tableId, tablePath, rowPosResults, deletedFiles, indexSnapshotId);
@@ -492,6 +494,34 @@ public class TieringCommitOperator<WriteResult, Committable>
                     indexSnapshotId);
             return new TieringCommitResult<>(committable, lakeCommitResult.getTieringStats());
         }
+    }
+
+    /**
+     * A derived round without data: re-indexes the lake files another engine rewrote since the
+     * latest snapshot and makes the rewritten snapshot readable, else an idle table keeps reading
+     * the snapshot before the rewrite until new data arrives.
+     *
+     * <p>A rewrite to re-index holds the round like a data round's ({@link
+     * DerivedReindexDeferred}); the resumed round comes back here and finds nothing new to
+     * re-index, unless the table was rewritten again meanwhile.
+     */
+    private void reindexIdleDerivedTable(long tableId, TablePath tablePath, TableInfo tableInfo)
+            throws Exception {
+        resumingDerived.remove(tableId);
+        LakeSnapshot base = getLatestLakeSnapshot(tablePath);
+        if (base == null) {
+            LOG.info(
+                    "Commit tiering write results is empty for table {} ({}).", tablePath, tableId);
+            return;
+        }
+        Long compactSnapshotId = triggerDerivedReindex(tableId, tablePath, tableInfo, base);
+        if (compactSnapshotId != null) {
+            throw new DerivedReindexDeferred(compactSnapshotId, false);
+        }
+        LOG.info(
+                "Derived DV: idle round of {} found no rewrite since snapshot {}.",
+                tablePath,
+                base.getSnapshotId());
     }
 
     private static final int DERIVED_LOOKUP_CHUNK = 50_000;

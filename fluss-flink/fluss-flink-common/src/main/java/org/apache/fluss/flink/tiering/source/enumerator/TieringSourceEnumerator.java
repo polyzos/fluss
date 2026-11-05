@@ -706,6 +706,11 @@ public class TieringSourceEnumerator
     /**
      * Idle DV table with a latest commit not yet given an index-only round: one empty split so the
      * committer indexes it (a no-op if already indexed), else its last writes stay unmasked.
+     *
+     * <p>Derived tables have no such lag, but a rewrite of their lake files by another engine is
+     * only re-indexed by the committer. Fluss's latest lake snapshot does not change with such a
+     * rewrite, so every idle round of a derived table gets the split; the committer's check is a
+     * single lake metadata load when nothing was rewritten.
      */
     private List<TieringSplit> dvIndexOnlySplits(TableInfo tableInfo) throws Exception {
         // Iceberg only: Paimon's readable snapshot follows its own compaction, not this lag
@@ -721,8 +726,12 @@ public class TieringSourceEnumerator
         } catch (Exception e) {
             return Collections.emptyList(); // nothing tiered yet
         }
+        if (latest.getTableBucketsOffset().isEmpty()) {
+            return Collections.emptyList();
+        }
+        boolean derived = tableInfo.isDeletionVectorsDerived();
         Long done = indexOnlySnapshots.put(tableInfo.getTableId(), latest.getSnapshotId());
-        if (done != null && done == latest.getSnapshotId()) {
+        if (!derived && done != null && done == latest.getSnapshotId()) {
             return Collections.emptyList();
         }
         Map.Entry<TableBucket, Long> any =
@@ -736,7 +745,16 @@ public class TieringSourceEnumerator
                 }
             }
         }
-        LOG.info("DV index-only round for table {} (latest snapshot not yet indexed).", tablePath);
+        if (derived) {
+            LOG.info(
+                    "DV index-only round for idle derived table {} (checks for rewrites since snapshot {}).",
+                    tablePath,
+                    latest.getSnapshotId());
+        } else {
+            LOG.info(
+                    "DV index-only round for table {} (latest snapshot not yet indexed).",
+                    tablePath);
+        }
         return Collections.singletonList(
                 new TieringLogSplit(tablePath, tb, partitionName, any.getValue(), any.getValue()));
     }
