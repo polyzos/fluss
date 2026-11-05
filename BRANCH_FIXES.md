@@ -1,4 +1,4 @@
-# What we fixed on top of Anton's `dv-derived`
+# What was fixed on top of Anton's `dv-derived`
 
 The fixes fall into three groups:
 
