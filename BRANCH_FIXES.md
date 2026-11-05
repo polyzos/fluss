@@ -90,13 +90,3 @@ unknown, keep them. The worst case is then a few orphan files instead of a broke
 **Verified.** A new test fails before the fix and passes after.
 
 ---
-
-## Not on the branch
-
-**External writers.** Writes from other engines (Spark INSERT/DELETE/MERGE, overwrite, rollback) either stop a
-table's tiering for good, or silently make the lake diverge from Fluss. We decided to treat other engines as
-read-only, plus compaction, snapshot expiry and orphan cleanup. A fix that tolerated these writes was prototyped but
-not applied; it's kept in `patches/`. Risks and proposed safeguards are in `EXTERNAL_WRITES_PROPOSAL.md`.
-
-**Silent tiering failures** ([#5055](https://github.com/apache/fluss/issues/5055)). A commit that keeps failing is
-retried forever, with no metric and a WARN log only. This is reported upstream but not yet fixed.
