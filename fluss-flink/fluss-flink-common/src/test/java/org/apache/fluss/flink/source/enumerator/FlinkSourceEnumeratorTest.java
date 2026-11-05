@@ -1551,19 +1551,42 @@ class FlinkSourceEnumeratorTest extends FlinkTestBase {
             // a single bucket of a DV-enabled primary key table is planned into one
             // LakeSnapshotSplit per data file. They must NOT all be pinned to one
             // reader, otherwise the bucket's files cannot be read concurrently.
-            TableBucket bucket = new TableBucket(tableId, 0);
-            Set<Integer> owners = new HashSet<>();
-            for (int splitIndex = 0; splitIndex < 16; splitIndex++) {
-                LakeSnapshotSplit split =
-                        new LakeSnapshotSplit(
-                                bucket,
-                                null,
-                                new TestingLakeSplit(0, Collections.emptyList()),
-                                splitIndex);
-                owners.add(enumerator.getSplitOwner(split));
-            }
-            assertThat(owners).hasSizeGreaterThan(1);
+            Map<String, String> dvProperties =
+                    new HashMap<>(DEFAULT_PK_TABLE_DESCRIPTOR.getProperties());
+            dvProperties.put(ConfigOptions.TABLE_DELETION_VECTORS_ENABLED.key(), "true");
+            TableDescriptor dvDescriptor = DEFAULT_PK_TABLE_DESCRIPTOR.withProperties(dvProperties);
+            enumerator.setTableInfo(
+                    TableInfo.of(DEFAULT_TABLE_PATH, tableId, 1, dvDescriptor, "/tmp", 1L, 1L));
+            assertThat(lakeSplitOwners(enumerator, tableId)).hasSizeGreaterThan(1);
+
+            // Other tables keep a bucket's splits on one reader: its lake split and log split
+            // are read in order by the same reader (as on main).
+            enumerator.setTableInfo(
+                    TableInfo.of(
+                            DEFAULT_TABLE_PATH,
+                            tableId,
+                            1,
+                            DEFAULT_PK_TABLE_DESCRIPTOR,
+                            "/tmp",
+                            1L,
+                            1L));
+            assertThat(lakeSplitOwners(enumerator, tableId)).hasSize(1);
         }
+    }
+
+    private static Set<Integer> lakeSplitOwners(FlinkSourceEnumerator enumerator, long tableId) {
+        TableBucket bucket = new TableBucket(tableId, 0);
+        Set<Integer> owners = new HashSet<>();
+        for (int splitIndex = 0; splitIndex < 16; splitIndex++) {
+            LakeSnapshotSplit split =
+                    new LakeSnapshotSplit(
+                            bucket,
+                            null,
+                            new TestingLakeSplit(0, Collections.emptyList()),
+                            splitIndex);
+            owners.add(enumerator.getSplitOwner(split));
+        }
+        return owners;
     }
 
     @ParameterizedTest

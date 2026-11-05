@@ -1578,6 +1578,11 @@ public class FlinkSourceEnumerator
         }
     }
 
+    @VisibleForTesting
+    void setTableInfo(TableInfo tableInfo) {
+        this.tableInfo = tableInfo;
+    }
+
     /**
      * Returns the index of the target subtask that a specific split should be assigned to.
      *
@@ -1615,7 +1620,11 @@ public class FlinkSourceEnumerator
         // own any split. Bucket-unaware lake splits (e.g. paimon unaware bucket
         // log table, bucket == -1) likewise have no meaningful bucket to assign by.
         // todo: refactor the split assign logic
-        if (split instanceof LakeSnapshotSplit
+        boolean dvPkTable =
+                tableInfo != null
+                        && tableInfo.hasPrimaryKey()
+                        && tableInfo.isDeletionVectorsEnabled();
+        if ((dvPkTable && split instanceof LakeSnapshotSplit)
                 || (split.isLakeSplit() && tableBucket.getBucket() == -1)) {
             return (split.splitId().hashCode() & 0x7FFFFFFF) % context.currentParallelism();
         }

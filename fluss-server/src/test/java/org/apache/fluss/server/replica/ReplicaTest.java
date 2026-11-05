@@ -58,6 +58,7 @@ import org.apache.fluss.server.log.LogReadInfo;
 import org.apache.fluss.server.testutils.KvTestUtils;
 import org.apache.fluss.server.zk.ZooKeeperClient;
 import org.apache.fluss.server.zk.data.LeaderAndIsr;
+import org.apache.fluss.server.zk.data.TableRegistration;
 import org.apache.fluss.testutils.DataTestUtils;
 import org.apache.fluss.testutils.common.ManuallyTriggeredScheduledExecutorService;
 import org.apache.fluss.types.RowType;
@@ -344,6 +345,12 @@ final class ReplicaTest extends ReplicaTestBase {
         TableInfo dvTableInfo =
                 TableInfo.of(
                         dvTablePath, dvTableId, 1, dvDescriptor, DEFAULT_REMOTE_DATA_DIR, 1L, 1L);
+        // KV recovery loads the table and its schema from ZooKeeper.
+        zkClient.registerTable(
+                dvTablePath,
+                TableRegistration.newTable(
+                        dvTableId, conf.get(ConfigOptions.REMOTE_DATA_DIR), dvDescriptor));
+        zkClient.registerFirstSchema(dvTablePath, DATA1_SCHEMA_PK);
         TableBucket dvBucket = new TableBucket(dvTableId, 0);
         Replica dvReplica = makeKvReplica(PhysicalTablePath.of(dvTablePath), dvBucket, dvTableInfo);
         makeLeaderReplica(dvReplica, dvTablePath, dvBucket, INITIAL_LEADER_EPOCH);

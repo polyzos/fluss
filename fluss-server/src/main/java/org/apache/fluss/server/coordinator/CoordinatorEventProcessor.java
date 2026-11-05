@@ -2792,18 +2792,19 @@ public class CoordinatorEventProcessor implements EventProcessor {
                                             nonReadableMetadata,
                                             snapshot.getEarliestSnapshotIDToKeep());
                                 } else {
-                                    // A derived DV commit carries its deletes, so its snapshot
-                                    // is readable at its tiered offsets. Other tables keep the
-                                    // committer's choice: no readable offsets means tiered only.
+                                    // A Fluss DV table's commit without a DV report is readable
+                                    // at its tiered offsets (derived commits carry their deletes).
+                                    // Other tables keep the committer's choice: no readable
+                                    // offsets means tiered only (e.g. Paimon's own DVs).
                                     LakeTable.LakeSnapshotMetadata m =
                                             snapshot.getLakeSnapshotMetadata();
-                                    boolean derived =
+                                    boolean flussDvTable =
                                             coordinatorContext
                                                     .getTableInfoById(tableId)
-                                                    .isDeletionVectorsDerived();
+                                                    .isDeletionVectorsEnabled();
                                     lakeTableHelper.registerLakeTableSnapshotV2(
                                             tableId,
-                                            !derived || m.getReadableOffsetsFilePath() != null
+                                            !flussDvTable || m.getReadableOffsetsFilePath() != null
                                                     ? m
                                                     : new LakeTable.LakeSnapshotMetadata(
                                                             m.getSnapshotId(),
