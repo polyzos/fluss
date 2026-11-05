@@ -46,6 +46,7 @@ import org.apache.iceberg.deletes.PositionDeleteIndex;
 import org.apache.iceberg.events.CreateSnapshotEvent;
 import org.apache.iceberg.events.Listener;
 import org.apache.iceberg.events.Listeners;
+import org.apache.iceberg.exceptions.CleanableFailure;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.DeleteWriteResult;
@@ -552,6 +553,7 @@ public class IcebergLakeCommitter implements LakeCommitter<IcebergWriteResult, I
             Map<String, String> snapshotProperties) {
         icebergTable.refresh();
         RewriteFiles rewriteFiles = icebergTable.newRewrite();
+        boolean commitAttempted = false;
         try {
             if (rewriteDataFileResults.stream()
                             .map(RewriteDataFileResult::snapshotId)
@@ -566,6 +568,7 @@ public class IcebergLakeCommitter implements LakeCommitter<IcebergWriteResult, I
                 rewriteDataFileResult.addedDataFiles().forEach(rewriteFiles::addFile);
                 rewriteDataFileResult.deletedDataFiles().forEach(rewriteFiles::deleteFile);
             }
+            commitAttempted = true;
             return commit(rewriteFiles, snapshotProperties, FLUSS_LAKE_COMPACTION_COMMIT_USER);
         } catch (Exception e) {
             List<String> rewriteAddedDataFiles =
@@ -575,12 +578,30 @@ public class IcebergLakeCommitter implements LakeCommitter<IcebergWriteResult, I
                                             rewriteDataFileResult.addedDataFiles().stream())
                             .map(ContentFile::location)
                             .collect(Collectors.toList());
-            LOG.error(
-                    "Failed to commit rewrite files to iceberg, delete rewrite added files {}.",
-                    rewriteAddedDataFiles,
-                    e);
-            // we need to abort new rewrite files
-            CatalogUtil.deleteFiles(icebergTable.io(), rewriteAddedDataFiles, "data file", true);
+            // Like Iceberg's SnapshotProducer, only clean up when the commit definitely failed.
+            // Otherwise (CommitStateUnknownException on a REST 5xx/timeout in particular) the
+            // rewrite snapshot may be live and reference these files, so deleting them would
+            // corrupt the table; at worst they are left as orphans.
+            if (!commitAttempted || e instanceof CleanableFailure) {
+                LOG.error(
+                        "Failed to commit rewrite files to iceberg table {}, delete rewrite added files {}.",
+                        icebergTable.name(),
+                        rewriteAddedDataFiles,
+                        e);
+                CatalogUtil.deleteFiles(
+                        icebergTable.io(), rewriteAddedDataFiles, "data file", true);
+            } else {
+                LOG.warn(
+                        "Commit state of the rewrite of iceberg table {} (validated from snapshot {}) "
+                                + "is unknown, keep rewrite added files {} as a committed snapshot "
+                                + "may reference them.",
+                        icebergTable.name(),
+                        rewriteDataFileResults.get(0).snapshotId(),
+                        rewriteAddedDataFiles,
+                        e);
+            }
+            // The same as a rejected rewrite: callers fall back to the data snapshot, and the
+            // derived-DV round re-reads the table, so it picks the rewrite up if it did commit.
             return null;
         }
     }
