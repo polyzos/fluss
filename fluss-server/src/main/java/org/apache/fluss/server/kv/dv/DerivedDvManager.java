@@ -18,6 +18,7 @@
 package org.apache.fluss.server.kv.dv;
 
 import org.apache.fluss.annotation.Internal;
+import org.apache.fluss.annotation.VisibleForTesting;
 import org.apache.fluss.exception.StaleSnapshotException;
 import org.apache.fluss.lake.dv.index.PositionIndexStore;
 import org.apache.fluss.server.entity.DvPositionReportData;
@@ -56,6 +57,7 @@ public class DerivedDvManager extends DvManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(DerivedDvManager.class);
     private static final int APPLY_THRESHOLD = 100_000;
+    private static final int REPLAY_APPLY_BATCH = 4096;
 
     private final DvRocksDB db;
     private final LongSupplier highWatermark;
@@ -407,7 +409,7 @@ public class DerivedDvManager extends DvManager {
             src.replayLog(startOffset, this::enqueueReplayed);
         } catch (Exception e) {
             // the index stays, union reads retry the replay and fail until it succeeds
-            queue.clear();
+            dropPartialTail();
             tailFailure = e;
             LOG.warn(
                     "Derived DV recovery: covers snapshot {} but cannot replay the log from offset"
@@ -545,6 +547,24 @@ public class DerivedDvManager extends DvManager {
 
     private void enqueueReplayed(byte[] key, long recordOffset, long versionOffset) {
         queue.add(DvEntry.derived(key, recordOffset, versionOffset));
+        // A lake far behind the log leaves tens of millions of changes to replay; applying them
+        // in order once the high watermark passes them keeps one tail entry per changed key
+        // instead of every change, and only the part above the high watermark waits.
+        if (queue.size() >= REPLAY_APPLY_BATCH) {
+            applyUpTo(highWatermark.getAsLong());
+        }
+    }
+
+    /**
+     * Drops a partly replayed tail after a failed replay: changes past the failure are missing, so
+     * its masks would let old versions through. The next union read replays again.
+     */
+    private void dropPartialTail() {
+        queue.clear();
+        tail.clear();
+        logDv.clear();
+        lakeDv.clear();
+        unresolved.clear();
     }
 
     /** Builds the tail of the empty lake (the whole log) for the first union read that needs it. */
@@ -560,7 +580,7 @@ public class DerivedDvManager extends DvManager {
         try {
             recoverySource.replayLog(0, this::enqueueReplayed);
         } catch (Exception e) {
-            queue.clear();
+            dropPartialTail();
             throw new IOException(
                     "Derived DV: no lake snapshot yet and the log cannot be replayed from offset 0",
                     e);
@@ -568,7 +588,8 @@ public class DerivedDvManager extends DvManager {
         emptyLakeTracked = true;
         LOG.info(
                 "Derived DV: no lake snapshot yet; replayed the log from offset 0 for a union read"
-                        + " ({} changes) in {} ms.",
+                        + " ({} tail keys, {} changes above the high watermark) in {} ms.",
+                tail.size(),
                 queue.size(),
                 System.currentTimeMillis() - t0);
     }
@@ -585,7 +606,7 @@ public class DerivedDvManager extends DvManager {
         try {
             recoverySource.replayLog(snapshotStartOffset, this::enqueueReplayed);
         } catch (Exception e) {
-            queue.clear();
+            dropPartialTail();
             tailFailure = e;
             throw new IOException(
                     String.format(
@@ -597,9 +618,10 @@ public class DerivedDvManager extends DvManager {
         tailFailure = null;
         LOG.info(
                 "Derived DV: replayed the log of snapshot {} from offset {} after a failed replay"
-                        + " ({} changes) in {} ms.",
+                        + " ({} tail keys, {} changes above the high watermark) in {} ms.",
                 coveredSnapshotId,
                 snapshotStartOffset,
+                tail.size(),
                 queue.size(),
                 System.currentTimeMillis() - t0);
     }
@@ -1030,6 +1052,11 @@ public class DerivedDvManager extends DvManager {
     @Override
     public synchronized long getSnapshotStartLogOffset() {
         return snapshotStartOffset;
+    }
+
+    @VisibleForTesting
+    synchronized int queuedChanges() {
+        return queue.size();
     }
 
     /** Returns the size of the derived state, for diagnostics. */

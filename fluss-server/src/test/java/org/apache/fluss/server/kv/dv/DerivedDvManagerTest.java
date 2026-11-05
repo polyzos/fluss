@@ -65,6 +65,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.IntSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -291,6 +292,81 @@ class DerivedDvManagerTest {
         assertThat(lakeMasks(snapshot)).containsOnly(entry(F1, set(0L, 1L)));
         assertThat(offsets(snapshot.getLogDvBitmap())).containsExactly(10L);
         assertThat(snapshot.getSnapshotStartOffset()).isEqualTo(10L);
+    }
+
+    @Test
+    void testRecoverOfLaggingLakeHoldsOneEntryPerKeyNotPerChange() throws Exception {
+        // The lake lags far behind the log (a tiering backlog or a bulk load), so the tail spans
+        // many more changes than keys; a rebuild must not hold every replayed change at once.
+        int keys = 100;
+        int changes = 50_000;
+        long start = 10;
+        src.publish(100, 1, start, dict(1, F1), new Index().put("k0", 1, 0).build());
+        src.readable = new long[] {100, start};
+        appendChanges(start, keys, changes);
+        long hw = start + changes - 5; // the last 5 changes are not replicated yet
+        highWatermark.set(hw);
+        src.queueProbe = manager::queuedChanges;
+
+        manager.recover(src);
+
+        assertThat(src.maxQueuedDuringReplay).isLessThan(changes / 10);
+        // only the changes above the high watermark wait
+        assertThat(manager.queuedChanges()).isEqualTo(5);
+        assertThat(manager.stateSummary()).contains("tailKeys=" + keys + ",");
+        DvSnapshot snapshot = manager.getDvForUnionRead(100, 0);
+        assertThat(lakeMasks(snapshot)).containsOnly(entry(F1, set(0L)));
+        // below the high watermark, every change but the last of each key is superseded
+        Set<Long> masked = offsets(snapshot.getLogDvBitmap());
+        assertThat(masked).hasSize(changes - 5 - keys).contains(start).doesNotContain(hw - 1);
+
+        highWatermark.set(start + changes);
+        snapshot = manager.getDvForUnionRead(100, 0);
+        assertThat(offsets(snapshot.getLogDvBitmap())).hasSize(changes - keys);
+    }
+
+    @Test
+    void testEmptyLakeReplayHoldsOneEntryPerKeyNotPerChange() throws Exception {
+        int keys = 10;
+        int changes = 50_000;
+        appendChanges(0, keys, changes);
+        highWatermark.set(changes);
+        manager.recover(src);
+        src.queueProbe = manager::queuedChanges;
+
+        DvSnapshot snapshot = manager.getDvForUnionRead(-1, 0);
+
+        assertThat(src.maxQueuedDuringReplay).isLessThan(changes / 10);
+        assertThat(offsets(snapshot.getLogDvBitmap())).hasSize(changes - keys);
+    }
+
+    @Test
+    void testReplayFailingMidwayLeavesNoPartialTail() throws Exception {
+        int keys = 100;
+        int changes = 50_000;
+        long start = 10;
+        src.publish(100, 1, start, dict(1, F1), new Index().put("k0", 1, 0).build());
+        src.readable = new long[] {100, start};
+        appendChanges(start, keys, changes);
+        highWatermark.set(start + changes);
+        src.replayFailure = new IllegalStateException("remote segment gone");
+        src.failAfterChanges = changes / 2;
+
+        manager.recover(src);
+
+        // a partial tail would serve masks that miss the unreplayed changes
+        assertThat(manager.stateSummary())
+                .contains("tailKeys=0,")
+                .contains("queued=0,")
+                .contains("deadTailVersions=0,");
+        assertThatThrownBy(() -> manager.getDvForUnionRead(100, 0))
+                .isInstanceOf(IOException.class)
+                .hasRootCauseMessage("remote segment gone");
+
+        src.replayFailure = null;
+        DvSnapshot snapshot = manager.getDvForUnionRead(100, 0);
+        assertThat(lakeMasks(snapshot)).containsOnly(entry(F1, set(0L)));
+        assertThat(offsets(snapshot.getLogDvBitmap())).hasSize(changes - keys);
     }
 
     @Test
@@ -723,6 +799,15 @@ class DerivedDvManagerTest {
         return every;
     }
 
+    /** Appends {@code changes} upserts from {@code start}, cycling over {@code keys} keys. */
+    private void appendChanges(long start, int keys, int changes) {
+        List<Change> batch = new ArrayList<>(changes);
+        for (int i = 0; i < changes; i++) {
+            batch.add(new Change(key("k" + (i % keys)), start + i, start + i));
+        }
+        src.log.addAll(batch); // one copy of the copy-on-write log
+    }
+
     private static byte[] key(String k) {
         return k.getBytes(StandardCharsets.UTF_8);
     }
@@ -843,6 +928,11 @@ class DerivedDvManagerTest {
         final List<Long> downloadedIndexIds = new CopyOnWriteArrayList<>();
 
         volatile Exception replayFailure;
+        // the replay fails with replayFailure after delivering this many changes (-1: at once)
+        volatile int failAfterChanges = -1;
+        // sampled after every replayed change, for the peak number of queued changes
+        volatile IntSupplier queueProbe;
+        volatile int maxQueuedDuringReplay;
         volatile CountDownLatch chainGate;
         // when set, chain() and readChange() read a real index store (for one bucket)
         volatile PositionIndexStore store;
@@ -944,12 +1034,21 @@ class DerivedDvManagerTest {
                 throws Exception {
             replayedFrom.add(fromOffset);
             Exception failure = replayFailure;
-            if (failure != null) {
+            if (failure != null && failAfterChanges < 0) {
                 throw failure;
             }
+            int delivered = 0;
             for (Change c : log) {
                 if (c.recordOffset >= fromOffset) {
+                    if (failure != null && delivered == failAfterChanges) {
+                        throw failure;
+                    }
                     consumer.accept(c.key.clone(), c.recordOffset, c.versionOffset);
+                    delivered++;
+                    IntSupplier probe = queueProbe;
+                    if (probe != null) {
+                        maxQueuedDuringReplay = Math.max(maxQueuedDuringReplay, probe.getAsInt());
+                    }
                 }
             }
         }
