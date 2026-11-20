@@ -483,7 +483,8 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-compiler-plugin</artifactId>
-                        <configuration>
+                        <!-- Replaces the default configuration: javac 8 has no release option. -->
+                        <configuration combine.self="override">
                             <source>${target.java.version}</source>
                             <target>${target.java.version}</target>
                             <useIncrementalCompilation>false</useIncrementalCompilation>
@@ -592,16 +593,12 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.8.0</version>
                 <configuration>
-                    <source>${target.java.version}</source>
-                    <target>${target.java.version}</target>
+                    <!-- Compile against the target JDK's API, not just its class file version, so
+                    jars built on a newer JDK still link on the target JDK. -->
+                    <release>${target.java.version}</release>
                     <!-- The semantics of this option are reversed, see MCOMPILER-209. -->
                     <useIncrementalCompilation>false</useIncrementalCompilation>
                     <compilerArgs >
-                        <arg>--add-exports=java.base/sun.net.util=ALL-UNNAMED</arg>
-                        <arg>--add-exports=java.management/sun.management=ALL-UNNAMED</arg>
-                        <arg>--add-exports=java.rmi/sun.rmi.registry=ALL-UNNAMED</arg>
-                        <arg>--add-exports=java.security.jgss/sun.security.krb5=ALL-UNNAMED</arg>
-                        <arg>--add-exports=java.base/sun.nio.ch=ALL-UNNAMED</arg>
                         <!-- Prevents recompilation due to missing package-info.class, see MCOMPILER-205 -->
                         <arg>-Xpkginfo:always</arg>
                     </compilerArgs>
@@ -998,9 +995,7 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.8.0</version>
                     <configuration>
-                        <!-- Make sure that we only use Java 8 compatible APIs -->
-                        <source>${target.java.version}</source>
-                        <target>${target.java.version}</target>
+                        <release>${target.java.version}</release>
                         <!-- The semantics of this option are reversed, see MCOMPILER-209. -->
                         <useIncrementalCompilation>false</useIncrementalCompilation>
                         <compilerArgs>

@@ -267,8 +267,7 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.8.0</version>
                     <configuration>
-                        <source>${target.java.version}</source>
-                        <target>${target.java.version}</target>
+                        <release>${target.java.version}</release>
                         <useIncrementalCompilation>false</useIncrementalCompilation>
                         <compilerArgs>
                             <arg>-Xpkginfo:always</arg>
@@ -309,6 +308,9 @@
                         <args>
                             <arg>-nobootcp</arg>
                             <arg>-target:jvm-${target.java.version}</arg>
+                            <!-- like javac's release: compile against the target JDK's API -->
+                            <arg>-release</arg>
+                            <arg>${target.java.version}</arg>
                         </args>
                     </configuration>
                 </plugin>
@@ -354,5 +356,28 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <!-- scalac on a Java 8 JDK has no release option (no ct.sym) -->
+            <id>java8</id>
+            <build>
+                <pluginManagement>
+                    <plugins>
+                        <plugin>
+                            <groupId>net.alchim31.maven</groupId>
+                            <artifactId>scala-maven-plugin</artifactId>
+                            <configuration>
+                                <args combine.self="override">
+                                    <arg>-nobootcp</arg>
+                                    <arg>-target:jvm-${target.java.version}</arg>
+                                </args>
+                            </configuration>
+                        </plugin>
+                    </plugins>
+                </pluginManagement>
+            </build>
+        </profile>
+    </profiles>
 
 </project>
