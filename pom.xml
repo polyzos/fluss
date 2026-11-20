@@ -114,7 +114,9 @@
         <log4j.version>2.25.4</log4j.version>
         <jaxb.api.version>2.3.1</jaxb.api.version>
         <junit5.version>5.9.1</junit5.version>
-        <mockito.version>3.4.6</mockito.version>
+        <mockito.version>4.11.0</mockito.version>
+        <!-- Newer than Mockito's own Byte Buddy, which predates Java 21 -->
+        <byte-buddy.version>1.17.8</byte-buddy.version>
         <assertj.version>3.27.7</assertj.version>
 
         <protobuf.version>3.25.5</protobuf.version>
@@ -242,6 +244,18 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy</artifactId>
+                <version>${byte-buddy.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy-agent</artifactId>
+                <version>${byte-buddy.version}</version>
+            </dependency>
+
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-common</artifactId>
