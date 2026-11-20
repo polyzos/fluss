@@ -28,26 +28,19 @@ import java.io.InputStream;
 import static org.apache.fluss.utils.Preconditions.checkArgument;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
 
 /** Tests for the {@link HadoopDataInputStream}. */
 class HadoopDataInputStreamTest {
 
-    private FSDataInputStream verifyInputStream;
+    private CallCountingFSDataInputStream verifyInputStream;
     private HadoopDataInputStream testInputStream;
 
     @Test
     void testSeekSkip() throws IOException {
         verifyInputStream =
-                spy(
-                        new FSDataInputStream(
-                                new SeekableByteArrayInputStream(
-                                        new byte[2 * HadoopDataInputStream.MIN_SKIP_BYTES])));
+                new CallCountingFSDataInputStream(
+                        new SeekableByteArrayInputStream(
+                                new byte[2 * HadoopDataInputStream.MIN_SKIP_BYTES]));
         testInputStream = new HadoopDataInputStream(verifyInputStream);
         // skip
         long skipped = testInputStream.skip(5);
@@ -75,18 +68,49 @@ class HadoopDataInputStreamTest {
         testInputStream.seek(seekPos);
 
         if (delta > 0L && delta <= HadoopDataInputStream.MIN_SKIP_BYTES) {
-            verify(verifyInputStream, atLeastOnce()).skip(anyLong());
-            verify(verifyInputStream, never()).seek(anyLong());
+            assertThat(verifyInputStream.skipCalls).isPositive();
+            assertThat(verifyInputStream.seekCalls).isZero();
         } else if (delta != 0L) {
-            verify(verifyInputStream, atLeastOnce()).seek(seekPos);
-            verify(verifyInputStream, never()).skip(anyLong());
+            assertThat(verifyInputStream.seekCalls).isPositive();
+            assertThat(verifyInputStream.lastSeekPos).isEqualTo(seekPos);
+            assertThat(verifyInputStream.skipCalls).isZero();
         } else {
-            verify(verifyInputStream, never()).seek(anyLong());
-            verify(verifyInputStream, never()).skip(anyLong());
+            assertThat(verifyInputStream.seekCalls).isZero();
+            assertThat(verifyInputStream.skipCalls).isZero();
         }
 
         assertThat(verifyInputStream.getPos()).isEqualTo(seekPos);
-        reset(verifyInputStream);
+        verifyInputStream.resetCalls();
+    }
+
+    /** Records the seek and skip calls that {@link HadoopDataInputStream} issues. */
+    private static final class CallCountingFSDataInputStream extends FSDataInputStream {
+        private int seekCalls;
+        private int skipCalls;
+        private long lastSeekPos = -1;
+
+        CallCountingFSDataInputStream(InputStream in) {
+            super(in);
+        }
+
+        @Override
+        public void seek(long desired) throws IOException {
+            seekCalls++;
+            lastSeekPos = desired;
+            super.seek(desired);
+        }
+
+        @Override
+        public long skip(long n) throws IOException {
+            skipCalls++;
+            return super.skip(n);
+        }
+
+        void resetCalls() {
+            seekCalls = 0;
+            skipCalls = 0;
+            lastSeekPos = -1;
+        }
     }
 
     private static final class SeekableByteArrayInputStream extends InputStream

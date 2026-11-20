@@ -33,6 +33,22 @@
 
     <properties>
         <flink.version>1.20.3</flink.version>
+        <!-- The opens Spark itself requires on Java 17+ (see Spark's JavaModuleOptions). -->
+        <surefire.module.config>
+            --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
+            --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+            --add-opens=java.base/java.io=ALL-UNNAMED
+            --add-opens=java.base/java.net=ALL-UNNAMED
+            --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
+            --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
+            --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED
+            --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+            --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
+            --add-opens=java.base/sun.security.action=ALL-UNNAMED
+            --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
+            -Djdk.reflect.useDirectMethodHandle=false
+            -Dio.netty.tryReflectionSetAccessible=true
+        </surefire.module.config>
     </properties>
 
     <modules>
@@ -304,7 +320,7 @@
                     <configuration>
                         <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
                         <junitxml>.</junitxml>
-                        <argLine>-ea -Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=128m ${extraJavaTestArgs} -Dio.netty.tryReflectionSetAccessible=true</argLine>
+                        <argLine>-ea -Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=128m ${extraJavaTestArgs} ${surefire.module.config}</argLine>
                         <filereports>FlussTestSuite.txt</filereports>
                         <forkMode>once</forkMode>
                         <noScalaTestIgnore>true</noScalaTestIgnore>

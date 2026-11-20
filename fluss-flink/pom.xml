@@ -31,6 +31,10 @@
     <name>Apache Fluss : Engine Flink :</name>
     <packaging>pom</packaging>
 
+    <properties>
+        <surefire.module.config>${flinkJavaTestArgs}</surefire.module.config>
+    </properties>
+
     <modules>
         <module>fluss-flink-common</module>
         <module>fluss-flink-1.20</module>
