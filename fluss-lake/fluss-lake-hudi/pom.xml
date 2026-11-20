@@ -50,6 +50,12 @@
                     <groupId>org.apache.commons</groupId>
                     <artifactId>commons-lang3</artifactId>
                 </exclusion>
+                <!-- orc-shims adds hadoop-client-api when Maven runs on Java 17+. Its classes
+                shadow hadoop-common's and need the shaded Hadoop runtime, which is absent. -->
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-api</artifactId>
+                </exclusion>
                 <exclusion>
                     <groupId>org.apache.curator</groupId>
                     <artifactId>curator-client</artifactId>
