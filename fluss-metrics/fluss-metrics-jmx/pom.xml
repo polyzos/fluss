@@ -30,13 +30,6 @@
     <artifactId>fluss-metrics-jmx</artifactId>
     <name>Apache Fluss : Metrics : JMX</name>
 
-    <properties>
-        <!-- required by JmxServer -->
-        <surefire.module.config>
-            --add-exports=java.rmi/sun.rmi.registry=ALL-UNNAMED
-        </surefire.module.config>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>org.apache.fluss</groupId>
