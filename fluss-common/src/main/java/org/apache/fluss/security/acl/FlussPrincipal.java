@@ -45,6 +45,7 @@ import java.util.stream.Collectors;
 @PublicEvolving
 public class FlussPrincipal implements Principal {
     public static final FlussPrincipal ANONYMOUS = new FlussPrincipal("ANONYMOUS", "User");
+
     /** The wildcard principal, which represents all principals. */
     public static final FlussPrincipal WILD_CARD_PRINCIPAL = new FlussPrincipal("*", "*");
 

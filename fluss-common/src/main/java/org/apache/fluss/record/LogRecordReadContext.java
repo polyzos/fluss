@@ -72,6 +72,7 @@ public class LogRecordReadContext
 
     private final long tableId;
     private final LogFormat logFormat;
+
     /**
      * When present, provides fixed schema identity, data row type, and pre-built field getters.
      * When {@code null}, the reader dynamically adapts to each batch's schema so that columns added

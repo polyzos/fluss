@@ -48,6 +48,7 @@ final class ServerChannelInitializer extends NettyChannelInitializer {
     private final RequestsMetrics requestsMetrics;
     private final int maxRequestSize;
     private final Supplier<ServerAuthenticator> authenticatorSupplier;
+
     /** The TLS context of this listener, or {@code null} when the listener is plaintext. */
     @Nullable private final SslContext sslContext;
 

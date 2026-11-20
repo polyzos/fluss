@@ -54,6 +54,7 @@ public class FlussProtocolPlugin implements NetworkProtocolPlugin, ServerReconfi
     private PlainSaslServerConfigManager plainSaslServerConfigManager;
     private Map<String, Supplier<ServerAuthenticator>> authenticatorSuppliers;
     @Nullable private SslConfig sslConfig;
+
     /** Shared by every TLS listener; {@code null} when no listener enables TLS. */
     @Nullable private SslContext sslContext;
 

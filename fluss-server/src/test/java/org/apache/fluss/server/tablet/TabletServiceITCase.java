@@ -1373,7 +1373,7 @@ public class TabletServiceITCase {
         while (current.isHasMoreResults()) {
             current =
                     leaderGateWay
-                            .scanKv(newScanKvContinueRequest(scannerId, seq++, /*batch=*/ 1))
+                            .scanKv(newScanKvContinueRequest(scannerId, seq++, /* batch= */ 1))
                             .get();
             assertThat(current.hasErrorCode()).isFalse();
             assertThat(current.getScannerId()).isEqualTo(scannerId);

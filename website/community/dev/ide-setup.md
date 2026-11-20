@@ -98,9 +98,10 @@ install them, and restart the IDE if prompted:
 * [Checkstyle-IDEA](https://plugins.jetbrains.com/plugin/1065-checkstyle-idea)
 
 You will also need to install the [google-java-format](https://github.com/google/google-java-format)
-plugin. However, a specific version of this plugin is required. Download
-[google-java-format v1.7.0.6](https://plugins.jetbrains.com/plugin/8527-google-java-format/versions/stable/115957)
-and install it as follows. **Make sure to never update this plugin**.
+plugin. However, a specific version of this plugin is required: it must match the google-java-format
+version that Spotless uses (1.24.0). Download
+[google-java-format v1.24.0.0](https://plugins.jetbrains.com/plugin/8527-google-java-format/versions/stable/614263)
+and install it as follows. **Do not update this plugin** unless the version used by Spotless changes.
 
 1. Go to "Settings" → "Plugins".
 2. Click the gear icon and select "Install Plugin from Disk".

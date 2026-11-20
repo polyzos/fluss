@@ -1043,7 +1043,7 @@
                         <skip>${skip.on.java8}</skip>
                         <java>
                             <googleJavaFormat>
-                                <version>1.15.0</version>
+                                <version>1.24.0</version>
                                 <style>AOSP</style>
                             </googleJavaFormat>
 
@@ -1053,8 +1053,6 @@
                                     org.apache.fluss,,javax,java,scala,\#
                                 </order>
                             </importOrder>
-
-                            <removeUnusedImports/>
                         </java>
                         <scala>
                             <scalafmt>

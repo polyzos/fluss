@@ -611,6 +611,7 @@ class HistoricalLakeLookupManager implements AutoCloseable {
         private final int schemaId;
         private final LakeLookupMode lookupMode;
         private final long lakeConfigVersion;
+
         /** The opaque lake snapshot ID covered by the last file refresh, or null if none. */
         private @Nullable Long lakeSnapshotId;
 

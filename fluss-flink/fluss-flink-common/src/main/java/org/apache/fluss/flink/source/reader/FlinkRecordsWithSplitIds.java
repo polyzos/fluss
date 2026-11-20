@@ -46,6 +46,7 @@ public class FlinkRecordsWithSplitIds implements RecordsWithSplitIds<RecordAndPo
 
     /** SplitId iterator. */
     private final Iterator<String> splitIterator;
+
     /** The table buckets of the split in splitIterator. */
     private final Iterator<TableBucket> tableBucketIterator;
 

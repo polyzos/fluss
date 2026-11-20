@@ -418,7 +418,7 @@ cd fluss
 
 **Build:** `./mvnw clean install -DskipTests` (parallel: `-T 1C`); test: `./mvnw clean verify`
 **Test specific:** `./mvnw verify -pl fluss-server`; single test: `./mvnw test -Dtest=ConfigBuilderTest -pl fluss-common`
-**Format code:** `./mvnw spotless:apply` (google-java-format AOSP style; IntelliJ plugin v1.7.0.6 - DO NOT update)
+**Format code:** `./mvnw spotless:apply` (google-java-format 1.24.0 AOSP style; IntelliJ plugin v1.24.0.0 - keep it matched to the Spotless version)
 
 ### CI Pipeline
 

@@ -60,6 +60,7 @@ class MultiTableWriterImpl implements MultiTableWriter {
 
     private final MetadataUpdater metadataUpdater;
     private final Admin admin;
+
     /** Owned by this writer; created per writer instance and closed in {@link #close()}. */
     private final WriterClient writerClient;
 
@@ -340,6 +341,7 @@ class MultiTableWriterImpl implements MultiTableWriter {
     /** Encoding state for a log (non-PK) table; only supports APPEND. */
     private static final class LogTableWriteState extends TableWriteState {
         final LogFormat logFormat;
+
         /**
          * Per-row encoder for the {@link #logFormat}. Only initialized for {@link
          * LogFormat#INDEXED} and {@link LogFormat#COMPACTED}; {@code null} for {@link

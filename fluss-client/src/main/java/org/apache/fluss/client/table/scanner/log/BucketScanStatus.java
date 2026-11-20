@@ -24,6 +24,7 @@ import org.apache.fluss.annotation.Internal;
 class BucketScanStatus {
     private long offset; // last consumed position
     private long highWatermark = -1L; // the high watermark from last fetch, -1 if never fetched
+
     // TODO add resetStrategy and nextAllowedRetryTimeMs.
 
     public BucketScanStatus() {

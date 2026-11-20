@@ -71,6 +71,7 @@ public final class FetchParams {
     private final int minFetchBytes;
     private final long maxWaitMs;
     private final FetchLogReadPreference readPreference;
+
     // TODO: add more params like epoch etc.
 
     public FetchParams(int replicaId, int maxFetchBytes) {

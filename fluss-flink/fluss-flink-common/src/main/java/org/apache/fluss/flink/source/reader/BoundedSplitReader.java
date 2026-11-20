@@ -51,6 +51,7 @@ public class BoundedSplitReader implements AutoCloseable {
     private static final Duration POLL_TIMEOUT = Duration.ofMillis(10000L);
 
     private final BatchScanner splitScanner;
+
     /**
      * The records read so far. For a scanner over indexed lake splits, it counts the records of the
      * inner split {@link #currentSplitIndex} only, so that a position (split index, records count)

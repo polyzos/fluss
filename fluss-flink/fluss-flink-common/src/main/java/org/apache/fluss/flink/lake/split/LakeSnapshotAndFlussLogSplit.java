@@ -40,6 +40,7 @@ public class LakeSnapshotAndFlussLogSplit extends SourceSplitBase {
      * lake split via this lake split index.
      */
     private final int currentLakeSplitIndex;
+
     /** The records to skip when reading the lake split at {@link #currentLakeSplitIndex}. */
     private final long recordToSkip;
 

@@ -722,8 +722,10 @@ public class FlinkCatalog extends AbstractCatalog {
     @Override
     public List<CatalogPartitionSpec> listPartitions(
             ObjectPath objectPath, CatalogPartitionSpec catalogPartitionSpec)
-            throws TableNotExistException, TableNotPartitionedException,
-                    PartitionSpecInvalidException, CatalogException {
+            throws TableNotExistException,
+                    TableNotPartitionedException,
+                    PartitionSpecInvalidException,
+                    CatalogException {
 
         // TODO lake table should support.
         if (objectPath.getObjectName().contains(LAKE_TABLE_SPLITTER)) {
@@ -792,8 +794,10 @@ public class FlinkCatalog extends AbstractCatalog {
             CatalogPartitionSpec catalogPartitionSpec,
             CatalogPartition catalogPartition,
             boolean b)
-            throws TableNotExistException, TableNotPartitionedException,
-                    PartitionSpecInvalidException, PartitionAlreadyExistsException,
+            throws TableNotExistException,
+                    TableNotPartitionedException,
+                    PartitionSpecInvalidException,
+                    PartitionAlreadyExistsException,
                     CatalogException {
         // Virtual tables are read-only; reject partition mutations.
         if (isVirtualTable(objectPath)) {

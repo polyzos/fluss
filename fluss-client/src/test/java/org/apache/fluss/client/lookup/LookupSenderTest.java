@@ -1534,6 +1534,7 @@ public class LookupSenderTest {
     private static class TestingLeaderlessMetadataUpdater extends TestingMetadataUpdater {
 
         private final Cluster clusterWithLeaders;
+
         /** Buckets without a leader -> metadata refreshes left to fail for them. */
         private final Map<TableBucket, Integer> remainingFailures = new HashMap<>();
 
