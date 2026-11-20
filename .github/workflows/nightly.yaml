@@ -34,3 +34,11 @@ jobs:
       java-version: "8"
       maven-parameters: "-Pjava8"
       run-spark-scala213: true
+
+  # Flink 1.x and Spark 3.x support Java up to 17 upstream, so they are not tested on 21.
+  build-on-jdk21:
+    name: "Java 21"
+    uses: ./.github/workflows/ci-template.yaml
+    with:
+      java-version: "21"
+      modules: '["core","flink2","lake"]'

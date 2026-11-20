@@ -9,10 +9,11 @@ This page covers how to build Fluss from sources.
 
 In order to build Fluss you need to get the source code by [cloning the git repository](https://github.com/apache/fluss).
 
-In addition, you need **Maven 3.8.6** and a **JDK** (Java Development Kit). Fluss requires **Java 11** to build.
+In addition, you need **Maven 3.8.6** and a **JDK** (Java Development Kit). Fluss builds on **Java 11, 17 or 21**
+(CI uses Java 17). The artifacts target Java 11 whichever JDK you build on.
 
 The Iceberg 1.12 lake plugin (`fluss-lake-iceberg-1.12`) also needs a **JDK 17** installation, which it uses as a
-[Maven toolchain](https://maven.apache.org/guides/mini/guide-using-toolchains.html) while Maven itself keeps running on Java 11.
+[Maven toolchain](https://maven.apache.org/guides/mini/guide-using-toolchains.html) while Maven itself keeps running on your build JDK.
 The JDK 17 is found automatically in `~/.m2/toolchains.xml`, through `JAVA<version>_HOME` environment variables
 (e.g. `JAVA17_HOME`), or in common install locations such as SDKMAN! and `/Library/Java/JavaVirtualMachines`.
 To build without it, skip the plugin, which also leaves it out of the binary distribution: `mvn clean install -DskipTests -Dskip.iceberg-1.12`.

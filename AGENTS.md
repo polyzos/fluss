@@ -38,7 +38,7 @@ import org.apache.zookeeper.*                           // → org.apache.fluss.
 
 **Source level: Java 8** — All code MUST compile with JDK 8. CI enforces this via `compile-on-jdk8`.
 
-**Build requirement:** Java 11 is required to build the project, but all source code must remain Java 8 compatible. Exception: `fluss-lake-iceberg-1.12` is compiled and tested with a JDK 17 Maven toolchain (Iceberg 1.11+ needs Java 17) and still targets Java 11 bytecode.
+**Build requirement:** Build on Java 11, 17 or 21 (CI uses 17); bytecode targets Java 11 via `--release`, and all source code must remain Java 8 compatible. Exception: `fluss-lake-iceberg-1.12` is compiled and tested with a JDK 17 Maven toolchain (Iceberg 1.11+ needs Java 17) and still targets Java 11 bytecode.
 
 **FORBIDDEN Java 9+ features:**
 ```java
@@ -392,7 +392,7 @@ public static final FlussClusterExtension FLUSS_CLUSTER_EXTENSION =
 
 ### Quick Start (Deployment)
 
-**Prerequisites:** Java 11, JDK 17 (Maven toolchain for `fluss-lake-iceberg-1.12`; skip with `-Dskip.iceberg-1.12`), Maven 3.8.6+, Unix-like environment
+**Prerequisites:** Java 11, 17 or 21, JDK 17 (Maven toolchain for `fluss-lake-iceberg-1.12`; skip with `-Dskip.iceberg-1.12`), Maven 3.8.6+, Unix-like environment
 
 **Build from source:**
 ```bash
@@ -423,7 +423,7 @@ cd fluss
 ### CI Pipeline
 
 **CI stages:** compile-on-jdk8 → core (excludes Flink/Spark/Lake) → flink → spark3 → lake (`.github/workflows/ci.yaml`)
-**Java:** Build on Java 11 (required), plus a JDK 17 toolchain for `fluss-lake-iceberg-1.12`; runtime Java 8 compatible
+**Java:** Build and test on Java 17 per PR, compile on Java 21, and run core tests on a Java 11 JVM against Java 17-built classes; Java 21 tests run nightly. A JDK 17 toolchain is used for `fluss-lake-iceberg-1.12`
 
 **Test coverage:** `./mvnw verify -Ptest-coverage` → view `fluss-test-coverage/target/site/jacoco-aggregate/index.html`
 **License headers:** Apache 2.0 required (enforced by RAT); check with `./mvnw validate`

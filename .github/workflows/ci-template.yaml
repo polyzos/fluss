@@ -40,6 +40,11 @@ on:
         required: false
         type: boolean
         default: false
+      skip-tests:
+        description: "Only build, without running the tests."
+        required: false
+        type: boolean
+        default: false
 jobs:
   build:
     runs-on: self-hosted
@@ -83,6 +88,7 @@ jobs:
         run: |
           mvn -T 1C -B clean install -DskipTests $MAVEN_TOOLCHAIN_ARGS ${{ matrix.module == 'spark3-scala213' && '-Pscala-2.13' || '' }} ${{ inputs.maven-parameters }}
       - name: Test
+        if: ${{ !inputs.skip-tests }}
         timeout-minutes: 60
         run: |
           TEST_MODULES=$(./.github/workflows/stage.sh ${{ matrix.module }})
@@ -102,11 +108,11 @@ jobs:
         uses: actions/upload-artifact@v6
         if: ${{ failure() }}
         with:
-          name: logs-test-${{ matrix.module }}-${{ github.run_number}}#${{ github.run_attempt }}
+          name: logs-test-${{ matrix.module }}-jdk${{ inputs.java-version }}-${{ github.run_number}}#${{ github.run_attempt }}
           path: ${{ runner.temp }}/fluss-logs/*
       - name: Upload JaCoCo coverage report
         uses: actions/upload-artifact@v6
-        if: ${{ success() && github.ref == 'refs/heads/main' }}
+        if: ${{ success() && !inputs.skip-tests && github.ref == 'refs/heads/main' }}
         with:
-          name: jacoco-report-${{ matrix.module }}-${{ github.run_number}}#${{ github.run_attempt }}
+          name: jacoco-report-${{ matrix.module }}-jdk${{ inputs.java-version }}-${{ github.run_number}}#${{ github.run_attempt }}
           path: ${{ github.workspace }}/fluss-test-coverage/target/site/jacoco-aggregate/*
