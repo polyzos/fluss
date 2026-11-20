@@ -225,6 +225,26 @@ class IcebergRecordAsFlussRowTest {
     }
 
     @Test
+    void testNonAsciiStringsAreUtf8EncodedRegardlessOfDefaultCharset() {
+        String value = "Zürich 東京 😀";
+        record.setField("id", 1L);
+        record.setField("name", value);
+        record.setField("char_data", value);
+        record.setField("__bucket", 1);
+        record.setField("__offset", 100L);
+        record.setField("__timestamp", OffsetDateTime.now(ZoneOffset.UTC));
+
+        icebergRecordAsFlussRow.replaceIcebergRecord(record);
+
+        assertThat(icebergRecordAsFlussRow.getString(1).toString()).isEqualTo(value);
+        assertThat(icebergRecordAsFlussRow.getChar(12, value.length()).toString()).isEqualTo(value);
+
+        IcebergArrayAsFlussArray array = new IcebergArrayAsFlussArray(Arrays.asList(value));
+        assertThat(array.getString(0).toString()).isEqualTo(value);
+        assertThat(array.getChar(0, value.length()).toString()).isEqualTo(value);
+    }
+
+    @Test
     void testGetIntWithLocalDateAndLocalTime() {
         LocalDate date = LocalDate.of(2020, 6, 15);
         LocalTime time = LocalTime.of(14, 30, 0);

@@ -31,6 +31,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.NumberFormat;
+import java.util.Locale;
 import java.util.UUID;
 
 import static org.apache.fluss.utils.Preconditions.checkNotNull;
@@ -367,7 +368,8 @@ public class FlussPaths {
      * @return The filename
      */
     public static String filenamePrefixFromOffset(long offset) {
-        NumberFormat nf = NumberFormat.getInstance();
+        // Locale.ROOT keeps ASCII digits; some default locales format with native digits.
+        NumberFormat nf = NumberFormat.getInstance(Locale.ROOT);
         nf.setMinimumIntegerDigits(20);
         nf.setMaximumFractionDigits(0);
         nf.setGroupingUsed(false);

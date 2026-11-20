@@ -85,6 +85,21 @@ public class GlobalConfigurationTest {
                         "s3-access-key", "gs-private-key", "oss-access-key", "sasl-password");
     }
 
+    @Test
+    void testNonAsciiValuesAreReadAsUtf8RegardlessOfDefaultCharset(@TempDir Path tempDir)
+            throws Exception {
+        String value = "fluss-ünïcødé-客户端";
+        Files.write(
+                tempDir.resolve(GlobalConfiguration.FLUSS_CONF_FILENAME),
+                Arrays.asList("client.id: " + value),
+                StandardCharsets.UTF_8);
+
+        Configuration configuration =
+                GlobalConfiguration.loadConfiguration(tempDir.toString(), null);
+
+        assertThat(configuration.toMap()).containsEntry("client.id", value);
+    }
+
     private static class TestAppender extends AbstractAppender {
 
         private final List<String> messages = new ArrayList<>();
