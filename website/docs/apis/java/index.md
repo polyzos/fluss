@@ -25,6 +25,19 @@ In order to use the client, you need to add the following dependency to your `po
 </dependency>
 ```
 
+### Java Version
+
+The client is compiled for Java 11 and runs on Java 11, 17 and 21.
+On Java 17 or later, add this option to the JVM of your application:
+
+```
+--add-opens=java.base/java.nio=ALL-UNNAMED
+```
+
+The client uses Apache Arrow for log data, and Arrow needs access to `java.nio` internals.
+Without the option, reading or writing Arrow-formatted logs fails.
+Flink and Spark add this option in their launch scripts by default, so the connectors need no extra setup there.
+
 ## Initialization
 
 `Connection` is the main entry point for the Fluss Java client. It is used to create `Admin` and `Table` instances.
